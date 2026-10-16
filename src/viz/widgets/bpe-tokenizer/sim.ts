@@ -144,7 +144,7 @@ export function simulate({ text, merges: nMerges }: Params): Frame[] {
     {
       stage: 'bytes',
       lastMerge: null,
-      caption: `Start with the 256 byte tokens: ${charCount} characters → ${byteCount} UTF-8 bytes, plus one "▁" (space) per word = ${s0.tokenCount} tokens. Nothing is ever "unknown": any string can fall back to bytes.`,
+      caption: `Start with the 256 byte tokens: ${charCount} characters = ${byteCount} UTF-8 bytes. Each word is marked with a leading "▁" (the space), so ${s0.words.length} words → ${byteCount - (s0.words.length - 1)} letter bytes + ${s0.words.length} "▁" = ${s0.tokenCount} tokens. Nothing is ever "unknown": any string can fall back to bytes.`,
       predict: `Counting adjacent pairs across the corpus (weighted by word frequency), which pair do you think is most frequent and gets merged first?`,
     },
     0,

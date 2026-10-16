@@ -84,14 +84,17 @@ const Answer = z.object({ answer: z.string(), confidence: z.number().min(0).max(
 async function ask(model: string, q: string, ctx: string, maxTokens: number) {
   const res = await openai.chat.completions.create({
     model,
-    max_tokens: maxTokens, // hard cap on the expensive side of the bill
+    max_completion_tokens: maxTokens, // hard cap on the expensive side of the bill (includes reasoning tokens)
+    reasoning_effort: 'minimal', // keep hidden reasoning from eating the small cap
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: 'Answer from the context in at most 3 sentences. Reply as JSON {"answer": string, "confidence": 0..1}.' },
-      { role: 'user', content: 'Context:\n' + ctx + '\n\nQuestion: ' + q },
+      { role: 'user', content: 'Context:\\n' + ctx + '\\n\\nQuestion: ' + q },
     ],
   });
-  return { parsed: Answer.safeParse(JSON.parse(res.choices[0].message.content ?? '{}')), usage: res.usage };
+  let data: unknown = null;
+  try { data = JSON.parse(res.choices[0].message.content ?? ''); } catch { /* truncated or non-JSON -> escalate */ }
+  return { parsed: Answer.safeParse(data), usage: res.usage };
 }
 
 export async function cascade(q: string, ctx: string) {
@@ -393,7 +396,7 @@ export async function askAboutContract(contract: string, history: Anthropic.Mess
       { type: 'text', text: 'You are a contract analyst. Cite clause numbers. Be concise.' },
       {
         type: 'text',
-        text: '<contract>\n' + contract + '\n</contract>',
+        text: '<contract>\\n' + contract + '\\n</contract>',
         // breakpoint: everything up to here (tools + system) is cached
         cache_control: { type: 'ephemeral' }, // or { type: 'ephemeral', ttl: '1h' }
       },
@@ -475,7 +478,7 @@ console.log(cacheSavings({ prefixTokens: 40000, suffixTokens: 100, callsWithinTt
 // { withoutCache: 1.203, withCache: 0.261, savingPct: 78.3, breakEven: 2 }`,
         },
         explanation:
-          'One call with caching costs 1.25× (worse); two calls cost 1.25 + 0.1 = 1.35× vs 2×, so break-even is the second call. With the 1 h TTL (2× write) break-even is still the second call (2.1 vs 2). The real risk is not the maths but reuse falling outside the TTL.',
+          'One call with caching costs 1.25× (worse); two calls cost 1.25 + 0.1 = 1.35× vs 2×, so break-even is the second call. With the 1 h TTL (2× write) the second call is still slightly worse (2.1 vs 2), so break-even moves to the third call (2.2 vs 3). The real risk is not the maths but reuse falling outside the TTL.',
       },
       quickCheck: {
         question:
@@ -585,8 +588,8 @@ export function invalidateBySource(tenantId: string, docId: string) {
   max_tokens: 800,
   tools: Object.values(toolRegistry), // registry order varies between pods
   system:
-    'Today is ' + new Date().toISOString() + '. User: ' + user.name + '.\n' +
-    'You are a shopping assistant.\n' + JSON.stringify(catalog),
+    'Today is ' + new Date().toISOString() + '. User: ' + user.name + '.\\n' +
+    'You are a shopping assistant.\\n' + JSON.stringify(catalog),
   messages: history.concat({ role: 'user', content: input }),
 });`,
       },
@@ -936,8 +939,8 @@ Note: retrieved context changes per query, so in RAG the cacheable prefix is mos
       code: {
         language: 'typescript',
         code: `const system =
-  'Request ' + crypto.randomUUID() + '\n' +
-  POLICY_TEXT_8K_TOKENS + '\n' +
+  'Request ' + crypto.randomUUID() + '\\n' +
+  POLICY_TEXT_8K_TOKENS + '\\n' +
   FEW_SHOT_EXAMPLES_3K_TOKENS;
 await llm({ system, messages: [{ role: 'user', content: question }] });`,
       },

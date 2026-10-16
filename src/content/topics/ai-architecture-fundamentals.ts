@@ -106,8 +106,10 @@ export async function handle(question: string, retrieve: Retriever, traceId: str
     system: 'Answer only from the context. Return JSON {answer, citations}.',
     messages: [{ role: 'user', content: 'Context:\\n' + context + '\\n\\nQ: ' + question }],
   });
-  const text = res.content[0].type === 'text' ? res.content[0].text : '';
-  const parsed = Answer.safeParse(JSON.parse(text));            // guardrail layer
+  const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
+  let json: unknown = null;
+  try { json = JSON.parse(text); } catch { /* prose instead of JSON -> fails the schema below */ }
+  const parsed = Answer.safeParse(json);                        // guardrail layer
   console.log(JSON.stringify({ traceId, prompt: cfg.promptVersion, ms: Date.now() - t0,
     inTok: res.usage.input_tokens, outTok: res.usage.output_tokens, ok: parsed.success }));
   return parsed.success ? parsed.data : { answer: 'I could not verify an answer.', citations: [] };
@@ -379,12 +381,12 @@ const MODEL = process.env.LLM_MODEL ?? 'gpt-5-mini';
 type Verifier = (candidate: string) => Promise<{ ok: boolean; score: number }>;
 
 export async function generateAndVerify(prompt: string, verify: Verifier, n = 3) {
-  // Fan out N independent samples in parallel (temperature > 0 gives diversity)
+  // Fan out N independent samples in parallel (sampling at temperature > 0 gives diversity;
+  // GPT-5-family models only accept their default temperature of 1, so do not pass one)
   const samples = await Promise.all(
     Array.from({ length: n }, () =>
       client.chat.completions.create({
         model: MODEL,
-        temperature: 0.8,
         messages: [{ role: 'user', content: prompt }],
       }),
     ),

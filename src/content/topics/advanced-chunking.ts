@@ -140,7 +140,7 @@ export async function semanticChunks(text: string, percentile = 95, maxChars = 2
         prompt: `Write a **pure** function \`breakpoints(distances, percentile)\` (no API calls) that returns the indices after which to cut.
 
 Acceptance criteria:
-- Uses the nearest-rank percentile of the distance array as threshold.
+- Threshold = the sorted distances at index \`floor(p / 100 × (n − 1))\` (the rule used by the chunker above).
 - Returns indices \`i\` where \`distances[i] > threshold\`.
 - For \`[0.08, 0.11, 0.47, 0.09, 0.13, 0.52, 0.10]\` and percentile 80 → \`[2, 5]\`.
 - Also write \`applyBreakpoints(sentences, cuts)\` returning the joined chunks.`,
@@ -726,7 +726,9 @@ export function buildContextBatchRequests(docId: string, docText: string, chunks
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 FENCE = "\\u0060" * 3  # three backticks
-inner = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=400, chunk_overlap=40)
+inner = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+    encoding_name="cl100k_base", chunk_size=400, chunk_overlap=40,  # default encoder is gpt2
+)
 
 def split(md: str, source: str, max_level: int = 3) -> list[dict]:
     sections, path, body, in_fence = [], [], [], False

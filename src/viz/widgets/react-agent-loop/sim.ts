@@ -141,17 +141,19 @@ export function simulate({ scenario, maxSteps }: Params): Frame[] {
     iteration++;
     if (!step) {
       const fin = s.final!;
+      const promptIn = ctx;
       transcript.push({ kind: 'thought', text: fin.thought });
       ctx += tok(fin.thought);
-      push({ stage: 'thought', caption: `Step ${iteration} (LLM call, ~${ctx} prompt tokens): Thought: "${fin.thought}"` });
+      push({ stage: 'thought', caption: `Step ${iteration}: LLM call #${iteration} reads a ~${promptIn}-token prompt (everything so far) and writes: Thought: "${fin.thought}"` });
       transcript.push({ kind: 'answer', text: fin.answer });
       outcome = 'answered';
       push({ stage: 'final', caption: `Final Answer: "${fin.answer}" The loop ends after ${iteration} LLM calls and ${i} tool calls.` });
       break;
     }
+    const promptIn = ctx;
     transcript.push({ kind: 'thought', text: step.thought });
     ctx += tok(step.thought);
-    push({ stage: 'thought', caption: `Step ${iteration} (LLM call, ~${ctx} prompt tokens): Thought: "${step.thought}"` });
+    push({ stage: 'thought', caption: `Step ${iteration}: LLM call #${iteration} reads a ~${promptIn}-token prompt (everything so far) and writes: Thought: "${step.thought}"` });
     transcript.push({ kind: 'action', text: `${step.tool}(${step.args})` });
     ctx += tok(step.tool + step.args) + 10;
     const nextErr = !!step.error && !predictedError;
@@ -178,7 +180,7 @@ export function simulate({ scenario, maxSteps }: Params): Frame[] {
     stage: 'done',
     caption:
       outcome === 'answered'
-        ? `Recap: ${iteration} LLM calls, prompt grew from ~${SYSTEM + tok(s.task)} to ~${ctx} tokens. ReAct's power is interleaving reasoning with real observations; its costs are latency and tokens per step. Errors as observations enable recovery.`
+        ? `Recap: ${iteration} LLM calls; the transcript re-sent each call grew from ~${SYSTEM + tok(s.task)} to ~${ctx} tokens. ReAct's power is interleaving reasoning with real observations; its costs are latency and tokens per step. Errors as observations enable recovery.`
         : s.final
           ? `Recap: the guard did its job but was set too tight for a ${s.steps.length + 1}-call task. Raise max steps, or pair it with a token/cost budget so legitimate multi-step tasks can finish.`
           : `Recap: production agents need a step limit, a token/cost budget, repeated-action detection (the same search was tried more than once), and a clear "cannot complete" path.`,

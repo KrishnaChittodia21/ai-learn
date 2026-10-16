@@ -175,6 +175,12 @@ export function paragraphPack(text: string, minChars: number, maxChars: number):
       if (buf.length >= minChars) flush(); // big enough to stand alone
     }
   }
+  // a short trailing paragraph joins the previous chunk when it fits
+  const last = out.length - 1;
+  if (buf && buf.length < minChars && last >= 0 && out[last].length + 2 + buf.length <= maxChars) {
+    out[last] += '\\n\\n' + buf;
+    buf = '';
+  }
   flush();
   return out;
 }`,

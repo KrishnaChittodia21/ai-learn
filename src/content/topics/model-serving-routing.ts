@@ -744,7 +744,7 @@ export async function reply(messages: Msg[], metrics = console) {
         if (!retryable(e)) throw e;                           // never mask client bugs
         st.fails++;
         if (st.fails >= 5) { st.openUntil = Date.now() + 45_000; break; }
-        const retryAfter = Number(e?.headers?.['retry-after']) * 1000;
+        const retryAfter = Number(e?.headers?.get?.('retry-after')) * 1000; // Headers object
         await sleep(retryAfter || 250 * 2 ** attempt + Math.random() * 250); // jitter
       }
     }
@@ -1051,19 +1051,19 @@ Non-EU tenants get a wider allowlist. The chain is configured per tenant from an
       question: 'This vLLM pod crash-loops at start-up with an error that the KV cache cannot hold one full-length sequence. Which change most directly fixes it?',
       code: {
         language: 'bash',
-        code: `vllm serve Qwen/Qwen3-32B --gpu-memory-utilization 0.85
-# 1 x H100 80 GB, model default context 131072 tokens`,
+        code: `vllm serve Qwen/Qwen3-32B --gpu-memory-utilization 0.90
+# 1 x H100 80 GB, model default context 40960 tokens (config max_position_embeddings)`,
       },
       options: [
-        'Add --max-model-len 32768 so the KV pool only needs to fit 32k-token sequences',
+        'Add --max-model-len 8192 so the KV pool only needs to fit 8k-token sequences',
         'Lower --gpu-memory-utilization to 0.5',
         'Add --max-num-seqs 512',
         'Add --enable-prefix-caching',
       ],
       correct: [0],
-      explanation: 'vLLM must be able to hold at least one max-length sequence. With ~65 GB of bf16 weights, ~3 GB remains for KV, far less than a 131k context needs (~256 KB/token → ~32 GB). Capping max-model-len (or FP8 weights/KV) fixes it. Lowering utilisation shrinks the KV pool further, more sequences need more memory, and prefix caching does not change the minimum requirement.',
+      explanation: 'vLLM must be able to hold at least one max-length sequence. With ~65.5 GB of bf16 weights inside a 72 GB budget, roughly 5 GB remains for KV after activations, far less than the 40,960-token default needs (~256 KB/token → ~10.7 GB). Capping max-model-len at 8k (~2.1 GB) fixes it (as would FP8 weights/KV). Lowering utilisation shrinks the KV pool further, more sequences need more memory, and prefix caching does not change the minimum requirement.',
       followUps: [
-        { q: 'How much KV room does 32k need for Qwen3-32B in fp16?', a: '64 layers × 2 × 8 KV heads × 128 × 2 B = 256 KB per token, so 32,768 tokens ≈ 8.6 GB; still too much for ~3 GB, so you would also use FP8 weights (~33 GB) or a 2-GPU tensor-parallel setup.' },
+        { q: 'How much KV room does 32k need for Qwen3-32B in fp16?', a: '64 layers × 2 × 8 KV heads × 128 × 2 B = 256 KB per token, so 32,768 tokens ≈ 8.6 GB; too much for ~5 GB, so for long contexts you would use FP8 weights (~33 GB) or a 2-GPU tensor-parallel setup.' },
       ],
     },
     {

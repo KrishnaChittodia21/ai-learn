@@ -249,7 +249,7 @@ async function compact(s: Session) {
   const r = await llm.messages.create({ model: SMALL, max_tokens: 300, messages: [{ role: 'user',
     content: 'Update this support-chat summary with the new turns. Keep ids, amounts, promises.\\n' +
       'Summary: ' + s.summary + '\\nTurns: ' + JSON.stringify(old) }] });
-  s.summary = r.content[0]?.type === 'text' ? r.content[0].text : s.summary;
+  s.summary = r.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || s.summary;
 }
 
 export function shouldEscalate(s: Session, msg: string, confidence: number) {
@@ -265,7 +265,7 @@ export async function chat(id: string, msg: string, confidence: number) {
     system: 'You are Acme support. Conversation summary so far: ' + (s.summary || 'none'),
     messages: s.turns,
   });
-  const text = r.content[0]?.type === 'text' ? r.content[0].text : '';
+  const text = r.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
   s.turns.push({ role: 'assistant', content: text });
   await compact(s);
   await redis.set('chat:' + id, JSON.stringify(s), 'EX', 60 * 60 * 24); // 24 h session TTL

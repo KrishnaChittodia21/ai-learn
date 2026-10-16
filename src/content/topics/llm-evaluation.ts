@@ -279,7 +279,7 @@ type Case = z.infer<typeof CaseSchema>;
 
 export function loadGolden(path: string) {
   const raw = readFileSync(path, 'utf8');
-  const cases: Case[] = raw.trim().split('\n').map((l) => CaseSchema.parse(JSON.parse(l)));
+  const cases: Case[] = raw.trim().split('\\n').map((l) => CaseSchema.parse(JSON.parse(l)));
 
   const ids = new Set(cases.map((c) => c.id));
   if (ids.size !== cases.length) throw new Error('duplicate case ids');
@@ -469,13 +469,14 @@ async function judgeOnce(q: string, ref: string, first: string, second: string) 
   const msg = await client.messages.create({
     model: JUDGE_MODEL,
     max_tokens: 600,
-    temperature: 0,
+    // no temperature: current Claude models reject non-default sampling params; pin the model id instead
     system: RUBRIC,
     messages: [{ role: 'user', content:
       '<question>' + q + '</question>\\n<reference>' + ref + '</reference>\\n' +
       '<answer_1>' + first + '</answer_1>\\n<answer_2>' + second + '</answer_2>' }],
   });
-  const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}';
+  const block = msg.content.find((b) => b.type === 'text'); // a thinking block may come first
+  const text = block?.type === 'text' ? block.text : '{}';
   return JSON.parse(text).winner as '1' | '2' | 'tie';
 }
 
@@ -781,7 +782,7 @@ export function compareToBaseline(current: Report, baseline: Report, opts: { max
       title: 'Harden a naive 1–10 LLM judge',
       context:
         'A team grades RAG answers with the judge below and reports the mean score on a dashboard. Scores bounce between 7.1 and 7.9 run to run, longer answers always score higher, and occasionally the whole eval crashes.',
-      task: 'Rewrite the judge so it is reliable: binary rubric with reasoning-first JSON output, temperature 0, schema validation with a retry, and explicit protection against verbosity bias and prompt injection from the graded answer.',
+      task: 'Rewrite the judge so it is reliable: binary rubric with reasoning-first JSON output, a pinned judge model (temperature 0 only where the model accepts it), schema validation with a retry, and explicit protection against verbosity bias and prompt injection from the graded answer.',
       starter: {
         language: 'typescript',
         code: `import OpenAI from 'openai';
@@ -823,8 +824,7 @@ const SYSTEM = [
 export async function judge(question: string, reference: string, answer: string) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await client.chat.completions.create({
-      model: JUDGE_MODEL,
-      temperature: 0,
+      model: JUDGE_MODEL, // gpt-5* reasoning models reject temperature 0; use it only on models that accept it
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM },
@@ -832,7 +832,9 @@ export async function judge(question: string, reference: string, answer: string)
           '</reference>\\n<answer>' + answer + '</answer>' },
       ],
     });
-    const parsed = Verdict.safeParse(JSON.parse(res.choices[0].message.content ?? '{}'));
+    let json: unknown = null;
+    try { json = JSON.parse(res.choices[0].message.content ?? ''); } catch { /* truncated output: retry */ }
+    const parsed = Verdict.safeParse(json);
     if (parsed.success) return parsed.data;
   }
   return { reasoning: 'judge output invalid after retry', verdict: 'ERROR' as const };
@@ -1374,7 +1376,7 @@ process.exit(1);`,
       },
       options: [
         'Fails, because any drop in is_json fails the weighted score',
-        'Passes if helpful rose by more than about 0.9 points, because the weighted average lets soft gains hide hard-assert failures',
+        'Passes, because the 0.006 weighted loss sits inside the 0.02 tolerance, so soft gains hide hard-assert failures',
         'Fails, because the tolerance only applies to helpful',
         'Throws, because Report has no metrics field',
       ],

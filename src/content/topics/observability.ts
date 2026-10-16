@@ -96,7 +96,7 @@ export async function chat(question: string, promptVersion: string) {
     try {
       const res = await openai.chat.completions.create({
         model: MODEL,
-        max_tokens: 800,
+        max_completion_tokens: 800, // GPT-5 family rejects the deprecated max_tokens
         messages: [{ role: 'user', content: question }],
       });
       span.setAttributes({
@@ -392,7 +392,7 @@ Usage: input_tokens 900, cache_creation_input_tokens 0, cache_read_input_tokens 
 - output: 400 × 15/1M = $0.00600
 - total = **$0.0105**
 
-A naive tracker that used only \`input_tokens\` would report 900 input tokens and miss 6,000 cached ones; one that priced all 6,900 at full price would over-report input cost by 6× ($0.0207 vs $0.0045).`,
+A naive tracker that used only \`input_tokens\` would report 900 input tokens and miss 6,000 cached ones; one that priced all 6,900 at full price would over-report input cost by 4.6× ($0.0207 vs $0.0045).`,
       diagram: `LLM response.usage ──▶ normalise() ──▶ price(table v2026-10)
                           │                    │
                           ▼                    ▼
@@ -687,7 +687,7 @@ export async function ask(tenant: string, prompt: string) {
   // "tokens used" for billing
   const tokens = res.usage.input_tokens + res.usage.output_tokens;
   console.log('tokens', tokens);
-  return res.content[0].type === 'text' ? res.content[0].text : '';
+  return res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
 }`,
       },
       hints: [

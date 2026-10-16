@@ -85,7 +85,8 @@ DAG: E1 and E2 run in parallel; E3 waits for E1, E4 for E2. With 1.2 s per searc
           language: 'typescript',
           title: 'Plan-and-execute with a forced plan schema and bounded re-planning',
           code: `import Anthropic from '@anthropic-ai/sdk';
-import { z } from 'zod'; // zod v4: z.toJSONSchema is built in
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { z } from 'zod';
 
 const client = new Anthropic();
 const MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-5-5';
@@ -97,17 +98,15 @@ const Plan = z.object({ steps: z.array(Step).min(1).max(8) }); // step budget en
 type PlanT = z.infer<typeof Plan>;
 
 async function makePlan(goal: string, done: Record<string, string> = {}): Promise<PlanT> {
-  const res = await client.messages.create({
+  // Structured outputs constrain the reply to the schema (current Claude models reject a forced tool_choice)
+  const res = await client.messages.parse({
     model: MODEL,
-    max_tokens: 1024,
-    tools: [{ name: 'submit_plan', description: 'Submit the remaining plan',
-      input_schema: z.toJSONSchema(Plan) as Anthropic.Tool.InputSchema }],
-    tool_choice: { type: 'tool', name: 'submit_plan' }, // force structured output
+    max_tokens: 4096,
+    output_config: { format: zodOutputFormat(Plan) },
     messages: [{ role: 'user', content: 'Goal: ' + goal + '\\nCompleted steps: ' + JSON.stringify(done) +
       '\\nPlan only the REMAINING steps. Refer to earlier results as #<id>.' }],
   });
-  const block = res.content.find((b) => b.type === 'tool_use');
-  return Plan.parse(block?.type === 'tool_use' ? block.input : {}); // throws on bad shape
+  return Plan.parse(res.parsed_output); // throws on bad shape (e.g. a refusal with no output)
 }
 
 export async function run(goal: string, maxReplans = 2) {

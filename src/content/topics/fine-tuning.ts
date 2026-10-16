@@ -602,7 +602,7 @@ Acceptance: 8B → full ≈ 145 GB, lora ≈ 23 GB, qlora ≈ 10 GB.`,
 
 for m in ("full", "lora", "qlora"):
     print(m, train_mem_gb(8, m))
-# full 145.2, lora 22.9, qlora 10.0`,
+# full 145.2, lora 22.7, qlora 9.6`,
         },
         explanation: 'Full fine-tuning is dominated by optimizer state (12 of the 16 bytes), so freezing the base (LoRA) removes most of it, and quantising the frozen base (QLoRA) shrinks what remains by another 4×. Activations become the next bottleneck, which is why gradient checkpointing and sequence length matter.',
       },

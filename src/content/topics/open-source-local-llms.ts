@@ -214,9 +214,8 @@ async function ask(question: string, context: string): Promise<string> {
       { role: 'system', content: 'Answer only from the provided context.' },
       { role: 'user', content: 'Context:\\n' + context + '\\n\\nQuestion: ' + question },
     ],
-    // Ollama-specific: raise the context window (otherwise long prompts are truncated)
-    // @ts-expect-error extra body field passed through to Ollama
-    options: { num_ctx: 16384 },
+    // Context window: /v1 has no per-request num_ctx, so set it on the server
+    // (OLLAMA_CONTEXT_LENGTH=16384 ollama serve) or use a Modelfile model with PARAMETER num_ctx
   });
   let out = '';
   for await (const chunk of stream) {
@@ -492,7 +491,7 @@ export async function answer(question: string, docs: string[]) {
 }`,
       },
       hints: [
-        'Ollama\'s default context is small: pass options.num_ctx and estimate prompt tokens before sending.',
+        'Ollama\'s default context is small: raise it server-side (OLLAMA_CONTEXT_LENGTH or a Modelfile num_ctx; /v1 has no per-request option) and estimate prompt tokens before sending.',
         'The SDK supports timeout and maxRetries options; the "latest" tag can change underneath you.',
         'Put instructions in a system message and keep documents clearly delimited.',
       ],
@@ -528,8 +527,8 @@ export async function answer(question: string, docs: string[]): Promise<string> 
       { role: 'system', content: system },
       { role: 'user', content: context + '\\n\\nQuestion: ' + question },
     ],
-    // @ts-expect-error Ollama-specific option passed through
-    options: { num_ctx: NUM_CTX },
+    // the server must run with the same window: OLLAMA_CONTEXT_LENGTH=NUM_CTX or a
+    // Modelfile PARAMETER num_ctx (the /v1 endpoint ignores per-request options)
   });
   return res.choices[0]?.message?.content ?? '';
 }`,

@@ -264,7 +264,7 @@ export async function diagnose(
     else report.missing++; // recall problem -> chunking/query rewrite/missing content
     // near-duplicate detection on the top-k actually sent to the model
     const seen = new Set(top.slice(0, k).map((c) => c.text.slice(0, 120)));
-    report.dupes += k - seen.size;
+    report.dupes += Math.min(k, top.length) - seen.size; // fewer than k hits are not dupes
   }
   return report;
 }`,

@@ -241,9 +241,11 @@ export class SummaryBuffer {
     this.turns.push(m);
     const used = this.turns.reduce((s, t) => s + tokens(t), 0);
     if (used > this.budget * 0.75 && this.turns.length > this.keepRecent) {
-      // cut on a user turn so tool_use/tool_result pairs stay together
+      // cut on a plain user turn (not a tool_result) so tool_use/tool_result pairs stay together
+      const clean = (t: Msg) => t.role === 'user' &&
+        (typeof t.content === 'string' || !t.content.some((b) => b.type === 'tool_result'));
       let cut = this.turns.length - this.keepRecent;
-      while (cut > 0 && this.turns[cut].role !== 'user') cut--;
+      while (cut > 0 && !clean(this.turns[cut])) cut--;
       const old = this.turns.splice(0, cut);
       const res = await client.messages.create({
         model: SUMMARY_MODEL,
@@ -287,7 +289,7 @@ export class SummaryBuffer {
       exercise: {
         prompt: `Implement \`trimToBudget(messages, budget)\` that keeps the **first user message (the task)** plus the newest messages that fit within \`budget\` tokens (use chars/4).
 
-**Acceptance:** the result never starts the tail with an assistant message or a user message containing a \`tool_result\` block; the task message is always kept; total estimated tokens ≤ budget when possible.`,
+**Acceptance:** if everything fits, return the messages unchanged; when trimming, the kept tail never starts with an assistant message or a user message containing a \`tool_result\` block; the task message is always kept; total estimated tokens ≤ budget when possible.`,
         starter: {
           language: 'typescript',
           code: `type Block = { type: string; [k: string]: unknown };
@@ -329,6 +331,7 @@ export function trimToBudget(messages: Msg[], budget: number): Msg[] {
     remaining -= cost;
     start = i;
   }
+  if (start === 0) return messages; // everything fits: nothing to trim
   // advance to a clean user turn so no tool_result is orphaned
   while (start < rest.length && !isCleanUser(rest[start])) start++;
   return [task, ...rest.slice(start)];

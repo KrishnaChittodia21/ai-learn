@@ -274,7 +274,8 @@ interface ToolDef<T extends z.ZodTypeAny> {
   run: (args: z.infer<T>) => Promise<unknown>;
 }
 
-const registry: Record<string, ToolDef<z.ZodTypeAny>> = {
+// any: each entry has its own schema type; safeParse below restores safety at runtime
+const registry: Record<string, ToolDef<any>> = {
   get_order: {
     description: 'Fetch one order by id (format A-1234). Returns status, deliveredAt, totalUsd.',
     risk: 'read',

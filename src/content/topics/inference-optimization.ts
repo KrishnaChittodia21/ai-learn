@@ -56,7 +56,7 @@ const topic: Topic = {
 **When to use:** whenever you size hardware, set SLOs or decide between "faster GPU" and "smarter batching": first ask which phase dominates your traffic.`,
       example: `Llama-3.1-8B, bf16 weights (16.1 GB), on one H100 (3.35 TB/s).
 - **Batch 1:** each step reads 16.1 GB → floor 4.8 ms → ≤ 208 tok/s; measured ~150–170 tok/s (kernel and launch overheads).
-- **Batch 64, 2k context each:** weights still 16.1 GB per step, plus KV reads 64 × 2,048 × 128 KiB ≈ 17.2 GB → ~33 GB per step → ~10 ms/step → 64 sequences × ~100 tok/s ≈ **6,400 tok/s** aggregate. Per-user speed halved, total throughput up ~35×.
+- **Batch 64, 2k context each:** weights still 16.1 GB per step, plus KV reads 64 × 2,048 × 128 KiB ≈ 17.2 GB → ~33 GB per step → ~10 ms/step → 64 sequences × ~100 tok/s ≈ **6,400 tok/s** aggregate. Per-user speed halved, total throughput up ~31×.
 - **FP8 weights + FP8 KV:** bytes per step drop to ~8 + 8.6 ≈ 16.6 GB → ~5 ms/step → ~12,800 tok/s aggregate at the same batch.
 Lesson: at real batch sizes the KV cache becomes as large a byte stream as the weights.`,
       diagram: `  achievable                 compute roof (989 TFLOPS bf16)
@@ -96,7 +96,7 @@ Lesson: at real batch sizes the KV cache becomes as large a byte stream as the w
 KV_8B = 32 * 2 * 8 * 128 * 2                           # Llama-3-8B fp16: 131,072 B/token
 for b in (1, 16, 64, 256, 512):
     print(decode_step(8.03, 2, b, ctx=2048, kv_bytes_per_tok=KV_8B))
-# batch 1  -> ~4.8 ms, memory-bound, ~208 tok/s
+# batch 1  -> ~4.9 ms (weights + one 2k KV), memory-bound, ~205 tok/s
 # batch 64 -> ~9.9 ms, memory-bound (KV reads now ~half the bytes), ~6,500 tok/s total
 # larger batches: KV traffic grows with batch, so long contexts stay memory-bound`,
         },

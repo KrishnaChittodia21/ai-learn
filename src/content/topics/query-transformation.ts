@@ -88,6 +88,7 @@ export async function rewriteQuery(history: Turn[], message: string): Promise<st
       {
         model: MODEL,
         max_completion_tokens: 60,
+        reasoning_effort: 'minimal', // gpt-5 models spend this cap on reasoning tokens otherwise
         messages: [
           { role: 'system', content: SYSTEM },
           { role: 'user', content: 'Conversation:\\n' + recent + '\\n\\nLast user message: ' + message },
@@ -719,6 +720,7 @@ export async function hydeSearch(question: string, k = 20, nDocs = 2) {
     model: LLM,
     n: nDocs,                    // several hypothetical passages reduce variance
     max_completion_tokens: 150,
+    reasoning_effort: 'minimal', // keep the cap for the passage, not for reasoning
     messages: [{ role: 'user', content: 'Write a short help-centre passage that answers: ' + question }],
   });
   const passages = gen.choices.map((c) => c.message.content ?? '').filter(Boolean);

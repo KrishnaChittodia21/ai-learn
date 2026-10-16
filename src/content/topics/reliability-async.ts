@@ -230,10 +230,10 @@ console.log(b.tryTake(50, 3000)); // { ok: true, waitMs: 0 }`,
 
 **When to use:** every provider call. After N failures, stop retrying and fall back (another region/model) or fail fast with a clear error.`,
       example: `A request gets 429 with \`retry-after: 7\`. Policy: base 500 ms, cap 20 s, 5 attempts, full jitter.
-- Attempt 1 fails (429, retry-after 7 s) → computed jitter 0–1 s, but retry-after wins → wait **7.0 s**.
-- Attempt 2 fails (503, no header) → random(0, 2 s) = **1.3 s**.
-- Attempt 3 fails (ECONNRESET) → random(0, 4 s) = **2.9 s**.
-- Attempt 4 succeeds. Total extra latency ≈ 11.2 s.
+- Attempt 1 fails (429, retry-after 7 s) → computed jitter 0–0.5 s, but retry-after wins → wait **7.0 s**.
+- Attempt 2 fails (503, no header) → random(0, 1 s) = **0.6 s**.
+- Attempt 3 fails (ECONNRESET) → random(0, 2 s) = **1.4 s**.
+- Attempt 4 succeeds. Total extra latency ≈ 9.0 s.
 Streaming case: TTFT normally 800 ms; one stream emits 120 tokens then stalls. With a 20 s idle timeout the client aborts at +20 s and retries; without it the request hung until the 10-minute SDK default.`,
       diagram: `attempt ─▶ call provider ─▶ ok ─▶ return
               │ error
@@ -267,7 +267,7 @@ export async function withRetry<T>(fn: (attempt: number) => Promise<T>, maxAttem
     } catch (err: any) {
       const status: number | undefined = err?.status;
       // no status = network error or SDK timeout (retryable) unless the caller aborted on purpose
-      const retryable = err?.idle === true || (status === undefined ? err?.name !== 'APIUserAbortError' : RETRYABLE.has(status));
+      const retryable = err?.idle === true || (status === undefined ? !(err instanceof OpenAI.APIUserAbortError) : RETRYABLE.has(status));
       if (!retryable || attempt + 1 >= maxAttempts) throw err;
       const h = err?.headers;
       const ra = Number(h?.get?.('retry-after-ms') ?? NaN) || Number(h?.get?.('retry-after') ?? NaN) * 1000 || 0;
@@ -352,7 +352,7 @@ export function backoffDelay(attempt: number, o: Opts, retryAfter?: string | nul
   let ra = 0;
   if (retryAfter) {
     const secs = Number(retryAfter);
-    ra = Number.isFinite(secs) ? secs * 1000 : Math.max(0, Date.parse(retryAfter) - now());
+    ra = Number.isFinite(secs) ? secs * 1000 : Math.max(0, Date.parse(retryAfter) - now()) || 0; // unparseable -> 0, never NaN
   }
   return Math.max(jitter, ra);
 }
@@ -589,7 +589,7 @@ const worker = new Worker(
       const res = await client.messages.create({
         model: process.env.LLM_MODEL ?? 'claude-haiku-5-5',
         max_tokens: 300,
-        messages: [{ role: 'user', content: 'Summarise this support ticket:\n' + ticket.text }],
+        messages: [{ role: 'user', content: 'Summarise this support ticket:\\n' + ticket.text }],
       });
       const text = res.content.find((b) => b.type === 'text');
       await upsertSummary(ticket.id, text && text.type === 'text' ? text.text : ''); // idempotent by ticket id
@@ -744,8 +744,8 @@ async function enrich(text: string, maxAttempts = 6): Promise<string> {
     try {
       const r = await openai.chat.completions.create({
         model: process.env.LLM_MODEL ?? 'gpt-5-mini',
-        max_tokens: 300,
-        messages: [{ role: 'user', content: 'Improve this product description:\n' + text }],
+        max_completion_tokens: 300,
+        messages: [{ role: 'user', content: 'Improve this product description:\\n' + text }],
       });
       return r.choices[0].message.content ?? '';
     } catch (err: any) {

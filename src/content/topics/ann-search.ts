@@ -325,7 +325,7 @@ export function hnswPlan({ n, dims, k, recallTarget }: PlanIn) {
 console.log(hnswPlan({ n: 2e6, dims: 1536, k: 10, recallTarget: 0.98 }));
 // { M: 32, efConstruction: 128, efSearch: 80, memoryGB: 12.8 }
 console.log(hnswPlan({ n: 2e6, dims: 768, k: 10, recallTarget: 0.95 }));
-// { M: 16, efConstruction: 64, efSearch: 40, memoryGB: 6.3 }`,
+// { M: 16, efConstruction: 64, efSearch: 40, memoryGB: 6.4 }`,
         },
         explanation:
           'These are starting points, not answers: the plan gives a defensible first configuration and a memory budget, and the recall sweep from the previous section confirms or adjusts efSearch.',

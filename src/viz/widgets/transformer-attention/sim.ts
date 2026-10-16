@@ -207,7 +207,10 @@ export function simulate({ query: qi, model, temperature: T }: Params): Frame[] 
       caption: `Next-token logits = (x + z)·W_out (residual), softmax at T = 1: "${VOCAB[arg]}" ${(probs[arg] * 100).toFixed(0)}%.${
         sameThe ? ` Same word "the" as ${qi === 0 ? 'the₂' : 'the₁'}, different prediction: attention to the context made the difference.` : ''
       }`,
-      predict: `Temperature divides the logits before the softmax. At T = ${T}, what happens to the top word's probability, and to the unlikely words?`,
+      predict:
+        T === 1
+          ? `Temperature divides the logits before the softmax. If T dropped to 0.5, what would happen to the ${(probs[arg] * 100).toFixed(0)}% for "${VOCAB[arg]}", and to the unlikely words?`
+          : `Temperature divides the logits before the softmax. At T = ${T}, what happens to the ${(probs[arg] * 100).toFixed(0)}% for "${VOCAB[arg]}", and to the unlikely words?`,
     });
     const argT = probsT.indexOf(Math.max(...probsT));
     push({

@@ -76,8 +76,8 @@ const topic: Topic = {
 type Release = { id: string; promptVersion: string; model: string; temperature: number; indexAlias: string };
 
 const RELEASES: Record<string, Release> = {
-  r41: { id: 'r41', promptVersion: 'support-v14', model: 'gpt-5-mini-2026-08-07', temperature: 0.2, indexAlias: 'kb_v9' },
-  r42: { id: 'r42', promptVersion: 'support-v15', model: 'gpt-5-mini-2026-08-07', temperature: 0.2, indexAlias: 'kb_v9' },
+  r41: { id: 'r41', promptVersion: 'support-v14', model: 'gpt-4.1-mini-2025-04-14', temperature: 0.2, indexAlias: 'kb_v9' },
+  r42: { id: 'r42', promptVersion: 'support-v15', model: 'gpt-4.1-mini-2025-04-14', temperature: 0.2, indexAlias: 'kb_v9' },
 };
 // In production this comes from a flag service; editable at runtime without a deploy
 let rollout = { stable: 'r41', canary: 'r42', canaryPercent: 5 };
@@ -234,12 +234,15 @@ class Breaker {
   constructor(private threshold = 5, private windowMs = 30_000, private coolMs = 60_000) {}
   canTry(now = Date.now()) {
     if (!this.openedAt) return true;
-    return now - this.openedAt > this.coolMs; // half-open: let a probe through
+    if (now - this.openedAt <= this.coolMs) return false;
+    this.openedAt = now; // half-open: let ONE probe through, re-arm the timer for everyone else
+    return true;
   }
   success() { this.failures = []; this.openedAt = 0; }
   failure(now = Date.now()) {
     this.failures = this.failures.filter((t) => now - t < this.windowMs).concat(now);
-    if (this.failures.length >= this.threshold) this.openedAt = now; // open (or re-open after a failed probe)
+    // open on too many failures, or re-open at once if a half-open probe fails
+    if (this.openedAt || this.failures.length >= this.threshold) this.openedAt = now;
   }
 }
 
@@ -529,7 +532,7 @@ console.log(b, classify(b)); // ~0.5497 'significant'`,
 
 export async function reply(userId: string, msg: string) {
   return openai.chat.completions.create({
-    model: 'gpt-5-mini', // alias
+    model: 'gpt-4.1-mini', // alias
     temperature: 0.7,
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: msg }],
   });
@@ -551,8 +554,8 @@ type Release = { id: string; system: string; model: string; temperature: number 
 
 // releases.json in git (or a prompt registry); immutable once published
 const RELEASES: Record<string, Release> = {
-  'r7': { id: 'r7', system: 'You are a helpful assistant for Acme. Never discuss pricing.', model: 'gpt-5-mini-2026-08-07', temperature: 0.3 },
-  'r8': { id: 'r8', system: 'You are Acme’s assistant. For pricing, link to /pricing instead of quoting.', model: 'gpt-5-mini-2026-08-07', temperature: 0.3 },
+  'r7': { id: 'r7', system: 'You are a helpful assistant for Acme. Never discuss pricing.', model: 'gpt-4.1-mini-2025-04-14', temperature: 0.3 },
+  'r8': { id: 'r8', system: 'You are Acme’s assistant. For pricing, link to /pricing instead of quoting.', model: 'gpt-4.1-mini-2025-04-14', temperature: 0.3 },
 };
 const ROLLOUT = { stable: process.env.STABLE_RELEASE ?? 'r7', canary: process.env.CANARY_RELEASE ?? 'r8', pct: Number(process.env.CANARY_PCT ?? 5) };
 
@@ -629,14 +632,20 @@ export async function evalGate(candidate: Release, baseline: Release, golden: { 
         code: `type Dep = { name: string; prompt: (q: string) => string; chat: (p: string, signal: AbortSignal) => Promise<string> };
 
 const state = new Map<string, { fails: number[]; openUntil: number }>();
-const isOpen = (n: string) => (state.get(n)?.openUntil ?? 0) > Date.now();
+function isOpen(n: string) {
+  const s = state.get(n);
+  if (!s || !s.openUntil) return false;
+  if (s.openUntil > Date.now()) return true;
+  s.openUntil = Date.now() + 60_000; // half-open: this caller is the single probe, others keep skipping
+  return false;
+}
 function record(n: string, ok: boolean) {
   const s = state.get(n) ?? { fails: [], openUntil: 0 };
   if (ok) { s.fails = []; s.openUntil = 0; }
   else {
     const now = Date.now();
     s.fails = s.fails.filter((t) => now - t < 30_000).concat(now);
-    if (s.fails.length >= 5) s.openUntil = now + 60_000; // open for 60 s
+    if (s.openUntil || s.fails.length >= 5) s.openUntil = now + 60_000; // open for 60 s; a failed probe re-opens at once
   }
   state.set(n, s);
 }

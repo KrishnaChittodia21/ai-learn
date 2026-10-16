@@ -366,7 +366,6 @@ export async function summarise(text: string) {
   const client = new OpenAI(); // hard-wired: tests hit the network
   const res = await client.chat.completions.create({
     model: 'gpt-5-mini',
-    temperature: 0,
     messages: [{ role: 'user', content: 'Summarise in 2 sentences: ' + text }],
   });
   return res.choices[0].message.content; // may be null
@@ -387,7 +386,7 @@ it('summarises', async () => {
         code: `import { it, expect, vi } from 'vitest';
 
 type ChatCreate = (req: {
-  model: string; temperature?: number; max_tokens?: number;
+  model: string; max_completion_tokens?: number;
   messages: { role: 'system' | 'user'; content: string }[];
 }) => Promise<{ choices: { message: { content: string | null } }[] }>;
 
@@ -396,7 +395,7 @@ const MODEL = process.env.LLM_MODEL ?? 'gpt-5-mini';
 export function buildSummaryRequest(text: string) {
   return {
     model: MODEL,
-    max_tokens: 200,
+    max_completion_tokens: 1000, // gpt-5* models: reasoning tokens count toward this cap (max_tokens is rejected)
     messages: [
       { role: 'system' as const, content: 'Summarise the user text in at most 2 sentences.' },
       { role: 'user' as const, content: text.slice(0, 20_000) },

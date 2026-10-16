@@ -3,7 +3,7 @@ import type { Topic } from '../../types';
 const topic: Topic = {
   id: 'knowledge-graphs',
   phase: 'frameworks',
-  order: 3,
+  order: 5,
   title: 'Knowledge Graphs for LLM Systems',
   subtitle:
     'Model facts as entities and relationships, store and query them in a graph database, build them with LLM extraction and entity resolution, and retrieve over them alongside vectors',

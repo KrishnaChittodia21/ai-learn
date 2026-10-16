@@ -602,7 +602,8 @@ const norm = (s: string) => s.replace(/\\s+/g, ' ').trim().toLowerCase();
 export async function checkGrounding(answer: string, context: string) {
   const r = await openai.chat.completions.parse({
     model: JUDGE,
-    temperature: 0,
+    // GPT-5 / o-series reasoning models reject temperature != 1; pin a dated snapshot instead
+    ...(/^(gpt-5|o\d)/.test(JUDGE) ? {} : { temperature: 0 }),
     messages: [
       { role: 'system', content: 'You verify answers against CONTEXT only. For each atomic claim give a verdict and copy the exact supporting sentence from CONTEXT as evidence ("" if none). Never use outside knowledge.' },
       { role: 'user', content: 'CONTEXT:\\n' + context + '\\n\\nANSWER:\\n' + answer },

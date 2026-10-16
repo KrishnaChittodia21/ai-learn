@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
+import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
 import { DEFAULT_PARAMS, K, LABELS, Q, SCALED, V, VOCAB, WK, WQ, WV, X, attention, simulate, type Model, type Params, type Stage } from './sim';
 
@@ -160,140 +161,142 @@ export default function TransformerAttentionViz() {
         </>
       }
     >
-      <svg viewBox="0 0 600 350" className="viz-svg" role="img" aria-label={aria}>
-        {/* attention arcs */}
-        {LABELS.map((_, j) => {
-          const w = showWeights ? f.weights![j] : st === 'dot' && f.key === j ? 0.25 : 0;
-          if (w < 0.005 || j === qi) return null;
-          const x1 = TX(qi) + TW / 2;
-          const x2 = TX(j) + TW / 2;
-          const peak = Math.min(44, 10 + Math.abs(x2 - x1) * 0.08);
-          return (
-            <path
-              key={j}
-              d={`M${x1},${TOK_Y - 2} Q${(x1 + x2) / 2},${TOK_Y - 2 - peak * 2} ${x2},${TOK_Y - 2}`}
-              fill="none"
-              stroke={showWeights ? 'var(--good)' : 'var(--accent)'}
-              strokeWidth={showWeights ? 1 + w * 12 : 1.5}
-              strokeDasharray={showWeights ? undefined : '4 3'}
-              opacity={showWeights ? 0.35 + w * 0.65 : 0.9}
-              style={{ transition: 'stroke-width 0.3s ease' }}
-            />
-          );
-        })}
-        {showWeights && f.weights![qi] > 0.005 && (
-          <circle cx={TX(qi) + TW / 2} cy={TOK_Y - 12} r={9} fill="none" stroke="var(--good)" strokeWidth={1 + f.weights![qi] * 12} opacity={0.35 + f.weights![qi] * 0.65} />
-        )}
+      <WideSvg>
+        <svg viewBox="0 0 600 350" className="viz-svg" role="img" aria-label={aria}>
+          {/* attention arcs */}
+          {LABELS.map((_, j) => {
+            const w = showWeights ? f.weights![j] : st === 'dot' && f.key === j ? 0.25 : 0;
+            if (w < 0.005 || j === qi) return null;
+            const x1 = TX(qi) + TW / 2;
+            const x2 = TX(j) + TW / 2;
+            const peak = Math.min(44, 10 + Math.abs(x2 - x1) * 0.08);
+            return (
+              <path
+                key={j}
+                d={`M${x1},${TOK_Y - 2} Q${(x1 + x2) / 2},${TOK_Y - 2 - peak * 2} ${x2},${TOK_Y - 2}`}
+                fill="none"
+                stroke={showWeights ? 'var(--good)' : 'var(--accent)'}
+                strokeWidth={showWeights ? 1 + w * 12 : 1.5}
+                strokeDasharray={showWeights ? undefined : '4 3'}
+                opacity={showWeights ? 0.35 + w * 0.65 : 0.9}
+                style={{ transition: 'stroke-width 0.3s ease' }}
+              />
+            );
+          })}
+          {showWeights && f.weights![qi] > 0.005 && (
+            <circle cx={TX(qi) + TW / 2} cy={TOK_Y - 12} r={9} fill="none" stroke="var(--good)" strokeWidth={1 + f.weights![qi] * 12} opacity={0.35 + f.weights![qi] * 0.65} />
+          )}
 
-        {/* tokens */}
-        {LABELS.map((l, j) => {
-          const isQ = j === qi;
-          const masked = f.masked[j];
-          return (
-            <g key={j} opacity={masked ? 0.45 : 1} style={{ transition: 'opacity 0.3s ease' }}>
-              <rect x={TX(j)} y={TOK_Y} width={TW} height={28} rx={6} fill={isQ ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={isQ ? 'var(--accent)' : 'var(--border)'} strokeWidth={isQ ? 2.2 : 1.2} strokeDasharray={masked ? '4 3' : undefined} />
-              <text x={TX(j) + TW / 2} y={TOK_Y + 19} textAnchor="middle" fontSize={13} fontWeight={700}>
-                {l}
-              </text>
-              {masked && (
-                <text x={TX(j) + TW / 2} y={TOK_Y - 6} textAnchor="middle" fontSize={9.5} fontWeight={700} style={{ fill: 'var(--muted)' }}>
-                  future: masked
+          {/* tokens */}
+          {LABELS.map((l, j) => {
+            const isQ = j === qi;
+            const masked = f.masked[j];
+            return (
+              <g key={j} opacity={masked ? 0.45 : 1} style={{ transition: 'opacity 0.3s ease' }}>
+                <rect x={TX(j)} y={TOK_Y} width={TW} height={28} rx={6} fill={isQ ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={isQ ? 'var(--accent)' : 'var(--border)'} strokeWidth={isQ ? 2.2 : 1.2} strokeDasharray={masked ? '4 3' : undefined} />
+                <text x={TX(j) + TW / 2} y={TOK_Y + 19} textAnchor="middle" fontSize={13} fontWeight={700}>
+                  {l}
                 </text>
-              )}
-              {/* per-token vector */}
-              {perToken && <VecCells v={perToken[j]} x={TX(j) + (TW - 4 * CELL) / 2} y={TOK_Y + 36} max={st === 'q' ? 3 : 1.5} hot={isQ && (st === 'q' || st === 'embed')} />}
-              {/* score / weight under token */}
-              {showScores && f.raw[j] !== null && !masked && (
-                <text x={TX(j) + TW / 2} y={TOK_Y + 52} textAnchor="middle" fontSize={12} fontWeight={700} style={{ fontFamily: 'var(--mono)', fill: f.key === j ? 'var(--accent)' : 'var(--text)' }}>
-                  {st === 'dot' ? f.raw[j]!.toFixed(2) : SCALED[qi][j].toFixed(2)}
-                </text>
-              )}
-              {showWeights && (
-                <g>
-                  <rect x={TX(j) + 8} y={TOK_Y + 62} width={TW - 16} height={10} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
-                  <rect x={TX(j) + 8} y={TOK_Y + 62} width={(TW - 16) * f.weights![j]} height={10} rx={3} fill="var(--good)" style={{ transition: 'width 0.3s ease' }} />
-                  <text x={TX(j) + TW / 2} y={TOK_Y + 88} textAnchor="middle" fontSize={11} fontWeight={700} style={{ fontFamily: 'var(--mono)' }}>
-                    {(f.weights![j] * 100).toFixed(0)}%
+                {masked && (
+                  <text x={TX(j) + TW / 2} y={TOK_Y - 6} textAnchor="middle" fontSize={9.5} fontWeight={700} style={{ fill: 'var(--muted)' }}>
+                    future: masked
                   </text>
-                </g>
+                )}
+                {/* per-token vector */}
+                {perToken && <VecCells v={perToken[j]} x={TX(j) + (TW - 4 * CELL) / 2} y={TOK_Y + 36} max={st === 'q' ? 3 : 1.5} hot={isQ && (st === 'q' || st === 'embed')} />}
+                {/* score / weight under token */}
+                {showScores && f.raw[j] !== null && !masked && (
+                  <text x={TX(j) + TW / 2} y={TOK_Y + 52} textAnchor="middle" fontSize={12} fontWeight={700} style={{ fontFamily: 'var(--mono)', fill: f.key === j ? 'var(--accent)' : 'var(--text)' }}>
+                    {st === 'dot' ? f.raw[j]!.toFixed(2) : SCALED[qi][j].toFixed(2)}
+                  </text>
+                )}
+                {showWeights && (
+                  <g>
+                    <rect x={TX(j) + 8} y={TOK_Y + 62} width={TW - 16} height={10} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
+                    <rect x={TX(j) + 8} y={TOK_Y + 62} width={(TW - 16) * f.weights![j]} height={10} rx={3} fill="var(--good)" style={{ transition: 'width 0.3s ease' }} />
+                    <text x={TX(j) + TW / 2} y={TOK_Y + 88} textAnchor="middle" fontSize={11} fontWeight={700} style={{ fontFamily: 'var(--mono)' }}>
+                      {(f.weights![j] * 100).toFixed(0)}%
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+          {perToken && (
+            <text x={8} y={TOK_Y + 74} className="viz-label" style={{ fontSize: 10 }}>
+              {st === 'embed' ? 'x' : st === 'q' ? 'q = x·W_Q' : st === 'k' ? 'k = x·W_K' : 'v = x·W_V'} per token
+            </text>
+          )}
+          {st === 'sum' && (
+            <text x={300} y={TOK_Y + 112} textAnchor="middle" fontSize={11} fontWeight={600}>
+              z({LABELS[qi]}) = Σ wⱼ·vⱼ = [{att.Z[qi].map(f2).join(', ')}]
+            </text>
+          )}
+
+          {/* lower-left: matrix for the stage */}
+          {matForStage && (
+            <Matrix
+              M={matForStage.M}
+              x={8}
+              y={panelY}
+              title={matForStage.title}
+              max={matForStage.max}
+              rowLabels={matForStage.rows ?? ['det', 'noun', 'verb', 'prep']}
+              colLabels={matForStage.cols}
+              hotRow={matForStage.hot}
+              cell={matForStage.M[0].length > 4 ? 25 : 24}
+            />
+          )}
+
+          {/* lower-right: formula or next-token distribution */}
+          {bars ? (
+            <g>
+              <text x={330} y={panelY - 6} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+                next token after “{LABELS.slice(0, qi + 1).join(' ')}” {f.probsT ? `(T = ${params.temperature.toFixed(1)})` : '(T = 1)'}
+              </text>
+              {VOCAB.map((w, k) => {
+                const y = panelY + 6 + k * 22;
+                const p = bars[k];
+                const p1 = f.probs![k];
+                return (
+                  <g key={w}>
+                    <text x={368} y={y + 12} textAnchor="end" fontSize={11} style={{ fontFamily: 'var(--mono)' }}>
+                      {w}
+                    </text>
+                    <rect x={374} y={y + 2} width={170} height={13} rx={3} fill="var(--surface-2)" />
+                    {f.probsT && <rect x={374} y={y + 2} width={170 * p1} height={13} rx={3} fill="none" stroke="var(--text-2)" strokeDasharray="3 2" />}
+                    <rect x={374} y={y + 2} width={170 * p} height={13} rx={3} fill="var(--good)" opacity={0.85} style={{ transition: 'width 0.3s ease' }} />
+                    <text x={550} y={y + 12} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
+                      {(p * 100).toFixed(0)}%
+                    </text>
+                  </g>
+                );
+              })}
+              {f.probsT && (
+                <text x={374} y={panelY + 146} className="viz-label" style={{ fontSize: 10 }}>
+                  dashed = T 1.0 · filled = T {params.temperature.toFixed(1)}
+                </text>
               )}
             </g>
-          );
-        })}
-        {perToken && (
-          <text x={8} y={TOK_Y + 74} className="viz-label" style={{ fontSize: 10 }}>
-            {st === 'embed' ? 'x' : st === 'q' ? 'q = x·W_Q' : st === 'k' ? 'k = x·W_K' : 'v = x·W_V'} per token
-          </text>
-        )}
-        {st === 'sum' && (
-          <text x={300} y={TOK_Y + 112} textAnchor="middle" fontSize={11} fontWeight={600}>
-            z({LABELS[qi]}) = Σ wⱼ·vⱼ = [{att.Z[qi].map(f2).join(', ')}]
-          </text>
-        )}
-
-        {/* lower-left: matrix for the stage */}
-        {matForStage && (
-          <Matrix
-            M={matForStage.M}
-            x={8}
-            y={panelY}
-            title={matForStage.title}
-            max={matForStage.max}
-            rowLabels={matForStage.rows ?? ['det', 'noun', 'verb', 'prep']}
-            colLabels={matForStage.cols}
-            hotRow={matForStage.hot}
-            cell={matForStage.M[0].length > 4 ? 25 : 24}
-          />
-        )}
-
-        {/* lower-right: formula or next-token distribution */}
-        {bars ? (
-          <g>
-            <text x={330} y={panelY - 6} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-              next token after “{LABELS.slice(0, qi + 1).join(' ')}” {f.probsT ? `(T = ${params.temperature.toFixed(1)})` : '(T = 1)'}
-            </text>
-            {VOCAB.map((w, k) => {
-              const y = panelY + 6 + k * 22;
-              const p = bars[k];
-              const p1 = f.probs![k];
-              return (
-                <g key={w}>
-                  <text x={368} y={y + 12} textAnchor="end" fontSize={11} style={{ fontFamily: 'var(--mono)' }}>
-                    {w}
-                  </text>
-                  <rect x={374} y={y + 2} width={170} height={13} rx={3} fill="var(--surface-2)" />
-                  {f.probsT && <rect x={374} y={y + 2} width={170 * p1} height={13} rx={3} fill="none" stroke="var(--text-2)" strokeDasharray="3 2" />}
-                  <rect x={374} y={y + 2} width={170 * p} height={13} rx={3} fill="var(--good)" opacity={0.85} style={{ transition: 'width 0.3s ease' }} />
-                  <text x={550} y={y + 12} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
-                    {(p * 100).toFixed(0)}%
-                  </text>
-                </g>
-              );
-            })}
-            {f.probsT && (
-              <text x={374} y={panelY + 146} className="viz-label" style={{ fontSize: 10 }}>
-                dashed = T 1.0 · filled = T {params.temperature.toFixed(1)}
+          ) : (
+            <g>
+              <rect x={330} y={panelY - 4} width={262} height={92} rx={8} fill="var(--surface-2)" stroke="var(--border)" />
+              <text x={342} y={panelY + 16} fontSize={11} fontWeight={700}>
+                Attention(Q, K, V) =
               </text>
-            )}
-          </g>
-        ) : (
-          <g>
-            <rect x={330} y={panelY - 4} width={262} height={92} rx={8} fill="var(--surface-2)" stroke="var(--border)" />
-            <text x={342} y={panelY + 16} fontSize={11} fontWeight={700}>
-              Attention(Q, K, V) =
-            </text>
-            <text x={342} y={panelY + 38} fontSize={12} style={{ fontFamily: 'var(--mono)' }}>
-              softmax(QKᵀ/√d_k{dec ? ' + mask' : ''})·V
-            </text>
-            <text x={342} y={panelY + 60} fontSize={10} style={{ fill: 'var(--text-2)' }}>
-              d_k = 4 · 5 tokens · 1 head
-            </text>
-            <text x={342} y={panelY + 76} fontSize={10} style={{ fill: 'var(--text-2)' }}>
-              {dec ? 'decoder: token i sees tokens 1…i' : 'encoder: every token sees all tokens'}
-            </text>
-          </g>
-        )}
-      </svg>
+              <text x={342} y={panelY + 38} fontSize={12} style={{ fontFamily: 'var(--mono)' }}>
+                softmax(QKᵀ/√d_k{dec ? ' + mask' : ''})·V
+              </text>
+              <text x={342} y={panelY + 60} fontSize={10} style={{ fill: 'var(--text-2)' }}>
+                d_k = 4 · 5 tokens · 1 head
+              </text>
+              <text x={342} y={panelY + 76} fontSize={10} style={{ fill: 'var(--text-2)' }}>
+                {dec ? 'decoder: token i sees tokens 1…i' : 'encoder: every token sees all tokens'}
+              </text>
+            </g>
+          )}
+        </svg>
+      </WideSvg>
     </VizFrame>
   );
 }

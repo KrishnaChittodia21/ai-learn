@@ -54,7 +54,7 @@ const topic: Topic = {
 
 - ffmpeg → mono 16 kHz PCM: 60 × 60 × 16,000 × 2 bytes ≈ **115 MB**; as 32 kbps Opus ≈ **14 MB** (under a 25 MB upload cap).
 - Silero VAD finds 41 minutes of speech → **32% less audio** to transcribe.
-- Chunker merges segments into 24 chunks of ~100 s each, cut at pauses ≥ 500 ms.
+- Chunker merges segments into ~90 chunks of ≤ 30 s (the Whisper window), cut at pauses ≥ 500 ms.
 - pyannote finds 2 speakers; overlap with ASR words labels 58% of words as the rep, 42% as the customer — a talk-ratio metric sales managers actually ask for.`,
       diagram: `  file.wav/mp4 ─► ffmpeg (mono,16kHz) ─► VAD (30ms frames)
                                              │ speech segments
@@ -522,7 +522,7 @@ console.log(latencyReport({ turn: 300, stt: 150, llm: 900, tts: 150, network: 80
         {
           language: 'typescript',
           title: 'Extract scene-change keyframes and ask a VLM with timestamps',
-          code: `import { execFileSync } from 'node:child_process';
+          code: `import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -531,10 +531,11 @@ const MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-5-5';
 
 export function keyframes(video: string, outDir: string) {
   // select frames whose scene score > 0.3, scale to 768 px wide, log timestamps via showinfo
-  const log = execFileSync('ffmpeg', [
+  // ffmpeg logs (incl. showinfo) go to stderr, so read it from spawnSync
+  const log = spawnSync('ffmpeg', [
     '-i', video, '-vf', "select='gt(scene,0.3)',scale=768:-2,showinfo",
-    '-vsync', 'vfr', outDir + '/kf_%04d.jpg',
-  ], { stdio: ['ignore', 'ignore', 'pipe'] }).toString();
+    '-fps_mode', 'vfr', outDir + '/kf_%04d.jpg',
+  ], { encoding: 'utf8' }).stderr;
   const times = [...log.matchAll(/pts_time:([\\d.]+)/g)].map((m) => Number(m[1]));
   const files = readdirSync(outDir).filter((f) => f.startsWith('kf_')).sort();
   return files.map((f, i) => ({ file: outDir + '/' + f, t: times[i] ?? 0 }));
@@ -551,7 +552,7 @@ export async function askVideo(frames: { file: string; t: number }[], transcript
   content.push({ type: 'text', text: 'Transcript:\\n' + transcript + '\\n\\nQuestion: ' + q +
     '\\nAnswer with mm:ss timestamps for evidence.' });
   const res = await client.messages.create({ model: MODEL, max_tokens: 500, messages: [{ role: 'user', content }] });
-  return res.content[0]?.type === 'text' ? res.content[0].text : '';
+  return res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
 }`,
         },
       ],
@@ -646,15 +647,15 @@ export async function transcribe(path: string) {
         language: 'typescript',
         code: `import OpenAI from 'openai';
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const openai = new OpenAI();
 const STT_MODEL = process.env.STT_MODEL ?? 'gpt-4o-transcribe';
 const TARGET_S = 300;
 
 function silences(path: string): number[] {
-  const log = execFileSync('ffmpeg', ['-i', path, '-af', 'silencedetect=n=-35dB:d=0.5', '-f', 'null', '-'],
-    { stdio: ['ignore', 'ignore', 'pipe'] }).toString();
+  const log = spawnSync('ffmpeg', ['-i', path, '-af', 'silencedetect=n=-35dB:d=0.5', '-f', 'null', '-'],
+    { encoding: 'utf8' }).stderr; // silencedetect logs to stderr
   // midpoint of each silence is a safe cut point
   const starts = [...log.matchAll(/silence_start: ([\\d.]+)/g)].map((m) => Number(m[1]));
   const ends = [...log.matchAll(/silence_end: ([\\d.]+)/g)].map((m) => Number(m[1]));

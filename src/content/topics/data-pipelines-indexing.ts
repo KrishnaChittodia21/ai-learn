@@ -232,7 +232,7 @@ import { Pool } from 'pg';
 
 const pg = new Pool();
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-const PIPELINE_VERSION = 'p3|rec-512-64-v2|te3-small'; // part of the hash: version bump = reindex
+const PIPELINE_VERSION = 'p3|rec-512-64-v2|te3-small'; // part of doc hash AND chunk ids: version bump = reindex
 
 // strip volatile content so cosmetic changes do not trigger re-embedding
 const normalise = (t: string) => t.replace(/Last (viewed|updated):.*$/gim, '').replace(/\\s+/g, ' ').trim();
@@ -245,7 +245,7 @@ export async function indexDoc(docId: string, text: string, chunker: (t: string)
   const { rows } = await pg.query('SELECT doc_hash, chunk_ids FROM index_records WHERE doc_id = $1', [docId]);
   if (rows[0]?.doc_hash === docHash) return { skipped: true }; // unchanged: zero cost
 
-  const chunks = chunker(norm).map((c) => ({ id: sha(docId + ':' + sha(c)).slice(0, 32), text: c }));
+  const chunks = chunker(norm).map((c) => ({ id: sha(PIPELINE_VERSION + ':' + docId + ':' + sha(c)).slice(0, 32), text: c }));
   const oldIds = new Set<string>(rows[0]?.chunk_ids ?? []);
   const newIds = new Set(chunks.map((c) => c.id));
   const toEmbed = chunks.filter((c) => !oldIds.has(c.id)); // only genuinely new chunk content
@@ -697,7 +697,7 @@ const QA = z.object({
 export async function generate(chunk: { id: string; text: string }, persona: string) {
   const res = await openai.chat.completions.create({
     model: GEN_MODEL,
-    temperature: 0.9, // diversity in phrasing
+    // GPT-5-family models only accept the default temperature: diversity comes from personas + sampling
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: 'Write realistic user questions about the passage, as asked by: ' + persona + '. ' +
@@ -853,7 +853,7 @@ export async function sync() {
     const rec = records.get(doc.id);
     if (rec?.docHash === docHash) continue; // unchanged: no cost
 
-    const chunks = splitByHeadings(doc.text, 512).map((t) => ({ id: uuid(sha(doc.id + ':' + sha(t))), text: t }));
+    const chunks = splitByHeadings(doc.text, 512).map((t) => ({ id: uuid(sha(PIPE + ':' + doc.id + ':' + sha(t))), text: t }));
     const old = new Set(rec?.chunkIds ?? []);
     const fresh = chunks.filter((c) => !old.has(c.id));
     for (let i = 0; i < fresh.length; i += 256) {

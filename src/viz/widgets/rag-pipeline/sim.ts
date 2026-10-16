@@ -73,6 +73,10 @@ export function simulate({ topK, rerank, budget }: Params): Frame[] {
   push({ stage: 'index', caption: `Offline: the help-centre docs were split into ${CHUNKS.length} chunks (260–380 tokens each), embedded, and stored in a vector index.` });
   push({ stage: 'query', caption: `A user asks: "${QUESTION}"` });
   push({ stage: 'embed', caption: `The query is embedded with the same bi-encoder as the chunks, giving one vector. Query and chunks were encoded separately, so the score only compares their overall gist.` });
+  push({
+    stage: 'embed',
+    caption: `The index scores every chunk by cosine(query, chunk): ${byVec.map((id) => `${id} ${byId(id).vec.toFixed(2)}`).join(', ')}. Scores are bunched within ${(byId(byVec[0]).vec - byId(byVec[2]).vec).toFixed(2)} at the top: the bi-encoder sees "refund + annual plan" everywhere.`,
+  });
   st.retrieved = candidates;
   const c3rank = byVec.indexOf(CORRECT) + 1;
   push({
@@ -115,7 +119,7 @@ export function simulate({ topK, rerank, budget }: Params): Frame[] {
   const cite = (id: string) => st.inPrompt.indexOf(id) + 1;
   push({
     stage: 'send',
-    caption: `Send ${st.used} tokens to the LLM with the instruction "answer only from the context and cite [n]". Context: ${st.inPrompt.map((id, i) => `[${i + 1}] ${id}`).join(', ') || 'nothing'}.`,
+    caption: `Send a ${st.used - ANSWER_RESERVE}-token prompt (plus ${ANSWER_RESERVE} reserved for the answer = ${st.used}/${budget}) with the instruction "answer only from the context and cite [n]". Context: ${st.inPrompt.map((id, i) => `[${i + 1}] ${id}`).join(', ') || 'nothing'}.`,
   });
   const answer = hasCorrect
     ? `EU customers can cancel an annual plan within 45 days [${cite(CORRECT)}]${st.inPrompt.includes('C1') ? ` (the standard 30-day window [${cite('C1')}] does not apply in the EU)` : ''}.`

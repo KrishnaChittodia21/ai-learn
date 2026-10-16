@@ -165,7 +165,7 @@ export function simulate({ type, load, failure }: Params): Frame[] {
     const rps = Math.round((load * t) / TICKS);
     const util = rps / HUB_CAPACITY;
     const ms = hubLatencyMs(rps);
-    const shed = Math.max(1, rps - HUB_CAPACITY);
+    const shed = Math.max(0, rps - HUB_CAPACITY);
     let note = '';
     if (failure && !guardDown) {
       if (breaker === 'closed') {
@@ -194,7 +194,9 @@ export function simulate({ type, load, failure }: Params): Frame[] {
       breaker,
       failures,
       caption: hot
-        ? `Load ${rps} req/s ≥ hub capacity ${HUB_CAPACITY}: the queue grows without bound, so the hub sheds ${shed} req/s with 429s. The spokes still have spare capacity; the hub is the bottleneck.${note}`
+        ? shed > 0
+          ? `Load ${rps} req/s > hub capacity ${HUB_CAPACITY}: the queue would grow without bound, so the hub sheds ${shed} req/s with 429s. The spokes still have spare capacity; the hub is the bottleneck.${note}`
+          : `Load ${rps} req/s = hub capacity: 100% busy with zero slack, so every burst queues and latency is unbounded (${HUB_WORK_MS} ms / (1 − 1)). The spokes still have spare capacity; the hub is the bottleneck.${note}`
         : `Load ${rps} req/s: hub ${Math.round(util * 100)}% busy, ~${ms.toFixed(0)} ms in hub (time in hub = ${HUB_WORK_MS} ms / (1 − utilisation)).${note}`,
       predict:
         t === 3
@@ -210,7 +212,7 @@ export function simulate({ type, load, failure }: Params): Frame[] {
     rps: load,
     hubUtil: load / HUB_CAPACITY,
     hubMs: hubLatencyMs(load),
-    shed: load >= HUB_CAPACITY ? Math.max(1, load - HUB_CAPACITY) : 0,
+    shed: Math.max(0, load - HUB_CAPACITY),
     breaker,
     failures,
     caption: `Mitigations: keep the hub stateless and run N replicas behind a load balancer, use a fast classifier (not a big LLM) for routing, cache routing for repeated intents, and run cheap policy checks as sidecars. ${load >= HUB_CAPACITY ? `Two replicas would serve ${load} req/s at ${Math.round((load / 2 / HUB_CAPACITY) * 100)}% utilisation each → ~${hubLatencyMs(load / 2).toFixed(0)} ms in hub.` : ''}`,
@@ -220,7 +222,7 @@ export function simulate({ type, load, failure }: Params): Frame[] {
     rps: load,
     hubUtil: load / HUB_CAPACITY,
     hubMs: hubLatencyMs(load),
-    shed: load >= HUB_CAPACITY ? Math.max(1, load - HUB_CAPACITY) : 0,
+    shed: Math.max(0, load - HUB_CAPACITY),
     breaker,
     failures,
     caption: `Hub-and-spoke buys one place for policy, routing, fallbacks and tracing, at the price of a shared bottleneck and single point of failure. Router pattern = just the routing part of the hub.`,

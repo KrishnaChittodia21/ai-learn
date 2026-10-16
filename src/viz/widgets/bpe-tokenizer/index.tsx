@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
+import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
 import { BASE_VOCAB, CORPUS, DEFAULT_PARAMS, MAX_MERGES, MIN_MERGES, TEXTS, encode, simulate, train, type Params, type TextChoice } from './sim';
 
@@ -65,86 +66,88 @@ export default function BpeTokenizerViz() {
         </>
       }
     >
-      <svg viewBox="0 0 600 340" className="viz-svg" role="img" aria-label={aria}>
-        <text x={14} y={22} className="viz-label">
-          text: “{TEXTS[params.text].text}”
-        </text>
-        <text x={586} y={22} textAnchor="end" fontSize={13} fontWeight={700}>
-          {f.tokenCount} tokens
-          <tspan className="viz-label" dx={6}>
-            (started at {startCount})
-          </tspan>
-        </text>
-        {chips.map((c) => {
-          const hot = lastNew !== null && c.t === lastNew;
-          return (
-            <g key={c.idx}>
-              <rect
-                x={c.x}
-                y={c.y}
-                width={c.w}
-                height={26}
-                rx={5}
-                fill={c.byte ? 'var(--bad-soft)' : FILLS[c.idx % 3]}
-                stroke={hot ? 'var(--accent)' : c.byte ? 'var(--bad)' : 'var(--border)'}
-                strokeWidth={hot ? 2.5 : 1}
-              />
-              <text x={c.x + c.w / 2} y={c.y + 17} textAnchor="middle" fontSize={c.byte ? 10 : 12.5} style={{ fontFamily: 'var(--mono)' }}>
-                {c.t}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* merge table */}
-        <text x={14} y={150} fontSize={11} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-          learned merges (latest 8 of {f.k})
-        </text>
-        {shown.length === 0 && (
-          <text x={14} y={172} className="viz-label">
-            none yet: vocabulary = 256 bytes
+      <WideSvg>
+        <svg viewBox="0 0 600 340" className="viz-svg" role="img" aria-label={aria}>
+          <text x={14} y={22} className="viz-label">
+            text: “{TEXTS[params.text].text}”
           </text>
-        )}
-        {shown.map((m, r) => {
-          const hot = m.i === f.lastMerge;
-          return (
-            <g key={m.i}>
-              <rect x={12} y={158 + r * 21} width={258} height={19} rx={4} fill={hot ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={hot ? 'var(--accent)' : 'var(--border)'} />
-              <text x={20} y={171 + r * 21} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
-                #{m.i + 1} {m.a} + {m.b} → {m.a + m.b}
-              </text>
-              <text x={262} y={171 + r * 21} textAnchor="end" fontSize={10} style={{ fill: 'var(--text-2)' }}>
-                ×{m.count}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* corpus segmentation */}
-        <text x={290} y={150} fontSize={11} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-          training corpus (word ×freq) as currently split
-        </text>
-        {corpusPreview.map((c, r) => (
-          <text key={c.w} x={290} y={171 + r * 17} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
-            {c.seg.join('·')}
-            <tspan className="viz-label" style={{ fontSize: 10 }} dx={6}>
-              ×{c.c}
+          <text x={586} y={22} textAnchor="end" fontSize={13} fontWeight={700}>
+            {f.tokenCount} tokens
+            <tspan className="viz-label" dx={6}>
+              (started at {startCount})
             </tspan>
           </text>
-        ))}
+          {chips.map((c) => {
+            const hot = lastNew !== null && c.t === lastNew;
+            return (
+              <g key={c.idx}>
+                <rect
+                  x={c.x}
+                  y={c.y}
+                  width={c.w}
+                  height={26}
+                  rx={5}
+                  fill={c.byte ? 'var(--bad-soft)' : FILLS[c.idx % 3]}
+                  stroke={hot ? 'var(--accent)' : c.byte ? 'var(--bad)' : 'var(--border)'}
+                  strokeWidth={hot ? 2.5 : 1}
+                />
+                <text x={c.x + c.w / 2} y={c.y + 17} textAnchor="middle" fontSize={c.byte ? 10 : 12.5} style={{ fontFamily: 'var(--mono)' }}>
+                  {c.t}
+                </text>
+              </g>
+            );
+          })}
 
-        {/* vocab / token bars */}
-        <text x={290} y={300} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
-          vocab {f.vocab} = {BASE_VOCAB} bytes + {f.k} merges
-        </text>
-        <rect x={290} y={306} width={296} height={9} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
-        <rect x={290} y={306} width={(296 * f.vocab) / (BASE_VOCAB + MAX_MERGES)} height={9} rx={3} fill="var(--accent)" style={{ transition: 'width 0.3s ease' }} />
-        <text x={290} y={329} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
-          tokens {f.tokenCount}/{startCount}
-        </text>
-        <rect x={380} y={321} width={206} height={9} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
-        <rect x={380} y={321} width={(206 * f.tokenCount) / startCount} height={9} rx={3} fill="var(--good)" style={{ transition: 'width 0.3s ease' }} />
-      </svg>
+          {/* merge table */}
+          <text x={14} y={150} fontSize={11} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+            learned merges (latest 8 of {f.k})
+          </text>
+          {shown.length === 0 && (
+            <text x={14} y={172} className="viz-label">
+              none yet: vocabulary = 256 bytes
+            </text>
+          )}
+          {shown.map((m, r) => {
+            const hot = m.i === f.lastMerge;
+            return (
+              <g key={m.i}>
+                <rect x={12} y={158 + r * 21} width={258} height={19} rx={4} fill={hot ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={hot ? 'var(--accent)' : 'var(--border)'} />
+                <text x={20} y={171 + r * 21} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
+                  #{m.i + 1} {m.a} + {m.b} → {m.a + m.b}
+                </text>
+                <text x={262} y={171 + r * 21} textAnchor="end" fontSize={10} style={{ fill: 'var(--text-2)' }}>
+                  ×{m.count}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* corpus segmentation */}
+          <text x={290} y={150} fontSize={11} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+            training corpus (word ×freq) as currently split
+          </text>
+          {corpusPreview.map((c, r) => (
+            <text key={c.w} x={290} y={171 + r * 17} fontSize={10.5} style={{ fontFamily: 'var(--mono)' }}>
+              {c.seg.join('·')}
+              <tspan className="viz-label" style={{ fontSize: 10 }} dx={6}>
+                ×{c.c}
+              </tspan>
+            </text>
+          ))}
+
+          {/* vocab / token bars */}
+          <text x={290} y={300} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
+            vocab {f.vocab} = {BASE_VOCAB} bytes + {f.k} merges
+          </text>
+          <rect x={290} y={306} width={296} height={9} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
+          <rect x={290} y={306} width={(296 * f.vocab) / (BASE_VOCAB + MAX_MERGES)} height={9} rx={3} fill="var(--accent)" style={{ transition: 'width 0.3s ease' }} />
+          <text x={290} y={329} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
+            tokens {f.tokenCount}/{startCount}
+          </text>
+          <rect x={380} y={321} width={206} height={9} rx={3} fill="var(--surface-2)" stroke="var(--border)" />
+          <rect x={380} y={321} width={(206 * f.tokenCount) / startCount} height={9} rx={3} fill="var(--good)" style={{ transition: 'width 0.3s ease' }} />
+        </svg>
+      </WideSvg>
     </VizFrame>
   );
 }

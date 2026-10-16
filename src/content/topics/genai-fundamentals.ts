@@ -264,7 +264,7 @@ Lower temperature squashes the tail (Paris almost always); higher temperature fl
           language: 'typescript',
           title: 'Temperature + top-p sampling from scratch (no API needed)',
           code: `// Toy logits for the next token after "The capital of France is"
-const logits: Record<string, number> = { ' Paris': 5.0, ' a': 2.92, ' located': 2.51, ' the': 2.10 };
+const logits: Record<string, number> = { ' Paris': 5.0, ' a': 2.92, ' located': 2.41, ' the': 2.0 };
 
 function softmax(scores: number[], temperature: number): number[] {
   const scaled = scores.map((s) => s / Math.max(temperature, 1e-6)); // T→0 ≈ greedy
@@ -386,7 +386,7 @@ console.log(estimateCall([
   { role: 'user', content: 'Explain context windows in two sentences.' },
   { role: 'assistant', content: 'A context window is the maximum number of tokens...' },
 ], 1024, 200_000, 3, 15));
-// ≈ { inputTokens: 44, worstCaseCostUsd: 0.015492 } — note output dominates the cost`,
+// ≈ { inputTokens: 42, worstCaseCostUsd: 0.015486 } — note output dominates the cost`,
         },
         explanation:
           'Even this rough heuristic shows two key facts: input and output share one window, and output tokens (5× the price here) dominate cost for short prompts. In production, use the provider\'s token-counting endpoint or tokenizer for exact numbers.',

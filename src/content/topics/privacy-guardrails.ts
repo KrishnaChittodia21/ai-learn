@@ -287,7 +287,7 @@ export function redactStructured(text: string) {
 }`,
         },
         hints: [
-          'Card regex: /\\b(?:\\d[ -]?){13,19}\\b/g, then strip spaces/dashes before checking Luhn.',
+          'Card regex: /\\b\\d(?:[ -]?\\d){12,18}\\b/g, then strip spaces/dashes before checking Luhn.',
           'Keep a Map<string, string> from original value to token to reuse tokens.',
         ],
         solution: {
@@ -315,7 +315,7 @@ export function redactStructured(input: string) {
     return seen.get(value)!;
   };
   let text = input.replace(/[\\w.+-]+@[\\w-]+\\.[\\w.]+/g, (m) => tokenFor('EMAIL', m));
-  text = text.replace(/\\b(?:\\d[ -]?){13,19}\\b/g, (m) => {
+  text = text.replace(/\\b\\d(?:[ -]?\\d){12,18}\\b/g, (m) => {
     const digits = m.replace(/[ -]/g, '');
     return luhn(digits) ? tokenFor('CARD', m) : m;      // order ids fail Luhn and stay
   });
@@ -404,7 +404,14 @@ rails:
       input:
         entities: [PERSON, EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD]
 
+# every self-check / content-safety rail needs a prompt template or config loading fails;
+# the content_safety_check_{input,output} $model=content_safety prompts live in prompts.yml
 prompts:
+  - task: self_check_output
+    content: |
+      Bot message: "{{ bot_response }}"
+      Does it reveal another customer's data or give investment advice (Yes or No)?
+      Answer:
   - task: self_check_input
     content: |
       Your task is to check if the user message complies with policy.

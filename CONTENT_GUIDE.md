@@ -54,8 +54,8 @@ Each section has ALL of these:
 
 ### Code conventions
 
-- **TypeScript (Node 20+) by default**: `openai`, `@anthropic-ai/sdk`, `zod`, `@langchain/*`, `@langchain/langgraph`, `llamaindex`, `@modelcontextprotocol/sdk`, `pg` + `pgvector`, `@qdrant/js-client-rest`, `ioredis`, `bullmq`.
-- **Python where the ecosystem is Python**: fine-tuning (`transformers`, `peft`, `trl`, `bitsandbytes`), training internals, PyTorch attention maths, vLLM, `sentence-transformers`, `ragas`, `unstructured`, OCR. Plain numpy for maths demos.
+- **TypeScript (Node 20+) by default**: `openai`, `@anthropic-ai/sdk`, `zod`, `@langchain/*`, `@langchain/langgraph`, `@modelcontextprotocol/sdk`, `pg` + `pgvector`, `@qdrant/js-client-rest`, `ioredis`, `bullmq`.
+- **Python where the ecosystem is Python**: fine-tuning (`transformers`, `peft`, `trl`, `bitsandbytes`), training internals, PyTorch attention maths, vLLM, `sentence-transformers`, `ragas`, LlamaIndex (`llama_index.core`; LlamaIndex.TS is deprecated), `unstructured`, OCR. Plain numpy for maths demos.
 - Model ids: read them from config so they don't go stale, e.g. `const MODEL = process.env.LLM_MODEL ?? 'claude-sonnet-5-5'` or `'gpt-5-mini'`. Embedding models: `text-embedding-3-small` (1536-d), `bge-m3`, `all-MiniLM-L6-v2` (384-d) and similar.
 - Use real API shapes (OpenAI Chat Completions / Responses API, Anthropic Messages API, tool/function schemas, SSE streaming). Don't invent SDK methods.
 - Use real numbers with sane ranges: token counts (~4 chars ≈ 1 token in English), context windows, $ per 1M tokens (say "illustrative price"), latencies (TTFT 200–800 ms), embedding dims, HNSW `M`/`efSearch`, recall figures.
@@ -125,9 +125,11 @@ Fix everything until both pass. (The cross-topic duplicate check may flag pairs 
 - `agent-memory-tools` (agents 3): Agent Memory · Short-Term Memory · Long-Term Memory · Tool Selection
 - `multi-agent-systems` (agents 4): Agentic Workflows · Multi-Agent Systems · Agent Orchestration
 - `hitl-state-machines` (agents 5): Human-in-the-Loop · State Machines
-- `langchain-langgraph-llamaindex` (frameworks 1): LangChain · LangGraph · LlamaIndex
-- `mcp` (frameworks 2): Model Context Protocol (MCP) · MCP Servers and Tools
-- `knowledge-graphs` (frameworks 3): Knowledge Graphs · Graph Databases · Entity Extraction · Entity Resolution · Graph-Based Retrieval
+- `langchain` (frameworks 1): LangChain Fundamentals · Prompt Templates and Output Parsers · LCEL and Runnables · Tools and Agents · Retrievers and RAG Chains · LangSmith and Production Practices
+- `langgraph` (frameworks 2): LangGraph Fundamentals · Conditional Edges and Cycles · Persistence and Checkpointers · Streaming · Human-in-the-Loop with interrupt() · Subgraphs and the Send API · Long-Term Memory and Production
+- `llamaindex` (frameworks 3): LlamaIndex Fundamentals · Ingestion Pipelines and Indexes · Workflows and Agents
+- `mcp` (frameworks 4): Model Context Protocol (MCP) · MCP Servers and Tools
+- `knowledge-graphs` (frameworks 5): Knowledge Graphs · Graph Databases · Entity Extraction · Entity Resolution · Graph-Based Retrieval
 - `fine-tuning` (models 1): Fine-Tuning · Supervised Fine-Tuning (SFT) · LoRA · QLoRA · PEFT
 - `alignment-distillation` (models 2): RLHF · DPO · Knowledge Distillation
 - `open-source-local-llms` (models 3): Open-Source LLMs · Local LLM Deployment · Quantization

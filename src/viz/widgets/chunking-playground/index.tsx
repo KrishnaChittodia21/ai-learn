@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
+import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
 import { ANSWER_SENTENCE, DEFAULT_PARAMS, N, SENTENCES, SIZE_MAX, SIZE_MIN, WORDS, brokenSentences, clampOverlap, cutSentences, simulate, type Params, type Strategy } from './sim';
 
@@ -51,7 +52,7 @@ export default function ChunkingPlaygroundViz() {
   const broken = brokenSentences(chunks);
 
   const dup = chunks.length ? chunks.reduce((a, c) => a + c.e - c.s, 0) - (chunks[chunks.length - 1].e - chunks[0].s) : 0;
-  const aria = `${params.strategy} chunking, size ${params.size}, overlap ${overlap}: ${chunks.length} chunks so far, ${cuts.length} sentences with a boundary inside, ${dup} duplicated tokens.`;
+  const aria = `${params.strategy} chunking, size ${params.size}, overlap ${overlap}: ${chunks.length} chunks${f.stage === 'chunk' ? ' so far' : ''}, ${cuts.length} sentences with a boundary inside, ${dup} duplicated tokens.${f.answerHits ? (f.answerHits.length ? ` Answer sentence wholly inside chunk ${f.answerHits.map((h) => h + 1).join(', ')}.` : ' Answer sentence split across chunks.') : ''}`;
 
   return (
     <VizFrame
@@ -82,76 +83,78 @@ export default function ChunkingPlaygroundViz() {
         </>
       }
     >
-      <svg viewBox="0 0 600 330" className="viz-svg" role="img" aria-label={aria}>
-        {WORDS.map((wd, i) => {
-          const p = LAYOUT[i];
-          const m = member[i];
-          const inCur = cur !== null && cur.s <= i && i < cur.e;
-          const dupe = f.showDupes && m.length > 1;
-          const fill = inCur ? 'var(--accent-soft)' : dupe ? 'var(--warn-soft)' : m.length ? (m[0] % 2 ? 'var(--surface-2)' : 'var(--good-soft)') : 'none';
-          const ans = f.highlightAnswer && wd.sentence === ANSWER_SENTENCE;
-          return (
-            <g key={i}>
-              <rect x={p.x - 1.5} y={p.y - 10} width={p.w + CHW} height={14} fill={fill} />
-              <text x={p.x} y={p.y} fontSize={9.5} fontWeight={ans ? 700 : 400} style={{ fill: ans ? 'var(--accent)' : 'var(--text)' }}>
-                {wd.w}
-              </text>
-              {ans && <line x1={p.x} y1={p.y + 2.5} x2={p.x + p.w} y2={p.y + 2.5} stroke="var(--accent)" strokeWidth={1.4} />}
-            </g>
-          );
-        })}
-        {cutAt.map((b) => {
-          const p = LAYOUT[b];
-          return (
-            <g key={b}>
-              <line x1={p.x - 2} y1={p.y - 12} x2={p.x - 2} y2={p.y + 4} stroke="var(--bad)" strokeWidth={2} />
-              <text x={p.x - 2} y={p.y - 12} textAnchor="middle" fontSize={8} style={{ fill: 'var(--bad)' }}>
-                ✂
-              </text>
-            </g>
-          );
-        })}
+      <WideSvg>
+        <svg viewBox="0 0 600 330" className="viz-svg" role="img" aria-label={aria}>
+          {WORDS.map((wd, i) => {
+            const p = LAYOUT[i];
+            const m = member[i];
+            const inCur = cur !== null && cur.s <= i && i < cur.e;
+            const dupe = f.showDupes && m.length > 1;
+            const fill = inCur ? 'var(--accent-soft)' : dupe ? 'var(--warn-soft)' : m.length ? (m[0] % 2 ? 'var(--surface-2)' : 'var(--good-soft)') : 'none';
+            const ans = f.highlightAnswer && wd.sentence === ANSWER_SENTENCE;
+            return (
+              <g key={i}>
+                <rect x={p.x - 1.5} y={p.y - 10} width={p.w + CHW} height={14} fill={fill} />
+                <text x={p.x} y={p.y} fontSize={9.5} fontWeight={ans ? 700 : 400} style={{ fill: ans ? 'var(--accent)' : 'var(--text)' }}>
+                  {wd.w}
+                </text>
+                {ans && <line x1={p.x} y1={p.y + 2.5} x2={p.x + p.w} y2={p.y + 2.5} stroke="var(--accent)" strokeWidth={1.4} />}
+              </g>
+            );
+          })}
+          {cutAt.map((b) => {
+            const p = LAYOUT[b];
+            return (
+              <g key={b}>
+                <line x1={p.x - 2} y1={p.y - 12} x2={p.x - 2} y2={p.y + 4} stroke="var(--bad)" strokeWidth={2} />
+                <text x={p.x - 2} y={p.y - 12} textAnchor="middle" fontSize={8} style={{ fill: 'var(--bad)' }}>
+                  ✂
+                </text>
+              </g>
+            );
+          })}
 
-        {/* chunk lanes on a token axis */}
-        <text x={14} y={laneTop - 8} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-          chunk map (token 1 → {N})
-        </text>
-        <rect x={14} y={laneTop - 3} width={400} height={2} fill="var(--border)" />
-        {chunks.map((c, k) => {
-          const answered = f.answerHits?.includes(k);
-          return (
-            <rect
-              key={k}
-              x={LX(c.s)}
-              y={laneTop + k * laneH}
-              width={Math.max(2, LX(c.e) - LX(c.s))}
-              height={Math.max(2, laneH - 2)}
-              rx={2}
-              fill={k === f.current ? 'var(--accent)' : answered ? 'var(--good)' : k % 2 ? 'var(--text-2)' : 'var(--good)'}
-              opacity={k === f.current || answered ? 1 : 0.55}
-            />
-          );
-        })}
+          {/* chunk lanes on a token axis */}
+          <text x={14} y={laneTop - 8} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+            chunk map (token 1 → {N})
+          </text>
+          <rect x={14} y={laneTop - 3} width={400} height={2} fill="var(--border)" />
+          {chunks.map((c, k) => {
+            const answered = f.answerHits?.includes(k);
+            return (
+              <rect
+                key={k}
+                x={LX(c.s)}
+                y={laneTop + k * laneH}
+                width={Math.max(2, LX(c.e) - LX(c.s))}
+                height={Math.max(2, laneH - 2)}
+                rx={2}
+                fill={k === f.current ? 'var(--accent)' : answered ? 'var(--good)' : k % 2 ? 'var(--text-2)' : 'var(--good)'}
+                opacity={k === f.current || answered ? 1 : 0.55}
+              />
+            );
+          })}
 
-        {/* stats */}
-        <g>
-          {[
-            ['chunks', String(chunks.length), 'var(--text)'],
-            ['sentences cut ✂', `${cuts.length}/${SENTENCES.length}`, cuts.length ? 'var(--bad)' : 'var(--good)'],
-            ['not whole in any chunk', f.showCuts ? String(broken.length) : '…', broken.length && f.showCuts ? 'var(--bad)' : 'var(--good)'],
-            ['duplicated tokens', String(dup), 'var(--warn)'],
-          ].map(([k, v, col], r) => (
-            <g key={k}>
-              <text x={430} y={laneTop + 6 + r * 20} fontSize={10} style={{ fill: 'var(--text-2)' }}>
-                {k}
-              </text>
-              <text x={590} y={laneTop + 6 + r * 20} textAnchor="end" fontSize={12} fontWeight={700} style={{ fill: col }}>
-                {v}
-              </text>
-            </g>
-          ))}
-        </g>
-      </svg>
+          {/* stats */}
+          <g>
+            {[
+              ['chunks', String(chunks.length), 'var(--text)'],
+              ['sentences cut ✂', `${cuts.length}/${SENTENCES.length}`, cuts.length ? 'var(--bad)' : 'var(--good)'],
+              ['not whole in any chunk', f.showCuts ? String(broken.length) : '…', broken.length && f.showCuts ? 'var(--bad)' : 'var(--good)'],
+              ['duplicated tokens', String(dup), 'var(--warn)'],
+            ].map(([k, v, col], r) => (
+              <g key={k}>
+                <text x={430} y={laneTop + 6 + r * 20} fontSize={10} style={{ fill: 'var(--text-2)' }}>
+                  {k}
+                </text>
+                <text x={590} y={laneTop + 6 + r * 20} textAnchor="end" fontSize={12} fontWeight={700} style={{ fill: col }}>
+                  {v}
+                </text>
+              </g>
+            ))}
+          </g>
+        </svg>
+      </WideSvg>
     </VizFrame>
   );
 }

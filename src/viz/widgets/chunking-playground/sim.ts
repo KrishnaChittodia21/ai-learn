@@ -15,7 +15,7 @@ export interface Params {
   overlap: number;
 }
 
-export const DEFAULT_PARAMS: Params = { strategy: 'fixed', size: 40, overlap: 10 };
+export const DEFAULT_PARAMS: Params = { strategy: 'fixed', size: 35, overlap: 10 };
 export const SIZE_MIN = 20;
 export const SIZE_MAX = 50;
 
@@ -216,7 +216,13 @@ export function simulate({ strategy, size, overlap: rawOverlap }: Params): Frame
       ? `Overlap duplicates ${dup} tokens (${((dup / N) * 100).toFixed(0)}% extra to embed and store). It is insurance for facts that straddle a boundary.`
       : `No duplicated tokens: ${overlap ? 'the recursive splitter only carries whole trailing sentences, and here none fit within both the overlap and the chunk size' : 'overlap is 0'}. Cheaper, but a fact on a boundary has no second chance.`,
   });
-  const hits = all.map((c, i) => ({ c, i })).filter(({ c }) => c.s <= SENTENCES[ANSWER_SENTENCE].s && c.e >= SENTENCES[ANSWER_SENTENCE].e).map(({ i }) => i);
+  const A = SENTENCES[ANSWER_SENTENCE];
+  const hits = all.map((c, i) => ({ c, i })).filter(({ c }) => c.s <= A.s && c.e >= A.e).map(({ i }) => i);
+  // best partial: the chunk holding the most of the answer sentence
+  const part = all
+    .map((c, i) => ({ i, n: Math.max(0, Math.min(c.e, A.e) - Math.max(c.s, A.s)), c }))
+    .sort((a, b) => b.n - a.n || a.i - b.i)[0];
+  const partWords = WORDS.slice(Math.max(part.c.s, A.s), Math.min(part.c.e, A.e)).map((w) => w.w);
   push({
     stage: 'question',
     chunks: all,
@@ -233,7 +239,7 @@ export function simulate({ strategy, size, overlap: rawOverlap }: Params): Frame
     answerHits: hits,
     caption: hits.length
       ? `Yes: chunk ${hits.map((h) => h + 1).join(' and ')} contain${hits.length > 1 ? '' : 's'} the whole sentence, so one retrieved chunk answers the question.`
-      : `No: the sentence is split across chunks, so the top hit holds "10 percent of the monthly fee" without the "capped at 50 percent" part (or vice versa). The LLM answers from half a fact.`,
+      : `No: the ${A.e - A.s}-token sentence is split across chunks. The best chunk (${part.i + 1}) holds only ${part.n} of its tokens ("${partWords.slice(0, 4).join(' ')} … ${partWords.slice(-3).join(' ')}"), and no chunk has all of it, so the LLM answers from part of the fact. Try more overlap or recursive splitting.`,
   });
   const oc = cutSentences(otherChunks).length;
   push({

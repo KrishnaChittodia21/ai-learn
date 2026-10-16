@@ -301,7 +301,10 @@ export async function answerFromImages(question: string, els: Element[]) {
     model: VLM,
     messages: [{ role: 'user', content: [
       { type: 'text', text: 'Answer from the images only; cite as (page N). Question: ' + question },
-      ...els.map((e) => ({ type: 'image_url' as const, image_url: { url: 'data:image/png;base64,' + e.pngBase64 } })),
+      ...els.flatMap((e) => [
+        { type: 'text' as const, text: 'Page ' + e.page + ':' }, // label each image so citations are real
+        { type: 'image_url' as const, image_url: { url: 'data:image/png;base64,' + e.pngBase64 } },
+      ]),
     ] }],
   });
   return r.choices[0].message.content;
@@ -505,6 +508,7 @@ const openai = new OpenAI();
 const VLM = process.env.VLM_MODEL ?? 'gpt-5-mini';
 const TEXT_LLM = process.env.LLM_MODEL ?? 'gpt-5-mini';
 
+// png is downscaled at ingest (e.g. long side <= 1536 px) so each image costs fewer tokens
 type Page = { n: number; png: string; text: string; visual: boolean };
 declare function searchPages(q: string, k: number): Promise<{ page: Page; score: number }[]>; // hybrid text + ColPali
 

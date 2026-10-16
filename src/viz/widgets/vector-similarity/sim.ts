@@ -75,6 +75,8 @@ export interface Frame extends BaseFrame {
 
 const f2 = (x: number) => x.toFixed(2);
 const vs = (v: number[]) => `(${f2(v[0])}, ${f2(v[1])})`;
+/** wrap negatives in parentheses inside products: 2.20×(-1.40) */
+const pf = (x: number) => (x < 0 ? `(${f2(x)})` : f2(x));
 const better = (m: Metric) => (m === 'euclidean' ? 'smallest distance' : 'highest score');
 
 export function simulate({ query, metric, normalise }: Params): Frame[] {
@@ -102,7 +104,7 @@ export function simulate({ query, metric, normalise }: Params): Frame[] {
     const v = dv[i];
     const detail =
       metric === 'dot'
-        ? `q·${d.id} = ${f2(qv[0])}×${f2(v[0])} + ${f2(qv[1])}×${f2(v[1])} = ${f2(s)}`
+        ? `q·${d.id} = ${pf(qv[0])}×${pf(v[0])} + ${pf(qv[1])}×${pf(v[1])} = ${f2(s)}`
         : metric === 'cosine'
           ? `cos(q, ${d.id}) = ${f2(dot(qv, v))} / (${f2(norm(qv))}×${f2(norm(v))}) = ${f2(s)}`
           : `‖q − ${d.id}‖ = √((${f2(qv[0] - v[0])})² + (${f2(qv[1] - v[1])})²) = ${f2(s)}`;

@@ -841,13 +841,14 @@ const Verdicts = z.object({ verdicts: z.array(z.object({ claim: z.string(), supp
 async function judge<T extends z.ZodTypeAny>(schema: T, name: string, prompt: string): Promise<z.infer<T>> {
   const r = await openai.chat.completions.parse({
     model: JUDGE,
-    temperature: 0, // reproducibility (omit if the judge model does not support it)
+    // temperature 0 for reproducibility; gpt-5 reasoning models reject it, so only send it to others
+    ...(JUDGE.startsWith('gpt-5') ? {} : { temperature: 0 }),
     messages: [{ role: 'user', content: prompt }],
     response_format: zodResponseFormat(schema, name),
   });
   const parsed = r.choices[0].message.parsed;
   if (!parsed) throw new Error('judge refused or returned invalid JSON');
-  return parsed;
+  return schema.parse(parsed); // re-validate at runtime; also gives the exact z.infer<T> type
 }
 
 export async function faithfulness(answer: string, context: string): Promise<number | null> {

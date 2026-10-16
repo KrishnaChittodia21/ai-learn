@@ -527,13 +527,18 @@ export async function denseSearch(query: string, k = 20) {
   const { data } = await openai.embeddings.create({ model: EMBED_MODEL, input: query });
   const qv = data[0].embedding; // same model as used for the chunks!
 
-  await pool.query('SET hnsw.ef_search = 100'); // recall/latency knob (default 40)
-  const { rows } = await pool.query(
-    'SELECT id, body, 1 - (embedding <=> $1) AS cosine ' + // <=> is cosine distance
-      'FROM chunks ORDER BY embedding <=> $1 LIMIT $2',
-    [pgvector.toSql(qv), k],
-  );
-  return rows as { id: string; body: string; cosine: number }[];
+  const client = await pool.connect(); // SET is per-connection: run both on the same one
+  try {
+    await client.query('SET hnsw.ef_search = 100'); // recall/latency knob (default 40)
+    const { rows } = await client.query(
+      'SELECT id, body, 1 - (embedding <=> $1) AS cosine ' + // <=> is cosine distance
+        'FROM chunks ORDER BY embedding <=> $1 LIMIT $2',
+      [pgvector.toSql(qv), k],
+    );
+    return rows as { id: string; body: string; cosine: number }[];
+  } finally {
+    client.release();
+  }
 }`,
         },
       ],
@@ -656,7 +661,7 @@ A FLOPS regulariser keeps vectors sparse (typically 100–300 non-zero terms per
 
 \`refund 2.41, damaged 2.18, 30 1.55, days 1.32, issued 0.97, **return 0.88**, **damage 0.84**, **money 0.41**, **reimbursement 0.37**\`, …(about 80 non-zero terms)
 
-Query "can I get reimbursed for a broken toaster" expands to \`reimbursement 1.6, broken 1.9, damaged 0.7, refund 0.6, toaster 2.3…\`. The dot product over shared terms (reimbursement, damaged, refund) gives **5.9**, so the passage is retrieved even though "reimbursed" and "broken" never appear in it. BM25 scored it **0**.`,
+Query "can I get reimbursed for a broken toaster" expands to \`reimbursement 1.6, broken 1.9, damaged 0.7, refund 0.6, toaster 2.3…\`. The dot product over shared terms (reimbursement, damaged, refund) gives 1.6×0.37 + 0.7×2.18 + 0.6×2.41 ≈ **3.6**, so the passage is retrieved even though "reimbursed" and "broken" never appear in it. BM25 scored it **0**.`,
       diagram: `text ─► BERT MLM head ─► logits [seq_len × 30,522 vocab]
                                │  log(1 + ReLU(x)), max over tokens
                                ▼

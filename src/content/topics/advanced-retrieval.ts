@@ -677,6 +677,7 @@ export async function chooseRoute(query: string): Promise<RouteName> {
         model: ROUTER_MODEL,
         response_format: { type: 'json_object' },
         max_completion_tokens: 80,
+        reasoning_effort: 'minimal', // reasoning tokens also count toward the cap
         messages: [
           { role: 'system', content: 'Classify how to answer a question for a company assistant. none: no company data needed. ' +
             'single: one lookup in company docs. multi: needs several lookups or combining facts. JSON {"route","reason"}.' },
@@ -832,8 +833,7 @@ export async function contextualizeChunks(docText: string, chunks: string[]): Pr
         ],
       }],
     });
-    const block = res.content[0];
-    const context = block.type === 'text' ? block.text.trim() : '';
+    const context = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim();
     out.push(context + '\\n\\n' + chunk); // index THIS text for both embeddings and BM25
   }
   return out;
@@ -1012,7 +1012,7 @@ export async function indexDoc(doc: { id: string; text: string; chunks: string[]
         model: 'claude-opus-4-1', max_tokens: 1000,
         messages: [{ role: 'user', content: doc.text + '\\n\\nDescribe this chunk: ' + chunk }],
       });
-      const ctx = r.content[0].type === 'text' ? r.content[0].text : '';
+      const ctx = r.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
       await upsertVector(doc.id + ':' + i, ctx + chunk);
     } catch {}
   }));
@@ -1045,8 +1045,7 @@ async function contextFor(docText: string, chunk: string): Promise<string> {
         'within the document to improve search retrieval. Do not add facts not in the document. Answer only with the context.' },
     ] }],
   });
-  const b = r.content[0];
-  return b.type === 'text' ? b.text.trim().slice(0, 600) : '';
+  return r.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim().slice(0, 600);
 }
 
 export async function indexDoc(doc: { id: string; text: string; chunks: string[] }) {

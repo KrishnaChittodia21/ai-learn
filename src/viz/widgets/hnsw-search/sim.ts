@@ -1,12 +1,17 @@
-// Pure, deterministic HNSW search on 30 points in 2-D (no React, Node-testable).
-// Graph: each node gets a level ℓ = ⌊−ln(U)·mL⌋ (mL = 1/ln 4, fixed seed). On every layer a node links to its
-// M nearest neighbours on that layer (2M on layer 0, like HNSW's M_max0), links are made bidirectional,
-// then any list over the cap is pruned back to its closest links.
-// (Real HNSW inserts incrementally with a neighbour-selection heuristic; nearest-M is a close simplification.)
+// Pure, deterministic HNSW search on NPTS points in 2-D (no React, Node-testable).
+// Graph: each node gets a level ℓ = ⌊−ln(U)·mL⌋ (mL = 1/ln 4, fixed seed, capped at 2) and is INSERTED one by one
+// as in HNSW (Malkov & Yashunin, Alg. 1 + 4): greedy descent to its level, then on each of its layers a beam
+// search (efConstruction = EF_CONSTRUCTION) finds candidates, and the neighbour-selection heuristic keeps up to M
+// of them, skipping a candidate that is closer to an already-kept neighbour than to the new node. That heuristic
+// keeps a few long "bridge" links between clusters, which plain nearest-M linking would lose (and with it the
+// graph's connectivity). Links are bidirectional; a list over its cap (M, or 2M on layer 0 = M_max0) is re-pruned
+// with the same heuristic.
 // Search (Malkov & Yashunin, Alg. 2/5):
 //   upper layers: greedy, ef = 1: hop to any neighbour closer to q until none is closer, then descend.
 //   layer 0:      best-first beam search keeping the efSearch closest nodes found (W) and a candidate queue C;
 //                 stop when the closest candidate is farther than the worst of W. Return the top K of W.
+// Cost metric: DISTINCT vectors whose distance to q was computed (a node met again on a lower layer reuses its
+// cached distance), compared with brute force, which computes all NPTS distances.
 import type { BaseFrame } from '../../core';
 
 export type QueryId = 'q1' | 'q2' | 'q3';
@@ -17,11 +22,11 @@ export interface Params {
   query: QueryId;
 }
 
-export const DEFAULT_PARAMS: Params = { ef: 3, M: 3, query: 'q3' };
+export const DEFAULT_PARAMS: Params = { ef: 3, M: 3, query: 'q2' };
 export const EF_MIN = 3;
 export const EF_MAX = 24;
 export const K = 3;
-export const NPTS = 80;
+export const NPTS = 200;
 
 function mulberry(seed: number) {
   let a = seed >>> 0;
@@ -73,26 +78,77 @@ export const QUERIES: Record<QueryId, { x: number; y: number; label: string }> =
 
 export const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** adjacency per layer */
-export function buildGraph(M: number): number[][][] {
-  const layers: number[][][] = [];
-  for (let l = 0; l <= TOP; l++) {
-    const nodes = POINTS.map((p, i) => ({ p, i })).filter(({ p }) => p.level >= l).map(({ i }) => i);
-    const cap = l === 0 ? 2 * M : M;
-    const adj: Set<number>[] = POINTS.map(() => new Set<number>());
-    for (const i of nodes) {
-      const near = nodes
-        .filter((j) => j !== i)
-        .sort((a, b) => dist(POINTS[i], POINTS[a]) - dist(POINTS[i], POINTS[b]) || a - b)
-        .slice(0, cap);
-      for (const j of near) {
-        adj[i].add(j);
-        adj[j].add(i);
+export const EF_CONSTRUCTION = 32;
+
+/** HNSW neighbour-selection heuristic: candidates sorted nearest-first; keep c only if it is closer to `base`
+ * than to every neighbour kept so far (so links spread out in different directions). */
+function selectNeighbours(base: number, sortedCands: number[], m: number): number[] {
+  const kept: number[] = [];
+  for (const c of sortedCands) {
+    if (kept.length >= m) break;
+    const dc = dist(POINTS[c], POINTS[base]);
+    if (kept.every((k) => dist(POINTS[c], POINTS[k]) > dc)) kept.push(c);
+  }
+  return kept;
+}
+
+/** beam search on one layer during construction; returns up to ef node ids, nearest first */
+function searchLayer(target: number, entries: number[], ef: number, adj: number[][]): number[] {
+  const dq = (i: number) => dist(POINTS[i], POINTS[target]);
+  const seen = new Set(entries);
+  const C = [...entries];
+  let W = [...entries].sort((a, b) => dq(a) - dq(b));
+  while (C.length) {
+    C.sort((a, b) => dq(a) - dq(b));
+    const c = C.shift()!;
+    if (dq(c) > dq(W[W.length - 1])) break;
+    for (const nb of adj[c]) {
+      if (seen.has(nb)) continue;
+      seen.add(nb);
+      if (W.length < ef || dq(nb) < dq(W[W.length - 1])) {
+        C.push(nb);
+        W = [...W, nb].sort((a, b) => dq(a) - dq(b) || a - b).slice(0, ef);
       }
     }
-    // like HNSW, a node whose link list overflows keeps only its `cap` closest links
-    layers.push(adj.map((s, i) => [...s].sort((a, b) => dist(POINTS[i], POINTS[a]) - dist(POINTS[i], POINTS[b]) || a - b).slice(0, cap)));
   }
+  return W;
+}
+
+const graphCache = new Map<number, number[][][]>();
+
+/** adjacency per layer (layers[l][i] = neighbour ids of node i on layer l), built by HNSW insertion */
+export function buildGraph(M: number): number[][][] {
+  const hit = graphCache.get(M);
+  if (hit) return hit;
+  const layers: number[][][] = Array.from({ length: TOP + 1 }, () => POINTS.map(() => [] as number[]));
+  let entry = -1;
+  let top = -1;
+  POINTS.forEach((p, i) => {
+    if (entry < 0) {
+      entry = i;
+      top = p.level;
+      return;
+    }
+    let eps = [entry];
+    for (let l = top; l > p.level; l--) eps = searchLayer(i, eps, 1, layers[l]).slice(0, 1);
+    for (let l = Math.min(top, p.level); l >= 0; l--) {
+      const W = searchLayer(i, eps, EF_CONSTRUCTION, layers[l]);
+      const cap = l === 0 ? 2 * M : M;
+      const nbs = selectNeighbours(i, W, M);
+      layers[l][i] = nbs;
+      for (const n of nbs) {
+        const list = [...layers[l][n], i];
+        layers[l][n] =
+          list.length > cap ? selectNeighbours(n, list.sort((a, b) => dist(POINTS[n], POINTS[a]) - dist(POINTS[n], POINTS[b]) || a - b), cap) : list;
+      }
+      eps = W;
+    }
+    if (p.level > top) {
+      entry = i;
+      top = p.level;
+    }
+  });
+  graphCache.set(M, layers);
   return layers;
 }
 
@@ -124,8 +180,15 @@ export function simulate({ ef, M, query }: Params): Frame[] {
   const q = QUERIES[query];
   const d = (i: number) => dist(POINTS[i], q);
   const frames: Frame[] = [];
+  /** every node whose distance to q is known (computed once, then cached) */
   const visited = new Set<number>();
   let ndist = 0;
+  const measure = (i: number) => {
+    if (!visited.has(i)) {
+      visited.add(i);
+      ndist++;
+    }
+  };
   const path: Frame['path'] = [];
   const base = () => ({ ndist, visited: [...visited], path: [...path], candidates: [] as number[], results: [] as number[], found: null, truth: null });
   const push = (f: Partial<Frame> & { stage: Stage; caption: string; layer: number; current: number | null }) => frames.push({ ...base(), ...f } as Frame);
@@ -142,8 +205,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
   });
 
   let cur = ENTRY;
-  visited.add(cur);
-  ndist = 1;
+  measure(cur);
   push({
     stage: 'entry',
     layer: TOP,
@@ -157,8 +219,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
       improved = false;
       let best = cur;
       for (const nb of G[l][cur]) {
-        visited.add(nb);
-        ndist++;
+        measure(nb);
         if (d(nb) < d(best)) best = nb;
       }
       if (best !== cur) {
@@ -202,8 +263,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
     for (const nb of G[0][c]) {
       if (seen.has(nb)) continue;
       seen.add(nb);
-      visited.add(nb);
-      ndist++;
+      measure(nb);
       if (W.length < ef || d(nb) < d(W[W.length - 1])) {
         C.add(nb);
         W.push(nb);
@@ -222,7 +282,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
       current: c,
       candidates: snapC,
       results: snapW,
-      caption: `Layer 0: expand node ${c} (${G[0][c].length} links). ${added.length ? `Closer-than-worst neighbours join the beam: ${added.join(', ')}.` : 'No neighbour beats the current worst result.'} W = [${snapW.join(', ')}], ${ndist} distances computed so far.`,
+      caption: `Layer 0: expand node ${c} (${G[0][c].length} links). ${added.length ? `Closer-than-worst neighbours join the beam: ${added.join(', ')}.` : 'No neighbour beats the current worst result.'} W = [${snapW.join(', ')}]; ${ndist} of ${NPTS} vectors measured so far.`,
     });
   }
   // compress if too many beam frames
@@ -244,7 +304,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
     current: null,
     results: [...W],
     found,
-    caption: `${lastC?.stop ? `Stop: the closest remaining candidate (node ${lastC.c}) is farther than the worst of W.` : 'Stop: the candidate queue is empty.'} Return the top ${K} of W: [${found.join(', ')}]. ${ndist} distance computations in total.`,
+    caption: `${lastC?.stop ? `Stop: the closest remaining candidate (node ${lastC.c}) is farther than the worst of W.` : 'Stop: the candidate queue is empty.'} Return the top ${K} of W: [${found.join(', ')}]. ${ndist} distinct distance computations in total.`,
     predict: `Brute force compares q with all ${NPTS} vectors. How many of the true ${K} nearest neighbours did HNSW return?`,
   });
   push({
@@ -254,7 +314,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
     results: [...W],
     found,
     truth,
-    caption: `Exact top ${K}: [${truth.join(', ')}]. Recall@${K} = ${hit}/${K} = ${(hit / K).toFixed(2)} using ${ndist} distance computations vs ${NPTS} for brute force${ndist >= NPTS ? ' (no saving: with so few points a wide beam and dense links touch almost everything, and upper-layer nodes are measured again on layer 0)' : ` (${Math.round((1 - ndist / NPTS) * 100)}% fewer)`}.${hit < K ? ` Missed ${truth.filter((x) => !found.includes(x)).join(', ')}: the beam got stuck in a local region. Raise efSearch or M.` : ''}`,
+    caption: `Exact top ${K}: [${truth.join(', ')}]. Recall@${K} = ${hit}/${K} = ${(hit / K).toFixed(2)} using ${ndist} distance computations vs ${NPTS} for brute force (${Math.round((1 - ndist / NPTS) * 100)}% fewer).${hit < K ? ` Missed ${truth.filter((x) => !found.includes(x)).join(', ')}: the beam stopped in a local region before reaching it. Raise efSearch (wider beam) or M (more links).` : ''}`,
   });
   push({
     stage: 'done',
@@ -263,7 +323,7 @@ export function simulate({ ef, M, query }: Params): Frame[] {
     results: [...W],
     found,
     truth,
-    caption: `Trade-off: larger efSearch (query time) and M (memory, build time) raise recall but compute more distances. At ${NPTS} points the saving is modest; at 10M vectors HNSW typically touches a few thousand nodes for ~95–99% recall. IVF instead scans only the nprobe nearest clusters.`,
+    caption: `Trade-off: larger efSearch (query time) and M (memory, build time) raise recall but compute more distances. Here HNSW measured ${ndist} of ${NPTS} vectors; the saving grows with scale because hops grow ~log(N): at 10M vectors HNSW typically touches a few thousand nodes for ~95–99% recall. IVF instead scans only the nprobe nearest clusters.`,
   });
   return frames;
 }

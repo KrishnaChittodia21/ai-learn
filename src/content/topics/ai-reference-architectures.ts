@@ -227,10 +227,10 @@ const key = (c: Ctx) => c.prefix.slice(-400) + '|' + c.suffix.slice(0, 100);
 export function onKeystroke(ctx: Ctx, show: (s: string) => void) {
   if (timer) clearTimeout(timer);
   timer = setTimeout(async () => {                    // debounce ~100 ms
+    inflight?.abort();                                // cancel the stale request (even on a cache hit)
     const k = key(ctx);
     const hit = cache.get(k);
     if (hit) return show(hit);
-    inflight?.abort();                                // cancel the stale request
     inflight = new AbortController();
     try {
       const res = await fetch('/copilot/complete', {

@@ -97,8 +97,7 @@ async function triageClaim(photoPath: string, story: string) {
   });
   // usage.input_tokens includes the visual tokens, so log it to track image cost
   console.log('input tokens', res.usage.input_tokens);
-  const block = res.content[0];
-  return block.type === 'text' ? block.text : '';
+  return res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
 }
 
 triageClaim('door.jpg', 'Damage happened in the car park on 3 March.').then(console.log);`,
@@ -606,7 +605,7 @@ export async function extract(path: string) {
       { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } },
     ] }],
   });
-  const text = res.content[0].type === 'text' ? res.content[0].text : '';
+  const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
   return JSON.parse(text); // crashes on prose; trusts any number
 }`,
       },
@@ -638,7 +637,7 @@ const sumsUp = (r: Receipt) =>
   Math.abs(r.items.reduce((s, i) => s + i.amount, 0) + r.tax + r.tip - r.total) < 0.011;
 
 export async function extract(path: string): Promise<Receipt> {
-  // 12 MP -> long edge 1500 px: ~1.5k tokens instead of hitting the cap, text still legible
+  // 12 MP -> long edge 1500 px: ~2k tokens at most (w*h/750) and far fewer bytes, text still legible
   const jpeg = await sharp(path).rotate().resize({ width: 1500, height: 1500, fit: 'inside' })
     .jpeg({ quality: 85 }).toBuffer();
   const image = { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: jpeg.toString('base64') } };
@@ -653,7 +652,7 @@ export async function extract(path: string): Promise<Receipt> {
           '{merchant, currency (ISO 4217), items:[{name, amount}], tax, tip, total}.' + hint },
       ] }],
     });
-    const text = res.content[0]?.type === 'text' ? res.content[0].text : '';
+    const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('') || '';
     const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
     const parsed = Receipt.safeParse(safeJson(json));
     if (parsed.success && sumsUp(parsed.data)) return parsed.data;

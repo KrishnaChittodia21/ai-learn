@@ -398,7 +398,7 @@ async function embed(texts: string[]) {
   return r.data.map((d) => d.embedding);
 }
 
-export async function buildRouter(threshold = 0.5) {
+export async function buildRouter(threshold = 0.7) { // tune on labelled messages per embedding model
   // centroid = mean of example embeddings per route (computed once at startup)
   const centroids: [Route, number[]][] = [];
   for (const [route, ex] of Object.entries(EXAMPLES)) {
@@ -801,7 +801,7 @@ Use it for high-volume, asynchronous AI work — ticket triage, document pipelin
 import Redis from 'ioredis';
 
 const kafka = new Kafka({ clientId: 'triage-agent', brokers: [process.env.KAFKA_BROKER ?? 'localhost:9092'] });
-const consumer = kafka.consumer({ groupId: 'triage-agent-v3' });   // new group id = replay from scratch
+const consumer = kafka.consumer({ groupId: 'triage-agent-v3' });   // new group id + fromBeginning = replay retained events
 const producer = kafka.producer();
 const redis = new Redis();
 
@@ -809,7 +809,7 @@ declare function classify(text: string): Promise<{ intent: string; priority: 'P1
 
 export async function run() {
   await Promise.all([consumer.connect(), producer.connect()]);
-  await consumer.subscribe({ topic: 'ticket.created' });
+  await consumer.subscribe({ topic: 'ticket.created', fromBeginning: true }); // only applies to a group with no committed offsets
   await consumer.run({
     eachMessage: async ({ message }) => {
       const evt = JSON.parse(message.value!.toString()) as { eventId: string; ticketId: string; text: string; correlationId: string };
@@ -823,7 +823,7 @@ export async function run() {
           messages: [{ key: evt.ticketId, value: JSON.stringify({ ...result, ticketId: evt.ticketId, correlationId: evt.correlationId }) }],
         });
       } catch (e) {
-        await redis.del('seen:triage:' + evt.eventId);        // allow redelivery to retry
+        await redis.del('seen:triage:' + evt.eventId);        // release the claim so a DLQ replay is not skipped as a duplicate
         await producer.send({ topic: 'ticket.created.dlq', messages: [{ key: evt.ticketId, value: JSON.stringify({ evt, error: String(e) }) }] });
       }
     },

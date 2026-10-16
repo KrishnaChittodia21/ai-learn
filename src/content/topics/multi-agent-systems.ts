@@ -80,8 +80,8 @@ async function llm(prompt: string, model = MODEL): Promise<string> {
   const res = await client.messages.create({
     model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }],
   });
-  const block = res.content[0];
-  return block.type === 'text' ? block.text : '';
+  const block = res.content.find((b) => b.type === 'text'); // skip any leading thinking block
+  return block?.type === 'text' ? block.text : '';
 }
 
 const Route = z.object({ intents: z.array(z.enum(['billing', 'bug', 'sales'])).min(1) });

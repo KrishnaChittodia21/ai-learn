@@ -3,7 +3,7 @@ import type { Topic } from '../../types';
 const topic: Topic = {
   id: 'mcp',
   phase: 'frameworks',
-  order: 2,
+  order: 4,
   title: 'Model Context Protocol (MCP)',
   subtitle:
     'The open protocol that plugs tools, data and prompts into any AI app: architecture, JSON-RPC, transports, building servers in TypeScript, auth and security',

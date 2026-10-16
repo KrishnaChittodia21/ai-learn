@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
+import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
 import { ANSWER_RESERVE, BUDGETS, CHUNKS, CORRECT, DEFAULT_PARAMS, QUESTION, QUESTION_TOKENS, SYSTEM_TOKENS, simulate, type Params, type Stage } from './sim';
 
@@ -66,124 +67,126 @@ export default function RagPipelineViz() {
         </>
       }
     >
-      <svg viewBox="0 0 600 340" className="viz-svg" role="img" aria-label={aria}>
-        {/* stage strip */}
-        {STEPS.map((s, i) => (
-          <g key={s}>
-            <rect x={6 + i * 74} y={6} width={66} height={24} rx={12} fill={i === active ? 'var(--accent)' : i < active ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={i === active ? 'var(--accent)' : 'var(--border)'} />
-            <text x={39 + i * 74} y={22} textAnchor="middle" fontSize={10.5} fontWeight={700} style={{ fill: i === active ? 'var(--surface)' : 'var(--text)' }} opacity={i === 4 && !params.rerank ? 0.5 : 1}>
-              {s}
-              {i === 4 && !params.rerank ? ' ✕' : ''}
-            </text>
-            {i < STEPS.length - 1 && <line x1={72 + i * 74} y1={18} x2={80 + i * 74} y2={18} stroke="var(--border)" strokeWidth={2} />}
-          </g>
-        ))}
-        {active >= 1 && (
-          <text x={8} y={50} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
-            Q: “{QUESTION}”
-          </text>
-        )}
-
-        {/* chunk table */}
-        <text x={8} y={72} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-          chunk
-        </text>
-        {showScores && (
-          <text x={300} y={72} textAnchor="end" fontSize={10} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-            cosine
-          </text>
-        )}
-        {showRR && (
-          <text x={356} y={72} textAnchor="end" fontSize={10} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-            rerank
-          </text>
-        )}
-        {CHUNKS.map((c, r) => {
-          const y = 80 + r * 26;
-          const retrieved = f.retrieved.includes(c.id);
-          const kept = f.kept.includes(c.id);
-          const inP = f.inPrompt.includes(c.id);
-          const dropped = f.dropped.includes(c.id);
-          const fill = inP ? (c.id === CORRECT ? 'var(--good-soft)' : 'var(--warn-soft)') : dropped ? 'var(--bad-soft)' : 'var(--surface-2)';
-          return (
-            <g key={c.id} opacity={showScores && !retrieved ? 0.45 : 1}>
-              <rect x={6} y={y} width={356} height={22} rx={5} fill={fill} stroke={f.current === c.id ? 'var(--accent)' : kept && active >= 4 ? 'var(--accent)' : 'var(--border)'} strokeWidth={f.current === c.id ? 2.5 : kept && active >= 4 ? 1.6 : 1} />
-              <text x={12} y={y + 15} fontSize={10} fontWeight={700} style={{ fill: c.id === CORRECT ? 'var(--good)' : 'var(--text)' }}>
-                {c.id}
+      <WideSvg>
+        <svg viewBox="0 0 600 340" className="viz-svg" role="img" aria-label={aria}>
+          {/* stage strip */}
+          {STEPS.map((s, i) => (
+            <g key={s}>
+              <rect x={6 + i * 74} y={6} width={66} height={24} rx={12} fill={i === active ? 'var(--accent)' : i < active ? 'var(--accent-soft)' : 'var(--surface-2)'} stroke={i === active ? 'var(--accent)' : 'var(--border)'} />
+              <text x={39 + i * 74} y={22} textAnchor="middle" fontSize={10.5} fontWeight={700} style={{ fill: i === active ? 'var(--surface)' : 'var(--text)' }} opacity={i === 4 && !params.rerank ? 0.5 : 1}>
+                {s}
+                {i === 4 && !params.rerank ? ' ✕' : ''}
               </text>
-              <text x={34} y={y + 15} fontSize={9.5}>
-                {short(c.title, 40)}
-              </text>
-              {showScores && (
-                <text x={300} y={y + 15} textAnchor="end" fontSize={10} style={{ fontFamily: 'var(--mono)' }}>
-                  {c.vec.toFixed(2)}
-                </text>
-              )}
-              {showRR && (
-                <text x={356} y={y + 15} textAnchor="end" fontSize={10} fontWeight={700} style={{ fontFamily: 'var(--mono)', fill: c.rr > 0.8 ? 'var(--good)' : 'var(--text)' }}>
-                  {c.rr.toFixed(2)}
-                </text>
-              )}
-              {dropped && (
-                <text x={240} y={y + 15} textAnchor="end" fontSize={9} fontWeight={700} style={{ fill: 'var(--bad)' }}>
-                  DROPPED
-                </text>
-              )}
+              {i < STEPS.length - 1 && <line x1={72 + i * 74} y1={18} x2={80 + i * 74} y2={18} stroke="var(--border)" strokeWidth={2} />}
             </g>
-          );
-        })}
+          ))}
+          {active >= 1 && (
+            <text x={8} y={50} fontSize={10.5} style={{ fill: 'var(--text-2)' }}>
+              Q: “{QUESTION}”
+            </text>
+          )}
 
-        {/* token budget */}
-        <text x={BX} y={72} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
-          context window: {packing ? f.used : 0}/{params.budget} tokens
-        </text>
-        <rect x={BX} y={80} width={BW} height={22} rx={4} fill="var(--surface-2)" stroke="var(--border)" />
-        {segs.map((s, i) => {
-          const x = BX + acc * scale;
-          acc += s.tokens;
-          return (
-            <g key={i}>
-              <rect x={x} y={80} width={s.tokens * scale} height={22} fill={s.fill} opacity={0.85} stroke="var(--surface)" />
-              {s.tokens * scale > 22 && (
-                <text x={x + (s.tokens * scale) / 2} y={95} textAnchor="middle" fontSize={9} fontWeight={700} style={{ fill: 'var(--surface)' }}>
-                  {s.label}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        {packing && <rect x={BX + BW - ANSWER_RESERVE * scale} y={80} width={ANSWER_RESERVE * scale} height={22} fill="none" stroke="var(--text-2)" strokeDasharray="3 2" />}
-        {packing && (
-          <text x={BX + BW - (ANSWER_RESERVE * scale) / 2} y={116} textAnchor="middle" fontSize={9} style={{ fill: 'var(--text-2)' }}>
-            answer reserve {ANSWER_RESERVE}
+          {/* chunk table */}
+          <text x={8} y={72} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+            chunk
           </text>
-        )}
-        {packing &&
-          f.inPrompt.map((id, i) => (
-            <text key={id} x={BX} y={140 + i * 16} fontSize={10} style={{ fontFamily: 'var(--mono)', fill: id === CORRECT ? 'var(--good)' : 'var(--text)' }}>
-              [{i + 1}] {id} · {CHUNKS.find((c) => c.id === id)!.tokens} tok
+          {showScores && (
+            <text x={300} y={72} textAnchor="end" fontSize={10} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+              cosine
             </text>
-          ))}
-        {packing &&
-          f.dropped.map((id, i) => (
-            <text key={id} x={BX + 110} y={140 + i * 16} fontSize={10} style={{ fontFamily: 'var(--mono)', fill: 'var(--bad)' }}>
-              ✕ {id}
+          )}
+          {showRR && (
+            <text x={356} y={72} textAnchor="end" fontSize={10} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+              rerank
             </text>
-          ))}
+          )}
+          {CHUNKS.map((c, r) => {
+            const y = 80 + r * 26;
+            const retrieved = f.retrieved.includes(c.id);
+            const kept = f.kept.includes(c.id);
+            const inP = f.inPrompt.includes(c.id);
+            const dropped = f.dropped.includes(c.id);
+            const fill = inP ? (c.id === CORRECT ? 'var(--good-soft)' : 'var(--warn-soft)') : dropped ? 'var(--bad-soft)' : 'var(--surface-2)';
+            return (
+              <g key={c.id} opacity={showScores && !retrieved ? 0.45 : 1}>
+                <rect x={6} y={y} width={356} height={22} rx={5} fill={fill} stroke={f.current === c.id ? 'var(--accent)' : kept && active >= 4 ? 'var(--accent)' : 'var(--border)'} strokeWidth={f.current === c.id ? 2.5 : kept && active >= 4 ? 1.6 : 1} />
+                <text x={12} y={y + 15} fontSize={10} fontWeight={700} style={{ fill: c.id === CORRECT ? 'var(--good)' : 'var(--text)' }}>
+                  {c.id}
+                </text>
+                <text x={34} y={y + 15} fontSize={9.5}>
+                  {short(c.title, 40)}
+                </text>
+                {showScores && (
+                  <text x={300} y={y + 15} textAnchor="end" fontSize={10} style={{ fontFamily: 'var(--mono)' }}>
+                    {c.vec.toFixed(2)}
+                  </text>
+                )}
+                {showRR && (
+                  <text x={356} y={y + 15} textAnchor="end" fontSize={10} fontWeight={700} style={{ fontFamily: 'var(--mono)', fill: c.rr > 0.8 ? 'var(--good)' : 'var(--text)' }}>
+                    {c.rr.toFixed(2)}
+                  </text>
+                )}
+                {dropped && (
+                  <text x={240} y={y + 15} textAnchor="end" fontSize={9} fontWeight={700} style={{ fill: 'var(--bad)' }}>
+                    DROPPED
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
-        {/* answer */}
-        {f.answer && (
-          <g>
-            <rect x={6} y={296} width={588} height={38} rx={8} fill={f.correct ? 'var(--good-soft)' : 'var(--bad-soft)'} stroke={f.correct ? 'var(--good)' : 'var(--bad)'} />
-            <text x={16} y={312} fontSize={10.5} fontWeight={700} style={{ fill: f.correct ? 'var(--good)' : 'var(--bad)' }}>
-              {f.correct ? '✓ correct' : '✕ wrong'}
+          {/* token budget */}
+          <text x={BX} y={72} fontSize={10.5} fontWeight={700} style={{ fill: 'var(--text-2)' }}>
+            context window: {packing ? f.used : 0}/{params.budget} tokens
+          </text>
+          <rect x={BX} y={80} width={BW} height={22} rx={4} fill="var(--surface-2)" stroke="var(--border)" />
+          {segs.map((s, i) => {
+            const x = BX + acc * scale;
+            acc += s.tokens;
+            return (
+              <g key={i}>
+                <rect x={x} y={80} width={s.tokens * scale} height={22} fill={s.fill} opacity={0.85} stroke="var(--surface)" />
+                {s.tokens * scale > 22 && (
+                  <text x={x + (s.tokens * scale) / 2} y={95} textAnchor="middle" fontSize={9} fontWeight={700} style={{ fill: 'var(--surface)' }}>
+                    {s.label}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          {packing && <rect x={BX + BW - ANSWER_RESERVE * scale} y={80} width={ANSWER_RESERVE * scale} height={22} fill="none" stroke="var(--text-2)" strokeDasharray="3 2" />}
+          {packing && (
+            <text x={BX + BW} y={116} textAnchor="end" fontSize={9} style={{ fill: 'var(--text-2)' }}>
+              ↑ reserved for the answer: {ANSWER_RESERVE}
             </text>
-            <text x={16} y={327} fontSize={10}>
-              {short(f.answer, 110)}
-            </text>
-          </g>
-        )}
-      </svg>
+          )}
+          {packing &&
+            f.inPrompt.map((id, i) => (
+              <text key={id} x={BX} y={140 + i * 16} fontSize={10} style={{ fontFamily: 'var(--mono)', fill: id === CORRECT ? 'var(--good)' : 'var(--text)' }}>
+                [{i + 1}] {id} · {CHUNKS.find((c) => c.id === id)!.tokens} tok
+              </text>
+            ))}
+          {packing &&
+            f.dropped.map((id, i) => (
+              <text key={id} x={BX + 110} y={140 + i * 16} fontSize={10} style={{ fontFamily: 'var(--mono)', fill: 'var(--bad)' }}>
+                ✕ {id}
+              </text>
+            ))}
+
+          {/* answer */}
+          {f.answer && (
+            <g>
+              <rect x={6} y={296} width={588} height={38} rx={8} fill={f.correct ? 'var(--good-soft)' : 'var(--bad-soft)'} stroke={f.correct ? 'var(--good)' : 'var(--bad)'} />
+              <text x={16} y={312} fontSize={10.5} fontWeight={700} style={{ fill: f.correct ? 'var(--good)' : 'var(--bad)' }}>
+                {f.correct ? '✓ correct' : '✕ wrong'}
+              </text>
+              <text x={16} y={327} fontSize={10}>
+                {short(f.answer, 110)}
+              </text>
+            </g>
+          )}
+        </svg>
+      </WideSvg>
     </VizFrame>
   );
 }

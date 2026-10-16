@@ -87,24 +87,27 @@ export async function ingestFile(path: string, parse: (buf: Buffer) => Promise<P
   if (rows.length) return { path, status: 'unchanged' as const };
 
   const parsed = await parse(buf);
-  await db.query('BEGIN');
+  const tx = await db.connect(); // a transaction must run on ONE pooled connection
   try {
+    await tx.query('BEGIN');
     // Replace old records for this source atomically (no stale chunks left behind)
-    await db.query('DELETE FROM documents WHERE source = $1', [path]);
-    await db.query(
+    await tx.query('DELETE FROM documents WHERE source = $1', [path]);
+    await tx.query(
       'INSERT INTO documents (source, content_hash, text, meta) VALUES ($1, $2, $3, $4)',
       [path, hash, parsed.text, { ...parsed.meta, pages: parsed.pages, parser: PARSER_VERSION }],
     );
-    await db.query(
+    await tx.query(
       'INSERT INTO ingest_manifest (source, content_hash, parser_version, ingested_at) VALUES ($1, $2, $3, now()) ' +
         'ON CONFLICT (source) DO UPDATE SET content_hash = EXCLUDED.content_hash, parser_version = EXCLUDED.parser_version, ingested_at = now()',
       [path, hash, PARSER_VERSION],
     );
-    await db.query('COMMIT');
+    await tx.query('COMMIT');
     return { path, status: 'ingested' as const };
   } catch (e) {
-    await db.query('ROLLBACK');
+    await tx.query('ROLLBACK');
     throw e;
+  } finally {
+    tx.release();
   }
 }`,
         },
@@ -500,7 +503,7 @@ docs = {
     "v2024": "Employees receive 20 days of paid leave per year effective January 2024.",
     "travel": "Book flights through the travel portal at least 14 days ahead.",
 }
-print(near_duplicates(docs, 0.7))  # [('v2023', 'v2024', 0.71)]`,
+print(near_duplicates(docs, 0.7))  # [('v2023', 'v2024', 0.82)]`,
         },
         explanation:
           'Shingling captures word order, so documents that differ only in a date share most shingles. At scale replace the O(n²) loop with MinHash signatures and LSH buckets (datasketch), which find candidates in near-linear time.',
@@ -633,7 +636,7 @@ def extract(path: str, vision_fallback) -> list[dict]:
 Acceptance criteria:
 - Sends the image as a base64 \`image\` content block plus instructions.
 - Prompt demands verbatim text, Markdown tables for tables, and \`[illegible]\` instead of guesses.
-- Uses temperature 0 and reads the model id from \`process.env.LLM_MODEL\`.
+- Reads the model id from \`process.env.LLM_MODEL\` (no sampling params: current Claude models reject non-default temperature).
 - Returns the concatenated text blocks.`,
         hints: [
           'Content blocks: { type: "image", source: { type: "base64", media_type: "image/png", data } } then { type: "text", text: "..." }.',
@@ -660,7 +663,6 @@ export async function visionOcr(png: Buffer): Promise<string> {
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 4096,
-    temperature: 0, // deterministic transcription
     messages: [
       {
         role: 'user',
@@ -678,7 +680,7 @@ export async function visionOcr(png: Buffer): Promise<string> {
 }`,
         },
         explanation:
-          'Explicit "verbatim" and "[illegible]" instructions plus temperature 0 reduce the main risk of LLM OCR: confidently invented text. Placing the image before the instruction follows the provider guidance for vision prompts.',
+          'Explicit "verbatim" and "[illegible]" instructions reduce the main risk of LLM OCR: confidently invented text. Placing the image before the instruction follows the provider guidance for vision prompts.',
       },
       quickCheck: {
         question:

@@ -654,8 +654,9 @@ export async function indexAll(articles: Article[]) {
 const client = new OpenAI({ timeout: 30_000, maxRetries: 0 }); // we retry ourselves
 const MODEL = process.env.EMBED_MODEL ?? 'text-embedding-3-small';
 const DIMS = 1536;
-const BATCH = 256;            // inputs per request
-const MAX_CHARS = 8000 * 4;   // ~8K tokens at ~4 chars/token, safely under 8,191
+const BATCH = 256;            // max inputs per request
+const MAX_CHARS = 6000 * 4;   // ~6K tokens at ~4 chars/token: margin under the 8,191 per-input limit
+const MAX_REQUEST_CHARS = 250_000 * 4; // the API also caps TOTAL tokens per request (~300K)
 
 type Article = { id: string; text: string };
 type Row = { id: string; chunk: number; vector: number[]; model: string; dims: number };
@@ -685,8 +686,14 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 5): Promise<T> {
 
 export async function indexAll(articles: Article[]) {
   const pieces = articles.flatMap(split);
-  for (let i = 0; i < pieces.length; i += BATCH) {
-    const batch = pieces.slice(i, i + BATCH);
+  for (let i = 0; i < pieces.length; ) {
+    // pack up to BATCH inputs without exceeding the per-request token budget
+    const batch: typeof pieces = [];
+    let chars = 0;
+    while (i < pieces.length && batch.length < BATCH && chars + pieces[i].text.length <= MAX_REQUEST_CHARS) {
+      chars += pieces[i].text.length;
+      batch.push(pieces[i++]);
+    }
     const res = await withRetry(() =>
       client.embeddings.create({ model: MODEL, input: batch.map((p) => p.text) }),
     );

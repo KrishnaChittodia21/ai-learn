@@ -73,7 +73,7 @@ Cost at an illustrative $3 per 1M input tokens and 200K queries/day: 6,400 → 4
       code: [
         {
           language: 'python',
-          title: 'Question-aware token compression with LLMLingua-2',
+          title: 'Task-agnostic token compression with LLMLingua-2',
           code: `# pip install llmlingua
 from llmlingua import PromptCompressor
 
