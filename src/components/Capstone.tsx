@@ -45,7 +45,7 @@ export function CapstoneTab({ projects }: { projects: CapstoneProject[] }) {
   const { results, reload } = useProjectResults(true);
   return (
     <div>
-      <div className="card info">
+      <div className="tp-intro">
         <strong>Build it, then get it judged.</strong> Each capstone is a real project in this repo. Write your implementation in
         your editor and run its test suite. The tests are the judge, and the results appear here automatically. Read the tests
         if you are stuck, but don&apos;t change them. A reference solution is in <code className="inline-code">solution/</code>{' '}
@@ -66,11 +66,14 @@ function ProjectCard({ p, result, onRefresh }: { p: CapstoneProject; result?: Pr
     if (done && claimCelebration(`capstone:${p.id}`)) celebrate(`Capstone complete: ${p.title}`, 'Every judge test passes.');
   }, [done, p.id, p.title]);
   return (
-    <article className={`card capstone ${done ? 'capstone-done' : ''}`}>
-      <div className="section-head">
-        <h2>
-          <Hammer size={20} aria-hidden className="inline-icon" /> {p.title}
-        </h2>
+    <article className={`tp-card capstone ${done ? 'done' : ''}`}>
+      <div className="tp-card-head">
+        <div>
+          <div className="tp-card-no">
+            <Hammer size={12} aria-hidden className="inline-icon" /> Capstone project
+          </div>
+          <h2>{p.title}</h2>
+        </div>
         <span className="row gap-s">
           <DifficultyBadge d={p.difficulty} />
           <Badge>~{p.estimatedHours} h</Badge>

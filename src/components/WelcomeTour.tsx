@@ -19,7 +19,7 @@ interface Step {
   body: ReactNode;
 }
 
-/** First-visit guide, "How this manual works" (also opened from the Guide button or the "?" key). */
+/** First-visit guide, "How GenAI.learn works" (also opened from the Guide button or the "?" key). */
 export default function WelcomeTour() {
   const p = useProgress();
   const nav = useNavigate();
@@ -76,7 +76,7 @@ export default function WelcomeTour() {
       >
         <header className="tour-top">
           <p className="tour-kicker" id="tour-kicker">
-            Guide · How this manual works
+            Guide · How GenAI.learn works
           </p>
           <button type="button" className="btn-ghost btn-icon tour-close" aria-label="Close guide" onClick={close}>
             <X size={18} aria-hidden />
@@ -162,12 +162,12 @@ function STEPS(): Step[] {
   return [
     {
       short: 'The course',
-      title: 'A field manual for Generative AI',
+      title: 'Generative AI, from first principles to production',
       body: (
         <>
           <p className="tour-lead">
-            {TOPICS.length} topics, read in order from first principles to production systems. Each one is short, practical and
-            ends in a timed exam. Pass the exam and the topic is marked <em>covered</em>.
+            {TOPICS.length} topics, read in order. Each one is short, practical and ends in a timed exam. Pass the exam and the topic
+            lights up as <em>covered</em> on the Syllabus map.
           </p>
           <table className="tour-levels">
             <caption className="sr-only">Topics per level</caption>
@@ -197,7 +197,7 @@ function STEPS(): Step[] {
       title: 'Five places, one search',
       body: (
         <>
-          <p className="tour-lead">The masthead at the top of every page holds everything.</p>
+          <p className="tour-lead">The glass header at the top of every page holds everything.</p>
           <dl className="tour-defs">
             <div>
               <dt>Today</dt>
@@ -205,7 +205,7 @@ function STEPS(): Step[] {
             </div>
             <div>
               <dt>Syllabus</dt>
-              <dd>Every level, phase and topic, with your status beside each.</dd>
+              <dd>Every level, phase and topic as a map, with your status beside each.</dd>
             </div>
             <div>
               <dt>Practice</dt>
@@ -217,9 +217,13 @@ function STEPS(): Step[] {
             </div>
             <div>
               <dt>Challenges</dt>
-              <dd>Real architecture interviews with a mock-interview timer.</dd>
+              <dd>Real architecture interviews with a mock-interview timer. Opens once every exam is passed.</dd>
             </div>
           </dl>
+          <p className="tour-note tour-phone">
+            On a phone the five places sit in the <strong>tab bar</strong> at the bottom; search, the guide, theme and settings are under{' '}
+            <strong>More</strong> at the top.
+          </p>
           <ul className="tour-keys" aria-label="Keyboard shortcuts">
             <li>
               <span>
@@ -252,22 +256,22 @@ function STEPS(): Step[] {
           <p className="tour-note">
             A <strong>Cheat sheet</strong> tab sits alongside for quick revision.
           </p>
-          <p className="tour-lead">Every section in Read follows the same pattern:</p>
+          <p className="tour-lead">Every section in Read follows the same four beats:</p>
           <ol className="tour-pattern">
             <li>
               <strong>Worked example.</strong> The idea applied to a real case.
             </li>
             <li>
-              <strong>Pros and cons.</strong> Each weakness comes with its fix.
+              <strong>Pros and cons.</strong> Every weakness comes with the fix for it.
             </li>
             <li>
-              <strong>Try it.</strong> A short coding exercise.
+              <strong>Try it.</strong> A short exercise to do yourself.
             </li>
             <li>
               <strong>Quick check.</strong> One question to confirm it stuck.
             </li>
           </ol>
-          <p className="tour-note">Tick a section as read when you finish it. Some sections have an interactive figure you can step through.</p>
+          <p className="tour-note">Mark a section read when you finish it. Some sections have an interactive animation you can step through.</p>
         </>
       ),
     },

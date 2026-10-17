@@ -1,12 +1,12 @@
 // Syllabus: every level, phase, topic and section of the course as one searchable index.
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronDown, CirclePlay, Search } from 'lucide-react';
 import { COMPANY_QUESTIONS, LEVELS, PHASES, TOPICS } from '../content';
 import { PROJECTS, projectsForTopic } from '../content/projects';
 import { useProgress } from '../lib/progress';
-import { companyUnlocked, topicStatus, type TopicStatus } from '../lib/stats';
+import { companyUnlocked, topicCompletion, topicStatus, type TopicStatus } from '../lib/stats';
 import { codeLabLabel } from '../lib/nextStep';
 import { currentlyWrong, weakTopics } from '../lib/weak';
 import { VIZ, vizForSection } from '../viz/registry';
@@ -29,7 +29,11 @@ const TOTALS: [string, number][] = [
 ];
 
 const NUMERALS = ['I', 'II', 'III'];
-const STATUS_LABEL: Record<TopicStatus, string> = { passed: 'Covered', 'in-progress': 'In progress', new: 'Not started' };
+const STATUS_LABEL: Record<TopicStatus, string> = {
+  passed: 'Covered',
+  'in-progress': 'In progress',
+  new: 'Not started',
+};
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Wrap every case-insensitive occurrence of `q` in <mark>. */
@@ -54,6 +58,15 @@ interface TopicView {
   showSections: boolean;
 }
 
+type PlanetState = 'passed' | 'now' | 'ahead';
+const PLANET_LABEL: Record<PlanetState, string> = {
+  passed: 'covered',
+  now: 'in progress',
+  ahead: 'ahead',
+};
+/** orbit diameter as a share of the galaxy, inner → outer (I, II, III) */
+const ORBIT_SIZE = [30, 61, 91];
+
 export default function ContentsPage() {
   const p = useProgress();
   const nav = useNavigate();
@@ -72,20 +85,56 @@ export default function ContentsPage() {
       for (const t of TOPICS.filter((x) => x.phase === ph.id)) {
         const read = new Set(p.sections[t.id] ?? []);
         const topicHit =
-          phaseHit || !q || t.title.toLowerCase().includes(q) || t.subtitle.toLowerCase().includes(q) || t.tags.some((g) => g.toLowerCase().includes(q));
+          phaseHit ||
+          !q ||
+          t.title.toLowerCase().includes(q) ||
+          t.subtitle.toLowerCase().includes(q) ||
+          t.tags.some((g) => g.toLowerCase().includes(q));
         const sections = t.sections
           .map((_, i) => i)
           .filter((i) => (!onlyUnread || !read.has(i)) && (!onlyViz || VIZ_SECTIONS.get(t.id)?.[i]))
           .filter((i) => topicHit || t.sections[i].heading.toLowerCase().includes(q));
         if (sections.length || (topicHit && !onlyUnread && !onlyViz))
-          views.push({ topic: t, sections, showSections: sections.length > 0 && (onlyUnread || onlyViz || !topicHit) });
+          views.push({
+            topic: t,
+            sections,
+            showSections: sections.length > 0 && (onlyUnread || onlyViz || !topicHit),
+          });
       }
-      return { ph, views, total: TOPICS.filter((x) => x.phase === ph.id).length };
+      return {
+        ph,
+        views,
+        total: TOPICS.filter((x) => x.phase === ph.id).length,
+      };
     }).filter((x) => x.total > 0);
   }, [p.sections, q, onlyUnread, onlyViz]);
 
+  /** per-phase progress for the galaxy and the level panels */
+  const { rows: orbit, current } = useMemo(() => {
+    const rows = PHASES.map((ph) => {
+      const ts = TOPICS.filter((t) => t.phase === ph.id);
+      const st = ts.map((t) => topicStatus(p, t));
+      const passed = st.filter((s) => s === 'passed').length;
+      const touched = st.some((s) => s !== 'new');
+      // a passed topic counts in full; the rest by how much of their work is done
+      const meter = ts.length ? Math.round(ts.reduce((a, t, i) => a + (st[i] === 'passed' ? 100 : topicCompletion(p, t)), 0) / ts.length) : 0;
+      return {
+        ph,
+        total: ts.length,
+        passed,
+        touched,
+        meter,
+        state: 'ahead' as PlanetState,
+      };
+    }).filter((r) => r.total > 0);
+    const firstOpen = rows.find((r) => r.passed < r.total);
+    for (const r of rows) r.state = r.passed === r.total ? 'passed' : r.touched || r === firstOpen ? 'now' : 'ahead';
+    return { rows, current: firstOpen?.ph.id };
+  }, [p]);
+
   const matchCount = phases.reduce((a, x) => a + x.views.length, 0);
   const covered = TOPICS.filter((t) => topicStatus(p, t) === 'passed').length;
+  const coveredPct = Math.round((covered / Math.max(1, TOPICS.length)) * 100);
 
   // deep links (/contents#phase-<id>) jump straight there; the jump bar scrolls smoothly itself
   const jumping = useRef(false);
@@ -102,42 +151,181 @@ export default function ContentsPage() {
     jumping.current = true;
     nav({ hash: id }, { replace: true });
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    document.getElementById(id)?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+    // a collapsed phase opens when you jump to it
+    if (id.startsWith('phase-')) setCollapsed((c) => ({ ...c, [id.slice(6)]: false }));
+    requestAnimationFrame(() =>
+      document.getElementById(id)?.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'start',
+      }),
+    );
   };
   const setAll = (value: boolean) => setCollapsed(Object.fromEntries(PHASES.map((ph) => [ph.id, value])));
+  const phaseCount = orbit.length;
 
   return (
     <div className="page syllabus">
       <header className="syl-head">
-        <p className="eyebrow">Course index</p>
-        <h1>Syllabus</h1>
-        <p className="lead">
-          Every phase, topic and section of the course. {covered} of {TOPICS.length} topics covered so far. Search it, filter it, or open any tab
-          of a topic directly.
-        </p>
-        <dl className="syl-totals" aria-label="Course totals">
-          {TOTALS.map(([label, n]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{n}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="syl-head-text">
+          <p className="syl-kicker">
+            Syllabus · {LEVELS.length} levels · {phaseCount} phases · {TOPICS.length} topics
+          </p>
+          <h1>
+            <span className="gtext">The GenAI universe</span>
+          </h1>
+          <p className="syl-lead">
+            {covered} of {TOPICS.length} topics covered. Search it, filter it, or open any tab of a topic directly.
+          </p>
+        </div>
+        <div className="syl-search-wrap" role="search">
+          <label className="syl-search glass">
+            <Search size={18} aria-hidden />
+            <span className="sr-only">Search the syllabus</span>
+            <input type="search" placeholder="Search topics, sections, keywords…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+        </div>
       </header>
 
-      <div className="syl-tools" role="search">
-        <label className="syl-search">
-          <Search size={16} aria-hidden />
-          <span className="sr-only">Search the syllabus</span>
-          <input type="search" placeholder="Search topics, tags and section headings" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </label>
+      {!filtering && (
+        <>
+          <figure className="syl-galaxy" aria-labelledby="syl-galaxy-cap">
+            <figcaption id="syl-galaxy-cap" className="sr-only">
+              Galaxy map: {coveredPct}% of topics covered.{' '}
+              {LEVELS.map((lv, li) => {
+                const rows = orbit.filter((r) => r.ph.level === lv.id);
+                const done = rows.filter((r) => r.state === 'passed').length;
+                return `${['Inner', 'Middle', 'Outer'][li]} orbit, ${lv.title}: ${rows.length} phases, ${done} covered. `;
+              })}
+            </figcaption>
+            <div className="syl-sky" aria-hidden>
+              {LEVELS.map((lv, li) => {
+                const rows = orbit.filter((r) => r.ph.level === lv.id);
+                return (
+                  <div key={lv.id} className={`syl-orbit o-${li + 1}`} style={{ '--size': `${ORBIT_SIZE[li] ?? 91}%` } as CSSProperties}>
+                    {rows.map((r, i) => {
+                      const a = (i / rows.length) * Math.PI * 2 - Math.PI / 2;
+                      return (
+                        <button
+                          key={r.ph.id}
+                          type="button"
+                          tabIndex={-1}
+                          className={`syl-planet p-${r.state}`}
+                          style={{
+                            left: `${50 + 50 * Math.cos(a)}%`,
+                            top: `${50 + 50 * Math.sin(a)}%`,
+                          }}
+                          title={`${pad(r.ph.number)} ${r.ph.title}: ${r.passed}/${r.total} ${PLANET_LABEL[r.state]}`}
+                          onClick={() => jump(`phase-${r.ph.id}`)}
+                        >
+                          <span>{pad(r.ph.number)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <div className="syl-core">
+                <span className="syl-core-num">{coveredPct}%</span>
+                <span className="syl-core-lbl">covered</span>
+              </div>
+            </div>
+            <ul className="syl-legend" aria-hidden>
+              {LEVELS.map((lv, li) => (
+                <li key={lv.id} className={`lv-${li + 1}`}>
+                  <span className="syl-legend-dot" />
+                  {['inner', 'middle', 'outer'][li]} orbit · {NUMERALS[li]} {lv.title}
+                </li>
+              ))}
+              <li className="syl-legend-states">
+                <span className="syl-mini p-passed" /> covered
+                <span className="syl-mini p-now" /> in progress
+                <span className="syl-mini p-ahead" /> ahead
+              </li>
+            </ul>
+          </figure>
+
+          <div className="syl-overview">
+            {LEVELS.map((lv, li) => {
+              const rows = orbit.filter((r) => r.ph.level === lv.id);
+              const passed = rows.reduce((a, r) => a + r.passed, 0);
+              const total = rows.reduce((a, r) => a + r.total, 0);
+              return (
+                <section key={lv.id} className={`syl-panel lv-${li + 1}`} aria-labelledby={`syl-ov-${lv.id}`}>
+                  <header className="syl-panel-head">
+                    <span className="syl-panel-num" aria-hidden>
+                      {NUMERALS[li]}
+                    </span>
+                    <h2 id={`syl-ov-${lv.id}`}>
+                      <span className="sr-only">Level {NUMERALS[li]}: </span>
+                      {lv.title}
+                    </h2>
+                    <span className="syl-panel-count">
+                      {passed}/{total}
+                      <span className="sr-only"> topics covered</span>
+                    </span>
+                  </header>
+                  <ul className="syl-prows">
+                    {rows.map((r) => (
+                      <li key={r.ph.id}>
+                        <a
+                          href={`#phase-${r.ph.id}`}
+                          className={`syl-prow s-${r.state} ${r.ph.id === current ? 'cur' : ''}`}
+                          aria-current={r.ph.id === current ? 'location' : undefined}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            jump(`phase-${r.ph.id}`);
+                          }}
+                        >
+                          <span className="syl-prow-num">{pad(r.ph.number)}</span>
+                          <span className="syl-prow-title">{r.ph.title}</span>
+                          <span className="syl-meter" aria-hidden>
+                            <span style={{ width: `${r.meter}%` }} />
+                          </span>
+                          <span className="syl-prow-count">
+                            {r.passed}/{r.total}
+                            <span className="sr-only"> topics covered, {PLANET_LABEL[r.state]}</span>
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+
+          <dl className="syl-totals" aria-label="Course totals">
+            {TOTALS.map(([label, n]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{n}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      )}
+
+      <div className="syl-tools" role="group" aria-label="Filters">
         <div className="syl-filters">
           <button type="button" className={`chip ${onlyUnread ? 'on' : ''}`} aria-pressed={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
             Only unread
           </button>
           <button type="button" className={`chip ${onlyViz ? 'on' : ''}`} aria-pressed={onlyViz} onClick={() => setOnlyViz((v) => !v)}>
-            Only with animations
+            <CirclePlay size={14} aria-hidden /> Only with animations
           </button>
+          {filtering && (
+            <button
+              type="button"
+              className="btn-ghost btn-xs"
+              onClick={() => {
+                setQuery('');
+                setOnlyUnread(false);
+                setOnlyViz(false);
+              }}
+            >
+              Clear
+            </button>
+          )}
           <span className="syl-filters-end">
             <span className="syl-match" aria-live="polite">
               {filtering ? `${matchCount} topic${matchCount === 1 ? '' : 's'} match` : ''}
@@ -154,19 +342,22 @@ export default function ContentsPage() {
 
       <nav className="syl-jump" aria-label="Jump to phase">
         <ol>
-          {phases.map(({ ph, views }) => (
-            <li key={ph.id}>
-              <button
-                type="button"
-                className={filtering && !views.length ? 'dim' : ''}
-                onClick={() => jump(`phase-${ph.id}`)}
-                title={ph.title}
-                aria-label={`Phase ${ph.number}: ${ph.title}`}
-              >
-                {pad(ph.number)}
-              </button>
-            </li>
-          ))}
+          {phases.map(({ ph, views }) => {
+            const st = orbit.find((r) => r.ph.id === ph.id)?.state ?? 'ahead';
+            return (
+              <li key={ph.id}>
+                <button
+                  type="button"
+                  className={`j-${st} ${filtering && !views.length ? 'dim' : ''}`}
+                  onClick={() => jump(`phase-${ph.id}`)}
+                  title={ph.title}
+                  aria-label={`Phase ${ph.number}: ${ph.title}`}
+                >
+                  {pad(ph.number)}
+                </button>
+              </li>
+            );
+          })}
           <li>
             <button type="button" className="syl-jump-tools" onClick={() => jump('phase-tools')}>
               Practice &amp; tools
@@ -183,7 +374,7 @@ export default function ContentsPage() {
         const lvTopics = TOPICS.filter((t) => PHASES.some((ph) => ph.level === lv.id && ph.id === t.phase));
         const lvPassed = lvTopics.filter((t) => topicStatus(p, t) === 'passed').length;
         return (
-          <section key={lv.id} className="syl-level" aria-labelledby={`syl-level-${lv.id}`}>
+          <section key={lv.id} className={`syl-level lv-${li + 1}`} aria-labelledby={`syl-level-${lv.id}`}>
             <header className="syl-level-head">
               <span className="syl-numeral" aria-hidden>
                 {NUMERALS[li]}
@@ -203,8 +394,9 @@ export default function ContentsPage() {
             {lvPhases.map(({ ph, views, total }) => {
               const passed = TOPICS.filter((t) => t.phase === ph.id && topicStatus(p, t) === 'passed').length;
               const open = filtering || !collapsed[ph.id];
+              const st = orbit.find((r) => r.ph.id === ph.id)?.state ?? 'ahead';
               return (
-                <section key={ph.id} id={`phase-${ph.id}`} className="syl-phase" aria-labelledby={`syl-ph-${ph.id}`}>
+                <section key={ph.id} id={`phase-${ph.id}`} className={`syl-phase s-${st}`} aria-labelledby={`syl-ph-${ph.id}`}>
                   <h3 className="syl-phase-h">
                     <button
                       type="button"
@@ -274,7 +466,9 @@ function TopicTable({
 }) {
   return (
     <table className="syl-table">
-      <caption className="sr-only">Topics in phase {phaseNumber}, {phaseTitle}</caption>
+      <caption className="sr-only">
+        Topics in phase {phaseNumber}, {phaseTitle}
+      </caption>
       <thead className={quietHead ? 'quiet' : undefined}>
         <tr>
           <th scope="col" className="c-num">
@@ -320,11 +514,36 @@ function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: numb
   const listed = showSections ? sections : t.sections.map((_, i) => i);
   const links: { label: string; long: string; to: string; show: boolean }[] = [
     { label: 'Read', long: 'Read', to: `${base}?tab=learn`, show: true },
-    { label: 'Lab', long: codeLabLabel(t), to: `${base}?tab=code`, show: t.codeChallenges.length > 0 },
-    { label: 'Questions', long: 'Interview questions', to: `${base}?tab=interview`, show: t.interviewQuestions.length > 0 },
-    { label: 'Estimation', long: 'Estimation', to: `${base}?tab=envelope`, show: t.envelopeQuestions.length > 0 },
-    { label: 'Exam', long: 'Exam', to: `${base}?tab=exam`, show: t.test.length > 0 },
-    { label: 'Capstone', long: 'Capstone', to: `${base}?tab=capstone`, show: capstones > 0 },
+    {
+      label: 'Lab',
+      long: codeLabLabel(t),
+      to: `${base}?tab=code`,
+      show: t.codeChallenges.length > 0,
+    },
+    {
+      label: 'Questions',
+      long: 'Interview questions',
+      to: `${base}?tab=interview`,
+      show: t.interviewQuestions.length > 0,
+    },
+    {
+      label: 'Estimation',
+      long: 'Estimation',
+      to: `${base}?tab=envelope`,
+      show: t.envelopeQuestions.length > 0,
+    },
+    {
+      label: 'Exam',
+      long: 'Exam',
+      to: `${base}?tab=exam`,
+      show: t.test.length > 0,
+    },
+    {
+      label: 'Capstone',
+      long: 'Capstone',
+      to: `${base}?tab=capstone`,
+      show: capstones > 0,
+    },
   ];
   return (
     <>
@@ -362,7 +581,13 @@ function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: numb
           </span>
         </td>
         <td className={`c-best ${st === 'passed' ? 'good' : ''}`}>
-          {rec ? `${rec.best}%` : <span className="syl-none">—<span className="sr-only">no attempt</span></span>}
+          {rec ? (
+            `${rec.best}%`
+          ) : (
+            <span className="syl-none">
+              —<span className="sr-only">no attempt</span>
+            </span>
+          )}
         </td>
         <td className="c-open">
           <ul className="syl-links">
@@ -408,12 +633,20 @@ function ToolsGroup() {
   const companyDone = COMPANY_QUESTIONS.filter((q) => p.company[q.id]).length;
   const weak = weakTopics(p, TOPICS).length;
   const mistakes = TOPICS.reduce((a, t) => a + currentlyWrong(p, t).length, 0);
-  const rows: { to: string; title: string; desc: string; state: string; flag?: boolean }[] = [
+  const rows: {
+    to: string;
+    title: string;
+    desc: string;
+    state: string;
+    flag?: boolean;
+  }[] = [
     {
       to: '/challenges',
       title: 'Architecture challenges',
       desc: `${COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges with a mock-interview timer.`,
-      state: unlocked ? `${companyDone}/${COMPANY_QUESTIONS.length} done` : `Locked · ${remaining.length} exam${remaining.length === 1 ? '' : 's'} to pass`,
+      state: unlocked
+        ? `${companyDone}/${COMPANY_QUESTIONS.length} done`
+        : `Locked · ${remaining.length} exam${remaining.length === 1 ? '' : 's'} to pass`,
     },
     {
       to: '/weak-areas',

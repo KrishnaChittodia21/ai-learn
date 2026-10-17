@@ -1,131 +1,115 @@
 /* ======================================================================
-   Study record: ledger figures + ruled chart panels (src/components/DashboardMetrics.tsx,
-   src/components/charts/*), plus shared progress bits (ProgressRing, status pill).
-   Charts draw in ink: --text marks on a --surface-2 track, hairline grid, mono axis text.
-   --accent appears only for "current/threshold" (latest point, pass mark, today).
+   Study record (src/components/DashboardMetrics.tsx, src/components/charts/*) in Neural Aurora:
+   KPI figures and chart panels are glass cards; marks glow Ion (done/data) on a dim tint track,
+   rounded ends, mono axis text. --accent marks "current/threshold" (latest point, pass mark, today).
    Self-ratings are a status, so they use the semantic --good/--warn/--bad.
-   Supersedes legacy blocks: chart card, tooltip, KPI tiles, chart grid, donut, bar list,
-   columns, line, 100% stacked bar, heatmap, practice-done lock badge, progress ring, status pill,
-   and the Dashboard v2 --dv-* palette.
+   Also: shared progress bits (ProgressRing, status pill) used by other screens.
    ====================================================================== */
 :root,
 :root[data-theme='dark'] {
-  --dv-1: var(--text);
+  --dv-1: var(--c-ion);
   --dv-2: var(--accent);
   --dv-ord-1: var(--bad);
   --dv-ord-2: var(--warn);
   --dv-ord-3: var(--good);
-  --dv-ink-1: var(--surface);
-  --dv-ink-2: var(--surface);
-  --dv-ink-3: var(--surface);
-  --dv-rest: color-mix(in srgb, var(--text) 22%, var(--surface));
-  --dv-track: var(--surface-2);
+  --dv-ink-1: light-dark(#ffffff, #0b0820);
+  --dv-ink-2: light-dark(#ffffff, #0b0820);
+  --dv-ink-3: light-dark(#ffffff, #0b0820);
+  --dv-rest: var(--st-new);
+  --dv-track: var(--tint-2);
   --dv-grid: var(--border);
   --dv-axis: var(--rule-strong);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --dv-1: var(--text);
+    --dv-1: var(--c-ion);
     --dv-2: var(--accent);
     --dv-ord-1: var(--bad);
     --dv-ord-2: var(--warn);
     --dv-ord-3: var(--good);
-    --dv-ink-1: var(--surface);
-    --dv-ink-2: var(--surface);
-    --dv-ink-3: var(--surface);
-    --dv-rest: color-mix(in srgb, var(--text) 22%, var(--surface));
+    --dv-ink-1: light-dark(#ffffff, #0b0820);
+    --dv-ink-2: light-dark(#ffffff, #0b0820);
+    --dv-ink-3: light-dark(#ffffff, #0b0820);
+    --dv-rest: var(--st-new);
     --dv-axis: var(--rule-strong);
   }
 }
 
-/* ---------- ledger figures (KPIs) ---------- */
+/* ---------- KPI figures: glass tiles ---------- */
 .dv-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  margin: 0 0 var(--s-6);
-  border-top: 1px solid var(--rule-strong);
-  border-bottom: 1px solid var(--border);
+  gap: 18px;
+  margin: 0 0 18px;
 }
 .dv-stat {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  padding: var(--s-3) var(--s-4) var(--s-4);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  transition: none;
-}
-.dv-stat:hover {
-  box-shadow: none;
-  transform: none;
-}
-.dv-stat:first-child {
-  padding-left: 0;
-}
-.dv-stat + .dv-stat {
-  border-left: 1px solid var(--border);
+  padding: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
 }
 .dv-stat-label {
   font-family: var(--mono);
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .dv-stat-value {
-  font-family: var(--serif);
-  font-size: 2.125rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-family: var(--display);
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   color: var(--text);
   font-variant-numeric: lining-nums tabular-nums;
 }
 .dv-stat-of {
-  font-family: var(--sans);
-  font-size: var(--fs-sm);
-  font-weight: 500;
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 600;
   letter-spacing: 0;
   color: var(--muted);
 }
 .dv-stat-hint {
   font-size: var(--fs-xs);
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--muted);
 }
 .dv-meter {
   position: relative;
-  height: 2px;
-  border-radius: 0;
+  height: 6px;
+  border-radius: 99px;
   background: var(--dv-track);
-  overflow: visible;
 }
 .dv-meter span {
   display: block;
   height: 100%;
-  border-radius: 0;
-  background: var(--text);
+  border-radius: 99px;
+  background: var(--grad-ion);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c-ion) 40%, transparent);
 }
 .dv-meter-mark {
   position: absolute;
-  top: -3px;
+  top: -4px;
   width: 2px;
-  height: 8px;
+  height: 14px;
   margin-left: -1px;
-  background: var(--accent);
+  border-radius: 2px;
+  background: var(--c-pulsar);
 }
 
-/* ---------- grid of ruled panels ---------- */
+/* ---------- grid of chart cards ---------- */
 .dv-grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
-  gap: var(--s-6) var(--s-6);
-  align-items: start;
+  gap: 18px;
+  align-items: stretch;
 }
 
 /* ---------- chart panel ---------- */
@@ -136,11 +120,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
-  padding: var(--s-3) 0 0;
-  background: transparent;
-  border: 0;
-  border-top: 1px solid var(--rule-strong);
-  border-radius: 0;
+  padding: 24px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
   box-shadow: none;
 }
 .dash-section > .dv-card {
@@ -157,9 +140,9 @@
 }
 .dv-title {
   margin: 0;
-  font-family: var(--serif);
+  font-family: var(--display);
   font-size: var(--fs-lg);
-  font-weight: 560;
+  font-weight: 600;
   line-height: 1.25;
 }
 .dv-sub {
@@ -183,7 +166,7 @@
   min-height: 26px;
   padding: 0 var(--s-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-family: var(--mono);
   font-size: 0.68rem;
   font-weight: 500;
@@ -215,14 +198,14 @@
   flex: none;
 }
 .dv-key-rect {
-  width: 9px;
-  height: 9px;
-  border-radius: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
 }
 .dv-key-line {
   width: 12px;
   height: 2px;
-  border-radius: 0;
+  border-radius: 2px;
 }
 .dv-key-ref {
   width: 2px;
@@ -231,7 +214,7 @@
   vertical-align: -1px;
 }
 .dv-key-on {
-  background: var(--text);
+  background: var(--c-ion);
 }
 .dv-key-empty {
   background: var(--dv-track);
@@ -239,7 +222,7 @@
 }
 .dv-key-today {
   background: var(--dv-track);
-  outline: 1.5px solid var(--accent);
+  outline: 1.5px solid var(--c-solar);
   outline-offset: 1px;
 }
 .dv-empty {
@@ -250,9 +233,9 @@
   justify-content: center;
   gap: var(--s-3);
   padding: var(--s-4);
-  border: 1px dashed var(--border);
-  border-radius: 0;
-  background: transparent;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--tint);
   color: var(--text-2);
   font-size: var(--fs-sm);
 }
@@ -408,14 +391,15 @@ a.dv-bar-main:hover {
 }
 .dv-bar-track {
   position: relative;
-  height: 6px;
-  border-radius: 0;
+  height: 8px;
+  border-radius: 99px;
   background: var(--dv-track);
 }
 .dv-bar {
   display: block;
   height: 100%;
-  border-radius: 0;
+  border-radius: 99px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c-ion) 35%, transparent);
   transition: width 0.5s var(--ease-out);
 }
 .dv-bar-ref {
@@ -424,8 +408,8 @@ a.dv-bar-main:hover {
   bottom: -4px;
   width: 2px;
   margin-left: -1px;
-  border-radius: 0;
-  background: var(--accent);
+  border-radius: 2px;
+  background: var(--c-pulsar);
 }
 .dv-bar-row:hover .dv-bar,
 .dv-bar-main:focus-visible .dv-bar {
@@ -485,15 +469,16 @@ a.dv-bar-main:hover {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
 }
 .dv-col-slot:hover {
-  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  background: var(--tint);
 }
 .dv-col {
   position: relative;
   width: 22px;
-  border-radius: 0;
+  border-radius: 8px 8px 2px 2px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-ion) 35%, transparent);
   transition: height 0.5s var(--ease-out);
 }
 .dv-col-value {
@@ -555,7 +540,8 @@ a.dv-bar-main:hover {
   font-variant-numeric: tabular-nums;
 }
 .dv-line path {
-  stroke-width: 1.5;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-ion) 45%, transparent));
 }
 /* the latest attempt is "current": signal colour */
 .dv-line circle:last-of-type {
@@ -579,8 +565,10 @@ a.dv-bar-main:hover {
 /* ---------- 100% stacked bar ---------- */
 .dv-stack-bar {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   height: 22px;
+  border-radius: 99px;
+  overflow: hidden;
   margin: var(--s-1) 0;
 }
 .dv-stack-seg {
@@ -588,7 +576,7 @@ a.dv-bar-main:hover {
   align-items: center;
   justify-content: center;
   min-width: 4px;
-  border-radius: 0 !important;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 0.7rem;
   font-weight: 600;
@@ -601,7 +589,7 @@ a.dv-bar-main:hover {
   white-space: nowrap;
 }
 
-/* ---------- heatmap: small ink squares ---------- */
+/* ---------- heatmap: rounded cells, studied days glow ---------- */
 .dv-heat-grid {
   display: grid;
   grid-template-columns: 2.4em repeat(var(--weeks), 13px);
@@ -630,20 +618,20 @@ a.dv-bar-main:hover {
   width: 13px;
   height: 13px;
   aspect-ratio: 1;
-  border-radius: 0;
+  border-radius: 3px;
   background: var(--dv-track);
   box-shadow: none;
 }
 .dv-heat-cell.on {
-  background: var(--text);
-  box-shadow: none;
+  background: var(--c-ion);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c-ion) 45%, transparent);
 }
 .dv-heat-cell.future {
   background: none;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent);
 }
 .dv-heat-cell.today {
-  outline: 1.5px solid var(--accent);
+  outline: 1.5px solid var(--c-solar);
   outline-offset: 1px;
 }
 .dv-heat-cell.dv-mark:hover {
@@ -744,25 +732,21 @@ a.dv-bar-main:hover {
 @media (max-width: 900px) {
   .dv-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .dv-stat:nth-child(odd) {
-    padding-left: 0;
-    border-left: 0;
-  }
-  .dv-stat:nth-child(n + 3) {
-    border-top: 1px solid var(--border);
+    gap: 12px;
   }
 }
 @media (max-width: 560px) {
   .dv-stat {
-    padding: var(--s-3) var(--s-3) var(--s-3);
+    padding: 14px;
+    border-radius: 18px;
   }
   .dv-stat-value {
-    font-size: 1.75rem;
+    font-size: 1.625rem;
   }
   .card.dv-card,
   .dv-card {
-    padding: var(--s-3) 0 0;
+    padding: 18px;
+    border-radius: 22px;
   }
   .dv-head {
     flex-wrap: wrap;

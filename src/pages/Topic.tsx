@@ -17,7 +17,7 @@ import { topicSteps } from '../lib/nextStep';
 import { StudyPath, type TabId } from '../components/StudyPath';
 import { CoachTip } from '../components/CoachTip';
 import { NextUp } from '../components/NextUp';
-import { BookOpen, CirclePlay, Crosshair, Library, Lightbulb, Lock } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, CirclePlay, Crosshair, Library, Lightbulb, Lock } from 'lucide-react';
 import { PREREQS } from '../content/prereqs';
 import { projectsForTopic } from '../content/projects';
 import { CapstoneTab } from '../components/Capstone';
@@ -114,48 +114,55 @@ export default function TopicPage() {
     <NextUp lead={<strong>That was the last topic.</strong>} label="Architecture Challenges" to="/challenges" />
   );
 
+  const passed = topicStatus(p, topic) === 'passed';
+  // "Retrieval Fundamentals: Keyword, BM25…" → big gradient head + a quieter second line
+  const colon = topic.title.indexOf(': ');
+  const titleMain = colon > 0 ? topic.title.slice(0, colon) : topic.title;
+  const titleRest = colon > 0 ? topic.title.slice(colon + 2) : '';
+  const levelNum = phase ? ({ beginner: 'I', intermediate: 'II', advanced: 'III' } as Record<string, string>)[phase.level] : undefined;
+
   return (
-    <div className="page">
-      <header className="chapter-head">
-        <p className="chapter-meta">
-          {phase && (
-            <>
-              <span className={`level-mark ${phase.level}`}>{phase.level}</span>
-              <Link to={`/contents#phase-${phase.id}`}>
-                Phase {String(phase.number).padStart(2, '0')} · {phase.title}
-              </Link>
-              <span aria-hidden>·</span>
-              <span>
-                Topic {phase.number}.{topic.order}
+    <div className="page tp">
+      <nav className="tp-crumbs" aria-label="Breadcrumb">
+        <Link to="/contents">Syllabus</Link>
+        {phase && (
+          <>
+            <span aria-hidden>/</span>
+            <Link to={`/contents#phase-${phase.id}`}>
+              Phase {String(phase.number).padStart(2, '0')} · {phase.title}
+            </Link>
+            <span aria-hidden>/</span>
+            <span aria-current="page">
+              Topic {phase.number}.{topic.order}
+            </span>
+          </>
+        )}
+      </nav>
+
+      <header className="tp-hero glass">
+        <div className="tp-hero-glow" aria-hidden />
+        <div className="tp-hero-row">
+          <div className="tp-hero-text">
+            <div className="tp-hero-chips">
+              {phase && (
+                <span className={`tp-chip level ${phase.level}`}>
+                  {levelNum ? `${levelNum} · ` : ''}
+                  {phase.level}
+                </span>
+              )}
+              <span className="tp-chip">
+                {topic.estimatedMinutes} min · {topic.sections.length} section{topic.sections.length === 1 ? '' : 's'}
+                {topic.test.length > 0 && ` · ${topic.test.length}-Q exam`}
               </span>
-            </>
-          )}
-        </p>
-        <h1>{topic.title}</h1>
-        <p className="lead">{topic.subtitle}</p>
-        <dl className="chapter-facts">
-          <div>
-            <dt>Time</dt>
-            <dd>{topic.estimatedMinutes} min</dd>
+            </div>
+            <h1 className="tp-title">
+              <span className="gtext">{titleMain}</span>
+              {titleRest && <span className="tp-title-rest">{titleRest}</span>}
+            </h1>
+            {topic.subtitle && <p className="tp-subtitle">{topic.subtitle}</p>}
           </div>
-          <div>
-            <dt>Sections</dt>
-            <dd>{topic.sections.length}</dd>
-          </div>
-          <div>
-            <dt>Exam</dt>
-            <dd>{topic.test.length} questions</dd>
-          </div>
-          <div className="chapter-progress">
-            <dt>Progress</dt>
-            <dd>
-              <span className="chapter-progress-bar" aria-hidden>
-                <span style={{ width: `${pct}%` }} />
-              </span>
-              {topicStatus(p, topic) === 'passed' ? 'Covered' : `${pct}%`}
-            </dd>
-          </div>
-        </dl>
+          <ProgressRing pct={pct} passed={passed} />
+        </div>
       </header>
 
       <StudyPath steps={steps} active={tab} locks={locks} onSelect={selectTab} />
@@ -165,16 +172,20 @@ export default function TopicPage() {
       </CoachTip>
 
       {tab === 'learn' && <LearnTab topic={topic} />}
-      {tab === 'code' && topic.codeChallenges.map((c, i) => <ChallengeCard key={c.id} c={c} n={i + 1} />)}
-      {tab === 'interview' && (locks.interview ? <StudyLock topic={topic} what="interview questions" /> : <InterviewTab topic={topic} />)}
-      {tab === 'envelope' && topic.envelopeQuestions.map((q, i) => <EnvelopeCard key={q.id} q={q} n={i + 1} />)}
-      {tab === 'cheat' && <CheatSheet topic={topic} />}
-      {tab === 'capstone' && <CapstoneTab projects={capstones} />}
-      {tab === 'exam' && (locks.exam ? <StudyLock topic={topic} what="exam" /> : <ExamIntro topic={topic} />)}
+      {tab !== 'learn' && (
+        <div className="tp-tab-panel">
+          {tab === 'code' && topic.codeChallenges.map((c, i) => <ChallengeCard key={c.id} c={c} n={i + 1} />)}
+          {tab === 'interview' && (locks.interview ? <StudyLock topic={topic} what="interview questions" /> : <InterviewTab topic={topic} />)}
+          {tab === 'envelope' && topic.envelopeQuestions.map((q, i) => <EnvelopeCard key={q.id} q={q} n={i + 1} />)}
+          {tab === 'cheat' && <CheatSheet topic={topic} />}
+          {tab === 'capstone' && <CapstoneTab projects={capstones} />}
+          {tab === 'exam' && (locks.exam ? <StudyLock topic={topic} what="exam" /> : <ExamIntro topic={topic} />)}
+        </div>
+      )}
       {!(tab === 'interview' && locks.interview) && !(tab === 'exam' && locks.exam) && nextUp}
 
       {(topic.sources.length > 0 || topic.tags.length > 0) && (
-        <footer className="chapter-colophon">
+        <footer className="tp-colophon">
           {topic.tags.length > 0 && (
             <p>
               <span className="label">Keywords</span>
@@ -196,12 +207,70 @@ export default function TopicPage() {
         </footer>
       )}
 
-      <div className="pager">
-        {prev ? <Link to={`/topic/${prev.id}`}>← {prev.title}</Link> : <span />}
-        {next ? <Link to={`/topic/${next.id}`}>{next.title} →</Link> : <Link to="/challenges">Architecture Challenges →</Link>}
+      <nav className="tp-topic-pager" aria-label="Topics">
+        {prev ? (
+          <Link to={`/topic/${prev.id}`} className="tp-topic-link prev">
+            <span className="tp-topic-k">← Previous topic</span>
+            <span className="tp-topic-t">{prev.title}</span>
+          </Link>
+        ) : (
+          <span />
+        )}
+        {next ? (
+          <Link to={`/topic/${next.id}`} className="tp-topic-link next">
+            <span className="tp-topic-k">Next topic →</span>
+            <span className="tp-topic-t">{next.title}</span>
+          </Link>
+        ) : (
+          <Link to="/challenges" className="tp-topic-link next">
+            <span className="tp-topic-k">Then →</span>
+            <span className="tp-topic-t">Architecture Challenges</span>
+          </Link>
+        )}
+      </nav>
+    </div>
+  );
+}
+
+/** % complete as a glowing conic ring (real data from topicCompletion). */
+function ProgressRing({ pct, passed }: { pct: number; passed: boolean }) {
+  const value = passed ? 100 : pct;
+  return (
+    <div className={`tp-ring ${passed ? 'passed' : ''}`} role="img" aria-label={passed ? 'Topic covered' : `Topic progress ${pct} percent`}>
+      <div className="tp-ring-arc" style={{ ['--p' as string]: `${value}%` }} aria-hidden />
+      <div className="tp-ring-label" aria-hidden>
+        <div className="tp-ring-num">{passed ? <Check size={34} strokeWidth={2.6} /> : `${pct}%`}</div>
+        <div className="tp-ring-cap">{passed ? 'Covered' : 'Complete'}</div>
       </div>
     </div>
   );
+}
+
+const headingParts = (h: string) => {
+  const [title, ...rest] = h.split(' — ');
+  return { title, sub: rest.join(' — ') };
+};
+const sectionNo = (i: number) => String(i + 1).padStart(2, '0');
+const scrollToSection = (i: number) => document.getElementById(`s-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+/** Index of the section the reader is in (the one crossing the upper third of the viewport). */
+function useActiveSection(count: number) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const els = Array.from({ length: count }, (_, i) => document.getElementById(`s-${i}`)).filter((e): e is HTMLElement => !!e);
+    if (!els.length || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActive(Number(e.target.id.slice(2)));
+        }
+      },
+      { rootMargin: '-28% 0px -66% 0px' },
+    );
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, [count]);
+  return active;
 }
 
 function LearnTab({ topic }: { topic: Topic }) {
@@ -209,6 +278,9 @@ function LearnTab({ topic }: { topic: Topic }) {
   const read = new Set(p.sections[topic.id] ?? []);
   const [params] = useSearchParams();
   const target = params.get('s');
+  const active = useActiveSection(topic.sections.length);
+  const [tocOpen, setTocOpen] = useState(false);
+  const n = topic.sections.length;
 
   // deep link from weak-area reports: /topic/:id?tab=learn&s=<section index>
   useEffect(() => {
@@ -222,76 +294,113 @@ function LearnTab({ topic }: { topic: Topic }) {
     });
     return () => cancelAnimationFrame(raf);
   }, [target]);
+
+  // the rail's glowing line fills up to the furthest section read
+  const furthest = Math.max(-1, ...topic.sections.map((_, i) => (read.has(i) ? i : -1)));
+  const fill = n > 1 && furthest >= 0 ? (furthest / (n - 1)) * 100 : 0;
+
   return (
-    <div className="learn">
-      <nav className="toc" aria-label="Sections in this topic">
-        <div className="toc-title">
-          Contents <span className="toc-count">{read.size}/{topic.sections.length} read</span>
-        </div>
-        <ol>
-          {topic.sections.map((s, i) => (
-            <li key={s.heading} className={read.has(i) ? 'done' : ''}>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => document.getElementById(`s-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              >
-                <span className="toc-num">{i + 1}</span>
-                <span className="toc-text">{s.heading.split(' — ')[0]}</span>
-              </button>
-            </li>
-          ))}
+    <div className="tp-learn">
+      <nav className={`tp-rail ${tocOpen ? 'open' : ''}`} aria-label="Sections in this topic">
+        <button type="button" className="tp-rail-title" aria-expanded={tocOpen} onClick={() => setTocOpen((o) => !o)}>
+          <span>
+            Contents · {read.size}/{n} read
+          </span>
+          <ChevronDown size={16} aria-hidden className="tp-rail-chev" />
+        </button>
+        <ol className="tp-rail-list" style={{ ['--fill' as string]: `${fill}%` }}>
+          {topic.sections.map((s, i) => {
+            const state = read.has(i) ? 'done' : 'ahead';
+            return (
+              <li key={s.heading} className={`${state} ${i === active ? 'current' : ''}`}>
+                <button
+                  type="button"
+                  aria-current={i === active ? 'location' : undefined}
+                  onClick={() => {
+                    scrollToSection(i);
+                    setTocOpen(false);
+                  }}
+                >
+                  <span className="tp-node" aria-hidden />
+                  <span className="tp-rail-text">{headingParts(s.heading).title}</span>
+                  <span className="sr-only">{read.has(i) ? ' (read)' : ''}</span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
       </nav>
-      <div className="learn-body">
-      {topic.sections.map((s, i) => (
-        <article key={s.heading} id={`s-${i}`} className="section">
-          <div className="section-head">
-            <h2>
-              <span className="section-num">{i + 1}</span>
-              {s.heading.split(' — ')[0]}
-              {s.heading.includes(' — ') && <span className="section-sub">{s.heading.split(' — ').slice(1).join(' — ')}</span>}
-            </h2>
-            <label className="check">
-              <input type="checkbox" checked={read.has(i)} onChange={() => toggleSectionRead(topic.id, i)} /> Read
-            </label>
-          </div>
-          {s.source && (
-            <div className="source">
-              <BookOpen size={13} aria-hidden /> {s.source}
+      <div className="tp-read">
+        {topic.sections.map((s, i) => {
+          const { title, sub } = headingParts(s.heading);
+          const prevS = topic.sections[i - 1];
+          const nextS = topic.sections[i + 1];
+          return (
+            <article key={s.heading} id={`s-${i}`} className={`tp-sec ${i === active ? 'is-active' : ''}`} aria-labelledby={`s-${i}-h`}>
+              <header className="tp-sec-head">
+                <div className="tp-sec-titles">
+                  <div className="tp-sec-no">§ {sectionNo(i)}</div>
+                  <h2 id={`s-${i}-h`}>{title}</h2>
+                  {sub && <p className="tp-sec-sub">{sub}</p>}
+                </div>
+                <label className={`tp-read-toggle ${read.has(i) ? 'on' : ''}`}>
+                  <input type="checkbox" checked={read.has(i)} onChange={() => toggleSectionRead(topic.id, i)} />
+                  {read.has(i) ? 'Read' : 'Mark as read'}
+                </label>
+              </header>
+              {s.source && (
+                <div className="source">
+                  <BookOpen size={13} aria-hidden /> {s.source}
+                </div>
+              )}
+              <PrereqLinks topicId={topic.id} heading={s.heading} />
+              <div className="tp-body">
+                <Markdown>{s.body}</Markdown>
+              </div>
+              {s.diagram && <Diagram text={s.diagram} />}
+              <SectionViz topic={topic} sectionIndex={i} />
+              {s.code?.map((c, j) => <CodeBlock key={j} snippet={c} />)}
+              {s.keyPoints && s.keyPoints.length > 0 && (
+                <div className="keypoints">
+                  <div className="keypoints-title">Key points</div>
+                  <ul>
+                    {s.keyPoints.map((k) => (
+                      <li key={k}>{k}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <SectionPractice topicId={topic.id} index={i} section={s} />
+              <nav className="tp-sec-pager" aria-label={`After section ${i + 1}`}>
+                {prevS ? (
+                  <button type="button" className="tp-sec-prev" onClick={() => scrollToSection(i - 1)}>
+                    ← §{i} {headingParts(prevS.heading).title}
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {nextS && (
+                  <button type="button" className={`btn ${i === active ? 'btn-primary' : ''} tp-sec-next`} onClick={() => scrollToSection(i + 1)}>
+                    §{i + 2} {headingParts(nextS.heading).title} →
+                  </button>
+                )}
+              </nav>
+            </article>
+          );
+        })}
+        {read.size < n && (
+          <div className="tp-cta">
+            <div>
+              <strong>
+                {read.size}/{n} sections ticked as read.
+              </strong>{' '}
+              Tick each one when you finish it, or mark them all if you already know this topic.
             </div>
-          )}
-          <PrereqLinks topicId={topic.id} heading={s.heading} />
-          <Markdown>{s.body}</Markdown>
-          {s.diagram && <Diagram text={s.diagram} />}
-          <SectionViz topic={topic} sectionIndex={i} />
-          {s.code?.map((c, j) => <CodeBlock key={j} snippet={c} />)}
-          {s.keyPoints && s.keyPoints.length > 0 && (
-            <div className="keypoints">
-              <div className="keypoints-title">Key points</div>
-              <ul>
-                {s.keyPoints.map((k) => (
-                  <li key={k}>{k}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <SectionPractice topicId={topic.id} index={i} section={s} />
-        </article>
-      ))}
-      {read.size < topic.sections.length && (
-        <div className="card cta">
-          <div>
-            <strong>
-              {read.size}/{topic.sections.length} sections ticked as read.
-            </strong>{' '}
-            Tick each one when you finish it, or mark them all if you already know this topic.
+            <button className="btn" type="button" onClick={() => markAllSectionsRead(topic.id, n)}>
+              Mark all as read
+            </button>
           </div>
-          <button className="btn" type="button" onClick={() => markAllSectionsRead(topic.id, topic.sections.length)}>
-            Mark all as read
-          </button>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
@@ -305,19 +414,21 @@ function ChallengeCard({ c, n }: { c: CodeChallenge; n: number }) {
   const [showSolution, setShowSolution] = useState(false);
   const done = !!p.cc[c.id];
   return (
-    <article className="card">
-      <div className="section-head">
-        <h2>
-          <span className="section-num">{n}</span> {c.title}
-        </h2>
+    <article className={`tp-card tp-lab ${done ? 'done' : ''}`}>
+      <div className="tp-card-head">
+        <div>
+          <div className="tp-card-no">Lab {sectionNo(n - 1)}</div>
+          <h2>{c.title}</h2>
+        </div>
         {done && <Badge tone="good">Completed</Badge>}
       </div>
       <Markdown>{c.context}</Markdown>
       <div className="task">
-        <strong>Your task:</strong> <Markdown>{c.task}</Markdown>
+        <div className="tp-kicker solar">Your task</div>
+        <Markdown>{c.task}</Markdown>
       </div>
-      <div className="row between">
-        <span className="small muted">
+      <div className="tp-ex-bar">
+        <span>
           {c.starter.language === 'text' ? 'Rewrite the answer below.' : 'Edit the code below.'} Your changes are saved automatically.{' '}
           {c.starter.title && `(${c.starter.title})`}
         </span>
@@ -332,7 +443,7 @@ function ChallengeCard({ c, n }: { c: CodeChallenge; n: number }) {
             <Lightbulb size={15} aria-hidden className="inline-icon" /> <strong>Hint {i + 1}:</strong> {h}
           </div>
         ))}
-        <div className="row gap-s wrap">
+        <div className="tp-ex-actions">
           {hints < c.hints.length && (
             <button className="btn" type="button" onClick={() => setHints((h) => h + 1)}>
               Show hint {hints + 1}/{c.hints.length}
@@ -341,7 +452,7 @@ function ChallengeCard({ c, n }: { c: CodeChallenge; n: number }) {
           <button className="btn" type="button" onClick={() => setShowSolution((s) => !s)}>
             {showSolution ? 'Hide solution' : 'Compare with reference solution'}
           </button>
-          <button className={`btn ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('cc', c.id, !done)}>
+          <button className={`btn tp-ex-solve ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('cc', c.id, !done)}>
             {done ? 'Mark not done' : 'Mark as done'}
           </button>
         </div>
@@ -362,7 +473,7 @@ function InterviewTab({ topic }: { topic: Topic }) {
   const rated = topic.interviewQuestions.filter((q) => p.iq[q.id]).length;
   return (
     <div>
-      <div className="card info">
+      <div className="tp-intro">
         <strong>How to practise:</strong> answer out loud or type your answer <em>before</em> revealing anything, as you would in a
         real interview. Then compare with what the interviewer is looking for and the model answer, work through the follow-ups
         and rate yourself honestly. <span className="muted">({rated}/{topic.interviewQuestions.length} rated)</span>
@@ -382,11 +493,12 @@ function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
   const rating = p.iq[q.id];
   const rate = (r: Rating) => rateIQ(q.id, rating === r ? null : r);
   return (
-    <article className="card iq">
-      <div className="section-head">
-        <h3>
-          <span className="section-num">Q{n}</span> {q.question}
-        </h3>
+    <article className={`tp-card iq ${rating ? `rated-${rating}` : ''}`}>
+      <div className="tp-card-head">
+        <div>
+          <div className="tp-card-no">Question {sectionNo(n - 1)}</div>
+          <h3>{q.question}</h3>
+        </div>
         <DifficultyBadge d={q.difficulty} />
       </div>
       {q.context && <div className="context">{q.context}</div>}
@@ -405,9 +517,11 @@ function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
         </ul>
       </Reveal>
       {!answer ? (
-        <button className="btn" type="button" onClick={() => setAnswer(true)}>
-          Reveal model answer
-        </button>
+        <div className="tp-ex-actions">
+          <button className="btn" type="button" onClick={() => setAnswer(true)}>
+            Reveal model answer
+          </button>
+        </div>
       ) : (
         <div className="model-answer">
           <div className="label">Model answer</div>
@@ -440,7 +554,7 @@ function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
         </div>
       )}
       <div className="rating">
-        <span className="small muted">How did you do?</span>
+        <span className="tp-rating-q">How did you do?</span>
         {(['nailed', 'partial', 'missed'] as Rating[]).map((r) => (
           <button key={r} type="button" className={`chip chip-${r} ${rating === r ? 'on' : ''}`} onClick={() => rate(r)}>
             {r === 'nailed' ? 'Nailed it' : r === 'partial' ? 'Partially' : 'Missed it'}
@@ -459,11 +573,14 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
   const total = q.steps.length + 2;
   const done = !!p.boe[q.id];
   return (
-    <article className="card boe">
-      <div className="section-head">
-        <h3>
-          <span className="section-num">E{n}</span> {q.question}
-        </h3>
+    <article className={`tp-card boe ${done ? 'done' : ''}`}>
+      <div className="tp-card-head">
+        <div>
+          <div className="tp-card-no">
+            Estimate {sectionNo(n - 1)} · stage {Math.min(stage, total)}/{total}
+          </div>
+          <h3>{q.question}</h3>
+        </div>
         {done && <Badge tone="good">Done</Badge>}
       </div>
       <textarea
@@ -503,7 +620,7 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
           <FollowUps items={q.followUps} />
         </div>
       )}
-      <div className="row gap-s wrap">
+      <div className="tp-ex-actions">
         {stage < total && (
           <button className="btn" type="button" onClick={() => setStage((s) => s + 1)}>
             {stage === 0 ? 'Reveal assumptions' : stage < total - 1 ? `Reveal step ${stage}/${q.steps.length}` : 'Reveal answer'}
@@ -514,7 +631,7 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
             Show everything
           </button>
         )}
-        <button className={`btn ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('boe', q.id, !done)}>
+        <button className={`btn tp-ex-solve ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('boe', q.id, !done)}>
           {done ? 'Mark not done' : 'Mark as done'}
         </button>
       </div>
@@ -524,7 +641,8 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
 
 function CheatSheet({ topic }: { topic: Topic }) {
   return (
-    <div className="card">
+    <div className="tp-card tp-cheat">
+      <div className="tp-card-no">Cheat sheet · {topic.cheatSheet.length} lines</div>
       <h2>Last-minute revision</h2>
       <ul className="cheat">
         {topic.cheatSheet.map((c) => (
@@ -546,7 +664,8 @@ function ExamIntro({ topic }: { topic: Topic }) {
   const wrong = currentlyWrong(p, topic);
   const weak = weakSections(topic, wrong);
   return (
-    <div className="card exam-intro">
+    <div className="tp-card exam-intro">
+      <div className="tp-card-no">Timed exam · {topic.test.length} questions · {minutes} min</div>
       <h2>Timed exam: {topic.title}</h2>
       <ul>
         <li>
@@ -567,7 +686,7 @@ function ExamIntro({ topic }: { topic: Topic }) {
         </li>
       </ul>
       {rec && (
-        <p>
+        <p className="tp-exam-rec">
           Attempts: {rec.attempts} · Best: <strong>{rec.best}%</strong> · Last: {rec.last}%{' '}
           {rec.passedAt && <Badge tone="good">Passed</Badge>}
         </p>
@@ -633,7 +752,7 @@ export function StudyLock({ topic, what }: { topic: Topic; what: string }) {
   const unread = topic.sections.map((s, i) => ({ s, i })).filter((x) => !read.has(x.i));
   const goRead = (i: number) => nav(`/topic/${topic.id}?tab=learn&s=${i}`);
   return (
-    <div className="card study-lock">
+    <div className="tp-card study-lock">
       <h2>
         <Lock size={20} aria-hidden className="inline-icon" /> Study first
       </h2>

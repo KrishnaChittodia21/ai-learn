@@ -1,75 +1,81 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+// Architecture challenges: the index (category chips, glowing rows; locked until every topic exam is passed)
+// and the worksheet for one challenge (timer ring, whiteboard, a stage rail revealed one step at a time).
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { COMPANIES, COMPANY_QUESTIONS, TOPICS, TOPIC_BY_ID } from '../content';
 import { setDraft, setFlag, setSettings, useProgress } from '../lib/progress';
 import { companyUnlocked } from '../lib/stats';
-import { Diagram, Markdown, ProgressBar, Reveal, formatClock } from '../components/ui';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { Diagram, Markdown, Reveal, formatClock } from '../components/ui';
+import { ArrowLeft, ArrowRight, Check, Lock, Pause, Play, RotateCcw } from 'lucide-react';
 import type { CompanyQuestion } from '../types';
 
 const FREQ_LABEL: Record<CompanyQuestion['frequency'], string> = { 'very-high': 'Very high', high: 'High', medium: 'Medium' };
 const pad = (n: number) => String(n).padStart(2, '0');
 const categoryName = (id: string) => COMPANIES.find((c) => c.id === id)?.name ?? id;
 
-/** The challenge index as a ruled table. Locked: rows are listed but cannot be opened yet. */
-function ChallengeTable({ qs, locked, done }: { qs: CompanyQuestion[]; locked: boolean; done: Record<string, true> }) {
+/** The challenge index as a list of glowing rows. Locked: rows are listed but cannot be opened yet. */
+function ChallengeList({ qs, locked, done }: { qs: CompanyQuestion[]; locked: boolean; done: Record<string, true> }) {
   return (
-    <table className="ch-table">
-      <caption className="sr-only">Architecture challenges{locked ? ' (locked)' : ''}</caption>
-      <thead>
-        <tr>
-          <th scope="col" className="c-num">
-            No.
-          </th>
-          <th scope="col">Challenge</th>
-          <th scope="col" className="c-cat">
-            Category
-          </th>
-          <th scope="col" className="c-level">
-            Level
-          </th>
-          <th scope="col" className="c-freq">
-            Asked
-          </th>
-          <th scope="col" className="c-state">
-            Status
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {qs.map((q) => {
-          const i = COMPANY_QUESTIONS.indexOf(q);
-          const isDone = !!done[q.id];
-          return (
-            <tr key={q.id} className={isDone ? 'done' : ''}>
-              <td className="c-num">{pad(i + 1)}</td>
-              <th scope="row" className="c-title">
-                {locked ? <span className="ch-title">{q.title}</span> : <Link to={`/challenges/${q.id}`} className="ch-title">{q.title}</Link>}
-                <span className="ch-row-meta">
-                  {categoryName(q.company)} · {q.level} · asked {FREQ_LABEL[q.frequency].toLowerCase()}
-                </span>
-              </th>
-              <td className="c-cat">{categoryName(q.company)}</td>
-              <td className="c-level">{q.level}</td>
-              <td className={`c-freq f-${q.frequency}`}>{FREQ_LABEL[q.frequency]}</td>
-              <td className="c-state">
-                {locked ? (
-                  <span className="ch-state locked">Locked</span>
-                ) : isDone ? (
-                  <span className="ch-state done">
-                    <span className="ch-tick" aria-hidden /> Done
-                  </span>
-                ) : (
-                  <span className="ch-state">
-                    <span className="ch-tick" aria-hidden /> Open
-                  </span>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <ol className={`ch-list ${locked ? 'locked' : ''}`} aria-label={`Architecture challenges${locked ? ' (locked)' : ''}`}>
+      {qs.map((q) => {
+        const i = COMPANY_QUESTIONS.indexOf(q);
+        const isDone = !!done[q.id];
+        const body = (
+          <>
+            <span className="ch-row-num">{pad(i + 1)}</span>
+            <span className="ch-row-main">
+              <span className="ch-title">{q.title}</span>
+              <span className="ch-row-meta">
+                <span>{categoryName(q.company)}</span>
+                <span aria-hidden>·</span>
+                <span>{q.level}</span>
+                <span aria-hidden>·</span>
+                <span className={`ch-freq f-${q.frequency}`}>asked {FREQ_LABEL[q.frequency].toLowerCase()}</span>
+              </span>
+            </span>
+            <span className={`ch-state ${locked ? 'locked' : isDone ? 'done' : 'open'}`}>
+              {locked ? (
+                <>
+                  <Lock size={12} aria-hidden /> Locked
+                </>
+              ) : isDone ? (
+                <>
+                  <Check size={13} strokeWidth={3} aria-hidden /> Done
+                </>
+              ) : (
+                <>
+                  Open <ArrowRight size={13} aria-hidden />
+                </>
+              )}
+            </span>
+          </>
+        );
+        return (
+          <li key={q.id} className={isDone ? 'done' : ''}>
+            {locked ? (
+              <div className="ch-row">{body}</div>
+            ) : (
+              <Link to={`/challenges/${q.id}`} className="ch-row">
+                {body}
+              </Link>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Head({ children, lead }: { children?: ReactNode; lead: ReactNode }) {
+  return (
+    <header className="ch-head">
+      <p className="ch-kicker">Final track · {COMPANY_QUESTIONS.length} challenges</p>
+      <h1>
+        <span className="gtext">Architecture challenges</span>
+      </h1>
+      <p className="lead">{lead}</p>
+      {children}
+    </header>
   );
 }
 
@@ -78,6 +84,7 @@ function Locked({ detail = false }: { detail?: boolean }) {
   const { remaining } = companyUnlocked(p, TOPICS);
   const done = TOPICS.length - remaining.length;
   const pct = Math.round((done / Math.max(1, TOPICS.length)) * 100);
+  const next = remaining[0];
   return (
     <div className="page challenges">
       {detail && (
@@ -85,39 +92,58 @@ function Locked({ detail = false }: { detail?: boolean }) {
           <ArrowLeft size={14} aria-hidden /> Architecture challenges
         </Link>
       )}
-      <header className="ch-head">
-        <p className="eyebrow">Final track</p>
-        <h1>Architecture challenges</h1>
-        <p className="lead">
-          {COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges in {COMPANIES.length} categories, each worked as a design review
-          against a mock-interview timer.
-        </p>
-      </header>
+      <Head
+        lead={
+          <>
+            {COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges in {COMPANIES.length} categories, each worked as a design review
+            against a mock-interview timer.
+          </>
+        }
+      />
 
-      <section className="ch-lock" aria-labelledby="ch-lock-title">
-        <h2 id="ch-lock-title" className="ch-lock-title">
-          <Lock size={16} aria-hidden /> Locked until every topic exam is passed
-        </h2>
-        <p className="ch-lock-why">
-          Each challenge draws on the whole course, so the track opens once you pass <strong>every</strong> topic exam at full length with at
-          least {p.settings.passMark}%. {remaining.length} to go.
-        </p>
-        <div className="ch-lock-meter">
-          <span className="ch-lock-count">
-            {done}
-            <span>/{TOPICS.length} exams passed</span>
-          </span>
-          <ProgressBar value={pct} tone="good" />
-          <span className="ch-lock-pct">{pct}%</span>
+      <section className="ch-lock glass" aria-labelledby="ch-lock-title">
+        <div className="ch-lock-orb" aria-hidden>
+          <Lock size={26} />
         </div>
-        <h3 className="ch-label">Remaining exams</h3>
+        <div className="ch-lock-text">
+          <h2 id="ch-lock-title">{detail ? 'This challenge is still locked' : 'Locked until every topic exam is passed'}</h2>
+          <p className="ch-lock-why">
+            Each challenge draws on the whole course, so the track opens once you pass <strong>every</strong> topic exam at full length with at
+            least {p.settings.passMark}%. {remaining.length === 1 ? 'One exam to go.' : `${remaining.length} exams to go.`}
+          </p>
+          <div className="ch-lock-meter">
+            <span className="ch-lock-count">
+              <span className="num">{done}</span>/{TOPICS.length} exams passed
+            </span>
+            <span className="ch-lock-bar" aria-hidden>
+              <span style={{ width: `${pct}%` }} />
+            </span>
+            <span className="ch-lock-pct num">{pct}%</span>
+          </div>
+          {next && (
+            <Link to={`/topic/${next.id}?tab=exam`} className="btn btn-primary">
+              Next exam: {next.title} <ArrowRight size={16} aria-hidden />
+            </Link>
+          )}
+        </div>
+      </section>
+
+      <section className="ch-remaining-wrap" aria-labelledby="ch-remaining-title">
+        <h2 id="ch-remaining-title" className="ch-label">
+          Remaining exams · {remaining.length}
+        </h2>
         <ul className="ch-remaining">
-          {remaining.map((t) => (
-            <li key={t.id}>
-              <Link to={`/topic/${t.id}?tab=exam`}>{t.title}</Link>
-              <span className="ch-best">{p.tests[t.id] ? `best ${p.tests[t.id].best}%` : 'not taken'}</span>
-            </li>
-          ))}
+          {remaining.map((t) => {
+            const rec = p.tests[t.id];
+            return (
+              <li key={t.id}>
+                <Link to={`/topic/${t.id}?tab=exam`}>
+                  <span className="ch-rem-title">{t.title}</span>
+                  <span className={`ch-best ${rec ? 'tried' : ''}`}>{rec ? `best ${rec.best}%` : 'not taken'}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </section>
 
@@ -126,7 +152,7 @@ function Locked({ detail = false }: { detail?: boolean }) {
           <h2 id="ch-preview-title">What unlocks</h2>
           <p className="muted small">{COMPANIES.map((c) => c.name).join(' · ')}</p>
         </div>
-        <ChallengeTable qs={COMPANY_QUESTIONS} locked done={p.company} />
+        <ChallengeList qs={COMPANY_QUESTIONS} locked done={p.company} />
       </section>
     </div>
   );
@@ -141,13 +167,8 @@ export function CompaniesPage() {
   const doneCount = COMPANY_QUESTIONS.filter((q) => p.company[q.id]).length;
   return (
     <div className="page challenges">
-      <header className="ch-head">
-        <p className="eyebrow">Final track</p>
-        <h1>Architecture challenges</h1>
-        <p className="lead">
-          Pick a category to see what it tests and how to approach it, then design the system against the clock.
-        </p>
-        <dl className="chapter-facts">
+      <Head lead="Pick a category to see what it tests and how to approach it, then design the system against the clock.">
+        <dl className="ch-facts">
           <div>
             <dt>Challenges</dt>
             <dd>{COMPANY_QUESTIONS.length}</dd>
@@ -159,15 +180,19 @@ export function CompaniesPage() {
           <div>
             <dt>Completed</dt>
             <dd>
-              {doneCount}/{COMPANY_QUESTIONS.length}
+              {doneCount}
+              <span>/{COMPANY_QUESTIONS.length}</span>
             </dd>
           </div>
           <div>
             <dt>Mock timer</dt>
-            <dd>{p.settings.mockMinutes} min</dd>
+            <dd>
+              {p.settings.mockMinutes}
+              <span> min</span>
+            </dd>
           </div>
         </dl>
-      </header>
+      </Head>
 
       <div className="ch-filter" role="group" aria-label="Filter by category">
         <button type="button" className={`chip ${filter === 'all' ? 'on' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
@@ -185,11 +210,11 @@ export function CompaniesPage() {
 
       {company && (
         <dl className="ch-brief" aria-label={`${company.name}: brief`}>
-          <div>
+          <div className="tint-ion">
             <dt>What it tests</dt>
             <dd>{company.focus}</dd>
           </div>
-          <div>
+          <div className="tint-pulsar">
             <dt>How to approach it</dt>
             <dd>{company.interviewStyle}</dd>
           </div>
@@ -197,30 +222,57 @@ export function CompaniesPage() {
       )}
 
       <section className="ch-index" aria-label="Challenges">
-        <ChallengeTable qs={qs} locked={false} done={p.company} />
+        <ChallengeList qs={qs} locked={false} done={p.company} />
       </section>
     </div>
   );
 }
 
-const STAGES = [
-  'Clarifying questions',
-  'Requirements',
-  'Estimation',
-  'High-level design',
-  'Deep dives',
-  'Trade-offs',
-  'Follow-ups',
-] as const;
+const STAGES = ['Clarifying questions', 'Requirements', 'Estimation', 'High-level design', 'Deep dives', 'Trade-offs', 'Follow-ups'] as const;
 
-/** A revealed stage of the worksheet: a ruled section with a numbered running head. */
+/** A revealed stage of the worksheet: a glass card with a numbered running head. */
 function Stage({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
-    <section className="ws-stage" aria-labelledby={`ws-stage-${n}`}>
+    <section className="ws-stage card" aria-labelledby={`ws-stage-${n}`}>
       <p className="ws-stage-num">Stage {pad(n)}</p>
       <h2 id={`ws-stage-${n}`}>{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** Time left as a ring that empties clockwise. */
+function TimerRing({ left, full, running }: { left: number; full: number; running: boolean }) {
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, left / Math.max(1, full)));
+  const urgent = left <= 300 && running;
+  return (
+    <div className={`ws-ring ${urgent ? 'urgent' : ''} ${running ? 'running' : ''}`}>
+      <svg viewBox="0 0 128 128" aria-hidden>
+        <defs>
+          <linearGradient id="ws-ring-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" style={{ stopColor: 'var(--act-1)' }} />
+            <stop offset="55%" style={{ stopColor: 'var(--act-2)' }} />
+            <stop offset="100%" style={{ stopColor: 'var(--act-3)' }} />
+          </linearGradient>
+        </defs>
+        <circle className="ws-ring-track" cx="64" cy="64" r={r} />
+        <circle
+          className="ws-ring-fill"
+          cx="64"
+          cy="64"
+          r={r}
+          style={{ strokeDasharray: c, strokeDashoffset: c * (1 - frac) } as CSSProperties}
+        />
+      </svg>
+      <div className="ws-ring-text">
+        <span className="ws-clock num" role="timer" aria-label="Time left">
+          {formatClock(left)}
+        </span>
+        <span className="ws-ring-lbl">{running ? (urgent ? 'final 5 min' : 'running') : left < full && left > 0 ? 'paused' : left <= 0 ? "time's up" : 'ready'}</span>
+      </div>
+    </div>
   );
 }
 
@@ -251,6 +303,9 @@ export function CompanyQuestionPage() {
           <ArrowLeft size={14} aria-hidden /> Architecture challenges
         </Link>
         <h1>Challenge not found</h1>
+        <p className="lead">
+          That challenge does not exist. <Link to="/challenges">See all challenges</Link>.
+        </p>
       </div>
     );
   const company = COMPANIES.find((c) => c.id === q.company);
@@ -267,74 +322,79 @@ export function CompanyQuestionPage() {
 
   return (
     <div className="page challenges worksheet">
-      <header className="chapter-head ws-head">
-        <p className="chapter-meta">
-          <Link to="/challenges">Architecture challenges</Link>
-          <span aria-hidden>·</span>
-          <span>{company?.name}</span>
-          <span aria-hidden>·</span>
-          <span>{q.level}</span>
-          <span aria-hidden>·</span>
-          <span>Asked: {FREQ_LABEL[q.frequency]}</span>
-          {done && <span className="ws-done-mark">Completed</span>}
+      <Link to="/challenges" className="ch-back">
+        <ArrowLeft size={14} aria-hidden /> Architecture challenges
+      </Link>
+      <header className="ws-head">
+        <p className="ws-meta">
+          <span className="badge badge-ion">{company?.name}</span>
+          <span className="badge">{q.level}</span>
+          <span className={`badge ${q.frequency === 'very-high' ? 'badge-medium' : ''}`}>Asked: {FREQ_LABEL[q.frequency]}</span>
+          {done && (
+            <span className="badge badge-good ws-done-mark">
+              <Check size={12} strokeWidth={3} aria-hidden /> Completed
+            </span>
+          )}
         </p>
         <h1>{q.title}</h1>
       </header>
 
-      <section className="ws-brief" aria-labelledby="ws-brief-label">
-        <h2 id="ws-brief-label" className="ch-label">
-          The brief
-        </h2>
-        <Markdown>{q.prompt}</Markdown>
-      </section>
+      <div className="ws-top">
+        <section className="ws-brief card" aria-labelledby="ws-brief-label">
+          <h2 id="ws-brief-label" className="ch-label">
+            The brief
+          </h2>
+          <Markdown>{q.prompt}</Markdown>
+        </section>
 
-      <section className="ws-timer" aria-label="Mock interview timer">
-        <div className="ws-timer-set">
-          <label htmlFor="ws-minutes" className="ch-label">
-            Mock interview
-          </label>
-          <span className="ws-minutes">
-            <input
-              id="ws-minutes"
-              type="number"
-              min={5}
-              max={120}
-              value={p.settings.mockMinutes}
-              disabled={running}
-              onChange={(e) => {
-                const m = Number(e.target.value) || 45;
-                setSettings({ mockMinutes: m });
-                setLeft(m * 60);
-              }}
-            />
-            <span>min</span>
-          </span>
-        </div>
-        <div className={`timer ws-clock ${left <= 300 && running ? 'urgent' : ''}`} role="timer" aria-label="Time left">
-          {formatClock(left)}
-        </div>
-        <div className="ws-timer-actions">
-          {!running ? (
-            <button className="btn btn-primary" type="button" onClick={startTimer}>
-              {left < full && left > 0 ? 'Resume' : 'Start'}
-            </button>
-          ) : (
-            <button className="btn" type="button" onClick={() => setRunning(false)}>
-              Pause
-            </button>
-          )}
-          <button
-            className="btn-ghost"
-            type="button"
-            onClick={() => {
-              setRunning(false);
-              setLeft(full);
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      </section>
+        <section className="ws-timer glass" aria-label="Mock interview timer">
+          <TimerRing left={left} full={full} running={running} />
+          <div className="ws-timer-side">
+            <div className="ws-timer-set">
+              <label htmlFor="ws-minutes" className="ch-label">
+                Mock interview
+              </label>
+              <span className="ws-minutes">
+                <input
+                  id="ws-minutes"
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={p.settings.mockMinutes}
+                  disabled={running}
+                  onChange={(e) => {
+                    const m = Number(e.target.value) || 45;
+                    setSettings({ mockMinutes: m });
+                    setLeft(m * 60);
+                  }}
+                />
+                <span>min</span>
+              </span>
+            </div>
+            <div className="ws-timer-actions">
+              {!running ? (
+                <button className="btn btn-primary btn-sm" type="button" onClick={startTimer}>
+                  <Play size={14} aria-hidden /> {left < full && left > 0 ? 'Resume' : 'Start'}
+                </button>
+              ) : (
+                <button className="btn btn-sm" type="button" onClick={() => setRunning(false)}>
+                  <Pause size={14} aria-hidden /> Pause
+                </button>
+              )}
+              <button
+                className="btn-ghost btn-sm"
+                type="button"
+                onClick={() => {
+                  setRunning(false);
+                  setLeft(full);
+                }}
+              >
+                <RotateCcw size={14} aria-hidden /> Reset
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <section className="ws-board" aria-labelledby="ws-board-label">
         <label id="ws-board-label" htmlFor="ws-draft" className="ch-label">
@@ -361,7 +421,7 @@ export function CompanyQuestionPage() {
                 aria-current={i === stage - 1 ? 'step' : undefined}
                 onClick={() => setStage(i + 1)}
               >
-                <span className="ws-stage-n">{i + 1}</span>
+                <span className="ws-stage-n">{i < stage ? <Check size={13} strokeWidth={3} aria-hidden /> : i + 1}</span>
                 <span className="ws-stage-label">{s}</span>
               </button>
             </li>
@@ -384,7 +444,7 @@ export function CompanyQuestionPage() {
       {stage >= 2 && (
         <Stage n={2} title="Requirements">
           <div className="ws-req">
-            <div>
+            <div className="tint-ion">
               <h3 className="ch-label">Functional</h3>
               <ul className="ws-list">
                 {q.functional.map((c) => (
@@ -392,7 +452,7 @@ export function CompanyQuestionPage() {
                 ))}
               </ul>
             </div>
-            <div>
+            <div className="tint-pulsar">
               <h3 className="ch-label">Non-functional</h3>
               <ul className="ws-list">
                 {q.nonFunctional.map((c) => (
@@ -405,33 +465,35 @@ export function CompanyQuestionPage() {
       )}
       {stage >= 3 && (
         <Stage n={3} title="Estimation">
-          <table className="ws-est">
-            <caption className="sr-only">Back-of-the-envelope estimation steps</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="c-num">
-                  Step
-                </th>
-                <th scope="col" className="c-qty">
-                  Quantity
-                </th>
-                <th scope="col">Working</th>
-              </tr>
-            </thead>
-            <tbody>
-              {q.estimation.map((s, i) => (
-                <tr key={i}>
-                  <td className="c-num">{pad(i + 1)}</td>
-                  <th scope="row" className="c-qty">
-                    {s.label}
+          <div className="ws-est-wrap">
+            <table className="ws-est">
+              <caption className="sr-only">Back-of-the-envelope estimation steps</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="c-num">
+                    Step
                   </th>
-                  <td className="c-calc">
-                    <code>{s.calc}</code>
-                  </td>
+                  <th scope="col" className="c-qty">
+                    Quantity
+                  </th>
+                  <th scope="col">Working</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {q.estimation.map((s, i) => (
+                  <tr key={i}>
+                    <td className="c-num">{pad(i + 1)}</td>
+                    <th scope="row" className="c-qty">
+                      {s.label}
+                    </th>
+                    <td className="c-calc">
+                      <code>{s.calc}</code>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Stage>
       )}
       {stage >= 4 && (
@@ -455,7 +517,7 @@ export function CompanyQuestionPage() {
       )}
       {stage >= 6 && (
         <Stage n={6} title="Trade-offs to state out loud">
-          <ul className="ws-list">
+          <ul className="ws-list ws-tradeoffs">
             {q.tradeoffs.map((c) => (
               <li key={c}>{c}</li>
             ))}
@@ -480,11 +542,17 @@ export function CompanyQuestionPage() {
       <div className="ws-actions">
         {stage < STAGES.length && (
           <button className="btn" type="button" onClick={() => setStage((s) => s + 1)}>
-            Reveal stage {stage + 1}: {STAGES[stage]}
+            Reveal stage {stage + 1}: {STAGES[stage]} <ArrowRight size={15} aria-hidden />
           </button>
         )}
         <button className={`btn ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('company', q.id, !done)}>
-          {done ? 'Mark not done' : 'Mark as completed'}
+          {done ? (
+            'Mark not done'
+          ) : (
+            <>
+              <Check size={15} strokeWidth={3} aria-hidden /> Mark as completed
+            </>
+          )}
         </button>
       </div>
 
@@ -499,7 +567,9 @@ export function CompanyQuestionPage() {
               .filter((t) => !!t)
               .map((t) => (
                 <li key={t!.id}>
-                  <Link to={`/topic/${t!.id}`}>{t!.title}</Link>
+                  <Link to={`/topic/${t!.id}`} className="chip">
+                    {t!.title}
+                  </Link>
                 </li>
               ))}
           </ul>

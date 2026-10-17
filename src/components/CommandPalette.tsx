@@ -24,11 +24,11 @@ interface Item {
 }
 
 const PAGES: Item[] = [
-  { id: 'page:home', label: 'Dashboard', href: '/', keywords: ['home', 'progress'] },
-  { id: 'page:contents', label: 'Contents', hint: 'everything in this course', href: '/contents', keywords: ['index', 'syllabus'] },
-  { id: 'page:weak', label: 'Weak Areas', href: '/weak-areas', keywords: ['mistakes', 'revise'] },
+  { id: 'page:home', label: 'Today', hint: 'your next step', href: '/', keywords: ['home', 'dashboard', 'progress'] },
+  { id: 'page:contents', label: 'Syllabus', hint: 'everything in this course', href: '/contents', keywords: ['index', 'contents', 'map'] },
+  { id: 'page:weak', label: 'Weak areas', href: '/weak-areas', keywords: ['mistakes', 'revise'] },
   { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', keywords: ['drill', 'mistakes'] },
-  { id: 'page:companies', label: 'Architecture Challenges', href: '/challenges', keywords: ['mock', 'interview'] },
+  { id: 'page:companies', label: 'Architecture challenges', href: '/challenges', keywords: ['mock', 'interview'] },
   { id: 'page:settings', label: 'Settings', href: '/settings', keywords: ['theme', 'pass mark', 'reset'] },
 ];
 
