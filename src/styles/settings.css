@@ -1,0 +1,196 @@
+/* ======================================================================
+   Settings: a ruled sheet. Groups open with a strong rule and a mono running
+   head; each row is label + explanation on the left, the control on the right.
+   ====================================================================== */
+.set-head {
+  padding-bottom: var(--s-4);
+}
+.set-head h1 {
+  margin-bottom: var(--s-3);
+}
+.set-head .lead {
+  margin: 0;
+}
+
+.set-group {
+  margin-top: var(--s-6);
+  border-top: 1px solid var(--rule-strong);
+}
+.set-group-title {
+  margin: 0;
+  padding: var(--s-3) 0 var(--s-1);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.set-group.danger .set-group-title {
+  color: var(--bad);
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  gap: var(--s-3) var(--s-6);
+  align-items: center;
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-label label,
+.set-label > span {
+  font-weight: 580;
+  color: var(--text);
+}
+.set-help {
+  margin: 2px 0 0;
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.set-control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* range + its value */
+.set-range {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+}
+.set-range input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.set-range output {
+  flex: none;
+  min-width: 4.5em;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* a plain checkbox, sized up */
+.set-switch {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* segmented control */
+.set-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.set-seg button {
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 0;
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--dur),
+    color var(--dur);
+}
+.set-seg button + button {
+  border-left: 1px solid var(--border);
+}
+.set-seg button:hover:not(.on) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.set-seg button.on {
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 560;
+}
+.set-seg button:focus-visible {
+  outline-offset: -3px;
+}
+
+/* signal colour swatches: squares with a label under them */
+.set-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+}
+.set-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--text-2);
+}
+.set-swatch .accent-dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  box-shadow: none;
+  transition: box-shadow var(--dur);
+}
+.set-swatch:hover .accent-dot {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3px var(--border);
+}
+.set-swatch.on .accent-dot {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--text);
+}
+.set-swatch-label {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.set-swatch.on .set-swatch-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.set-swatch:focus-visible {
+  outline-offset: 4px;
+}
+
+.set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+@media (max-width: 640px) {
+  .set-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .set-control {
+    justify-content: flex-start;
+  }
+  .set-actions {
+    justify-content: flex-start;
+  }
+  /* checkboxes stay on the label's line */
+  .set-row:has(> .set-control > .set-switch) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}

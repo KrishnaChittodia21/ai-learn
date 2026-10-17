@@ -1,0 +1,507 @@
+/* ======================================================================
+   Practice & weak areas: a diagnostic ledger. Accuracy as ruled tables, the focus list
+   as numbered ruled rows (topic · status · missed figure + thin bar · sections to revise),
+   a how-it-works note beside it. Also the mistakes-drill empty state and the compact
+   weak-areas block on Today. The running drill itself uses the exam paper (exam.css).
+   ====================================================================== */
+
+/* ---------- weak areas page ---------- */
+.diag-head {
+  max-width: 860px;
+  padding-bottom: var(--s-5);
+}
+.diag-head h1 {
+  margin-bottom: var(--s-3);
+}
+.diag-head .lead {
+  margin-bottom: var(--s-5);
+}
+.diag-head .row {
+  gap: var(--s-3);
+}
+
+/* accuracy tables */
+.diag-accuracy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-7);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule-strong);
+}
+.diag-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.diag-table caption {
+  text-align: left;
+  margin-bottom: var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.diag-table th,
+.diag-table td {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-align: left;
+  vertical-align: middle;
+}
+.diag-table tbody tr:first-child th,
+.diag-table tbody tr:first-child td {
+  border-top: 1px solid var(--border);
+}
+.diag-table th {
+  width: 42%;
+  white-space: nowrap;
+}
+.diag-table th strong {
+  font-weight: 640;
+}
+.diag-bar {
+  padding: 0 var(--s-3) !important;
+  background-image: linear-gradient(var(--surface-2), var(--surface-2));
+  background-size: calc(100% - 24px) 4px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.diag-bar span {
+  display: block;
+  height: 4px;
+  background: var(--text);
+}
+.diag-table tr.low .diag-bar span {
+  background: var(--bad);
+}
+.diag-num {
+  font-family: var(--mono);
+  font-size: var(--fs-xs) !important;
+  font-weight: 400 !important;
+  color: var(--text-2);
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.diag-pct {
+  width: 3.5em;
+  color: var(--text);
+}
+.diag-table tr.low .diag-pct {
+  color: var(--bad);
+}
+.diag-n {
+  width: 5em;
+  color: var(--muted);
+}
+.diag-note {
+  margin: var(--s-3) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+/* focus ledger + aside */
+.diag-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--s-7);
+  align-items: start;
+  margin-top: var(--s-7);
+}
+.diag-focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding-top: var(--s-4);
+  margin-bottom: var(--s-3);
+  border-top: 1px solid var(--rule-strong);
+}
+.diag-focus-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+.diag-count {
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.diag-ledger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.diag-row {
+  display: grid;
+  grid-template-columns: 2.4em minmax(0, 1fr) 150px;
+  column-gap: var(--s-4);
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.diag-idx {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  padding-top: 5px;
+}
+.diag-main {
+  min-width: 0;
+}
+.diag-topic {
+  margin: 0 0 4px;
+  font-size: var(--fs-lg);
+}
+.diag-topic a {
+  text-decoration: none;
+}
+.diag-topic a:hover {
+  text-decoration: underline;
+}
+.diag-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--s-3);
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.diag-status {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+}
+.diag-status.good {
+  color: var(--good);
+}
+.diag-status.bad {
+  color: var(--bad);
+}
+.diag-status.muted {
+  color: var(--text-2);
+}
+.diag-missed {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: var(--s-2);
+  text-align: right;
+}
+.diag-missed-num {
+  font-family: var(--serif);
+  font-size: 2.1rem;
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+  justify-self: end;
+  grid-column: 2;
+  grid-row: 1;
+}
+.diag-missed-label {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.diag-missed-bar {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  background: var(--surface-2);
+}
+.diag-missed-bar span {
+  display: block;
+  height: 100%;
+  margin-left: auto;
+  background: var(--bad);
+}
+.diag-sections {
+  grid-column: 2 / -1;
+  margin-top: var(--s-3);
+}
+.rev-count.warn {
+  color: var(--warn);
+}
+.diag-actions {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.diag-clear {
+  padding: var(--s-4) 0 var(--s-4) var(--s-4);
+  border-left: 3px solid var(--good);
+}
+.diag-clear-title {
+  margin: 0 0 var(--s-1);
+  font-family: var(--serif);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--good);
+}
+
+/* how it works */
+.diag-how {
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule-strong);
+}
+.diag-head + .diag-how {
+  max-width: 860px;
+  margin-top: var(--s-5);
+}
+.diag-how-title {
+  margin: 0 0 var(--s-3);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.diag-how ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.diag-how li {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.diag-how-num {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  padding-top: 3px;
+}
+.diag-how p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.diag-how strong {
+  display: block;
+  font-family: var(--serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---------- mistakes drill: empty state ---------- */
+.drill-empty h1 {
+  margin-bottom: var(--s-3);
+}
+.drill-explain {
+  margin: var(--s-6) 0 var(--s-5);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule-strong);
+}
+.drill-explain-label {
+  margin: 0 0 var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.drill-explain ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.drill-explain li {
+  display: grid;
+  grid-template-columns: 2.4em minmax(0, 1fr);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.drill-explain li span {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  padding-top: 2px;
+}
+.drill-actions {
+  gap: var(--s-3);
+}
+
+/* ---------- Today: compact weak-areas block ---------- */
+.reattempt .section-rule-head {
+  align-items: center;
+}
+.reattempt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.reattempt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule-strong);
+}
+.reattempt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 6.5em auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reattempt-topic {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.reattempt-topic > a {
+  font-weight: 560;
+  text-decoration: none;
+}
+.reattempt-topic > a:hover {
+  text-decoration: underline;
+}
+.reattempt-meta {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reattempt-meta .good {
+  color: var(--good);
+}
+.reattempt-meta .bad {
+  color: var(--bad);
+}
+.reattempt-bar {
+  height: 4px;
+  background: var(--surface-2);
+}
+.reattempt-bar span {
+  display: block;
+  height: 100%;
+  background: var(--text);
+}
+.reattempt-num {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  text-align: right;
+  white-space: nowrap;
+}
+.reattempt-links {
+  display: flex;
+  gap: var(--s-3);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  justify-content: flex-end;
+}
+.reattempt-note {
+  margin: var(--s-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  max-width: 80ch;
+}
+.reattempt-clear p {
+  margin: var(--s-3) 0 0;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule-strong);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.reattempt-ok {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  color: var(--good);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1020px) {
+  .diag-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-6);
+  }
+  .reattempt-row {
+    grid-template-columns: minmax(0, 1fr) 100px 6em;
+  }
+  .reattempt-links {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-top: -4px;
+  }
+}
+@media (max-width: 760px) {
+  .diag-accuracy {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-5);
+  }
+}
+@media (max-width: 560px) {
+  .diag-row {
+    grid-template-columns: 2em minmax(0, 1fr) auto;
+    column-gap: var(--s-3);
+  }
+  .diag-missed {
+    min-width: 64px;
+  }
+  .diag-missed-num {
+    font-size: 1.75rem;
+  }
+  .diag-sections,
+  .diag-actions {
+    grid-column: 1 / -1;
+  }
+  .diag-table th {
+    width: auto;
+    white-space: normal;
+  }
+  .diag-n {
+    display: none;
+  }
+  .diag-bar {
+    width: 38%;
+  }
+  .reattempt .section-rule-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .reattempt-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px var(--s-3);
+  }
+  .reattempt-bar {
+    display: none;
+  }
+  .reattempt-meta {
+    white-space: normal;
+  }
+}

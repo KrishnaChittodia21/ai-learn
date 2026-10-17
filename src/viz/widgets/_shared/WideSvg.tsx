@@ -13,6 +13,7 @@ export function WideSvg({
 }) {
   return (
     <div
+      className="viz-wide"
       style={{ overflowX: "auto", overscrollBehaviorX: "contain" }}
       tabIndex={0}
       role="group"

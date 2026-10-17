@@ -1,53 +1,29 @@
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  BookOpen,
-  Building,
-  Calculator,
-  CodeXml,
-  Compass,
-  Dumbbell,
-  GraduationCap,
-  Hammer,
-  ListTree,
-  MessagesSquare,
-  PanelLeft,
-  Save,
-  Search,
-  Target,
-  X,
-} from 'lucide-react';
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { COMPANY_QUESTIONS, PHASES, TOPICS } from '../content';
+import { COMPANY_QUESTIONS, LEVELS, LEVEL_OF_TOPIC, TOPICS } from '../content';
 import { useProgress } from '../lib/progress';
 import { nextStep } from '../lib/nextStep';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { closeTour } from '../lib/guide';
 import { saveUiPrefs } from '../lib/uiPrefs';
 
-const LOOP = [
-  { icon: BookOpen, label: 'Learn', why: 'Short sections with diagrams and interactive animations. Tick "Read" as you go.' },
-  { icon: CodeXml, label: 'Code Lab', why: 'Fix naive code the way a senior engineer would, then compare with the reference.' },
-  { icon: MessagesSquare, label: 'Interview Qs', why: 'Answer out loud first, then check the model answer and the follow-ups.' },
-  { icon: Calculator, label: 'Estimation', why: 'Estimation drills, revealed one step at a time.' },
-  { icon: GraduationCap, label: 'Exam', why: 'A timed scenario exam. Passing it marks the topic done.' },
-  { icon: Hammer, label: 'Capstone', why: 'Some topics have a real project judged by tests. Pass every exam to unlock the architecture challenges.' },
-];
+const NUMERALS = ['I', 'II', 'III', 'IV'];
+const pad = (n: number) => String(n).padStart(2, '0');
 
-const PLACES = [
-  { icon: PanelLeft, label: 'Sidebar', why: 'Every phase and topic, with a coloured dot for your status.' },
-  { icon: ListTree, label: 'Contents', why: 'One page listing every topic, section, animation and practice page, with search.' },
-  { icon: Search, label: 'Search: ⌘K / Ctrl+K', why: 'Press it anywhere to jump to any topic, section or architecture challenge by typing.' },
-  { icon: Target, label: 'Weak Areas', why: 'The sections behind the questions you miss, and drills to fix them.' },
-  { icon: Building, label: 'Architecture Challenges', why: `${COMPANY_QUESTIONS.length} real architecture challenges with mock-interview timers.` },
-];
+interface Step {
+  /** short name for the step index */
+  short: string;
+  title: string;
+  body: ReactNode;
+}
 
-/** First-visit welcome tour (also opened from the Guide button or the "?" key). */
+/** First-visit guide, "How this manual works" (also opened from the Guide button or the "?" key). */
 export default function WelcomeTour() {
   const p = useProgress();
   const nav = useNavigate();
+  const reduce = useReducedMotion();
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const ref = useRef<HTMLDivElement>(null);
@@ -57,7 +33,7 @@ export default function WelcomeTour() {
     closeTour();
   }, []);
   useFocusTrap(ref, true, close);
-  const steps = STEPS(next.title);
+  const steps = STEPS();
   const last = steps.length - 1;
   const go = (i: number) => {
     setDir(i > step ? 1 : -1);
@@ -73,193 +49,242 @@ export default function WelcomeTour() {
     if (e.key === 'ArrowRight') go(step + 1);
     if (e.key === 'ArrowLeft') go(step - 1);
   };
+  const shift = reduce ? 0 : 14;
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+    <motion.div
+      className="modal-backdrop tour-backdrop"
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: reduce ? 0 : 0.16 }}
+    >
       <motion.div
         ref={ref}
         className="modal tour"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tour-title"
+        aria-describedby="tour-kicker"
         tabIndex={-1}
         onKeyDown={onKey}
-        initial={{ opacity: 0, y: 16, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
+        initial={{ opacity: 0, y: reduce ? 0 : 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: reduce ? 0 : 6 }}
+        transition={{ duration: reduce ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="tour-top">
-          <span className="eyebrow">
-            <Compass size={14} aria-hidden /> Guide · step {step + 1} of {steps.length}
-          </span>
-          <button type="button" className="btn-ghost btn-icon" aria-label="Close guide" onClick={close}>
+        <header className="tour-top">
+          <p className="tour-kicker" id="tour-kicker">
+            Guide · How this manual works
+          </p>
+          <button type="button" className="btn-ghost btn-icon tour-close" aria-label="Close guide" onClick={close}>
             <X size={18} aria-hidden />
           </button>
-        </div>
+        </header>
+
+        <ol className="tour-index" aria-label="Guide steps">
+          {steps.map((s, i) => (
+            <li key={s.short}>
+              <button
+                type="button"
+                className={`tour-index-btn ${i === step ? 'on' : ''} ${i < step ? 'done' : ''}`}
+                aria-current={i === step ? 'step' : undefined}
+                onClick={() => go(i)}
+              >
+                <span className="tour-index-num">{pad(i + 1)}</span>
+                <span className="tour-index-label">{s.short}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+
         <div className="tour-stage">
           <AnimatePresence mode="wait" custom={dir} initial={false}>
             <motion.div
               key={step}
               custom={dir}
-              initial={{ opacity: 0, x: dir * 24 }}
+              initial={{ opacity: 0, x: dir * shift }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: dir * -24 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
+              exit={{ opacity: 0, x: dir * -shift }}
+              transition={{ duration: reduce ? 0 : 0.16, ease: 'easeOut' }}
             >
-              <h2 id="tour-title">{steps[step].title}</h2>
+              <h2 id="tour-title" className="tour-title">
+                {steps[step].title}
+              </h2>
               {steps[step].body}
               {step === last && (
                 <div className="tour-cta">
+                  <p className="tour-cta-kicker">Your next step</p>
                   <button type="button" className="btn btn-primary btn-lg" data-autofocus onClick={() => finish(next.href)}>
-                    Start here: {next.title} <ArrowRight size={16} aria-hidden />
+                    <span className="tour-cta-text">{next.title}</span> <ArrowRight size={16} aria-hidden />
                   </button>
-                  <button type="button" className="btn" onClick={() => finish('/contents')}>
-                    <ListTree size={16} aria-hidden /> Show me the Contents
+                  <button type="button" className="btn btn-lg" onClick={() => finish('/contents')}>
+                    Open the syllabus
                   </button>
                 </div>
               )}
             </motion.div>
           </AnimatePresence>
         </div>
-        <div className="tour-foot">
-          <button type="button" className="btn-ghost" onClick={close}>
-            Skip
-          </button>
-          <div className="tour-dots" role="group" aria-label="Guide steps">
-            {steps.map((s, i) => (
-              <button
-                key={s.title}
-                type="button"
-                className={`tour-dot ${i === step ? 'on' : ''}`}
-                aria-label={`Step ${i + 1}: ${s.title}`}
-                aria-current={i === step ? 'step' : undefined}
-                onClick={() => go(i)}
-              />
-            ))}
-          </div>
+
+        <footer className="tour-foot">
+          {step < last ? (
+            <button type="button" className="btn-ghost btn-sm" onClick={close}>
+              Skip the guide
+            </button>
+          ) : (
+            <span className="tour-foot-note">
+              Reopen any time with <kbd>?</kbd>
+            </span>
+          )}
           <div className="row gap-s">
-            <button type="button" className="btn" onClick={() => go(step - 1)} disabled={step === 0} aria-label="Previous step">
-              <ArrowLeft size={16} aria-hidden /> Back
+            <button type="button" className="btn btn-sm" onClick={() => go(step - 1)} disabled={step === 0} aria-label="Previous step">
+              <ArrowLeft size={15} aria-hidden /> Back
             </button>
             {step < last ? (
-              <button type="button" className="btn btn-primary" onClick={() => go(step + 1)} data-autofocus={step === 0 ? true : undefined}>
-                Next <ArrowRight size={16} aria-hidden />
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => go(step + 1)} data-autofocus={step === 0 ? true : undefined}>
+                Next <ArrowRight size={15} aria-hidden />
               </button>
             ) : (
-              <button type="button" className="btn btn-primary" onClick={close}>
+              <button type="button" className="btn btn-sm" onClick={close}>
                 Done
               </button>
             )}
           </div>
-        </div>
+        </footer>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }
 
-function STEPS(nextTitle: string) {
+function STEPS(): Step[] {
   return [
     {
-      title: 'Welcome to GenAI Learn',
+      short: 'The course',
+      title: 'A field manual for Generative AI',
       body: (
         <>
-          <p className="lead">
-            Become confident in Generative AI: {TOPICS.length} topics from Beginner to Advanced. Every section is short and
-            practice-first, with a worked example, pros and cons (each with its fix), a coding exercise and a quick check. Pass
-            each topic&apos;s exam to mark it covered, and finish with AI architecture challenges.
+          <p className="tour-lead">
+            {TOPICS.length} topics, read in order from first principles to production systems. Each one is short, practical and
+            ends in a timed exam. Pass the exam and the topic is marked <em>covered</em>.
           </p>
-          <ol className="tour-path" aria-label="Phases">
-            {PHASES.map((ph, i) => (
-              <motion.li
-                key={ph.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.03 * i, duration: 0.2 }}
-              >
-                <span className="tour-path-num">{ph.number}</span>
-                <span>{ph.title}</span>
-              </motion.li>
-            ))}
-            <motion.li className="goal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.03 * PHASES.length }}>
-              <span className="tour-path-num">
-                <Building size={12} aria-hidden />
-              </span>
-              <span>Architecture Challenges</span>
-            </motion.li>
-          </ol>
+          <table className="tour-levels">
+            <caption className="sr-only">Topics per level</caption>
+            <tbody>
+              {LEVELS.map((lv, i) => (
+                <tr key={lv.id}>
+                  <th scope="row">
+                    <span className="tour-numeral">{NUMERALS[i]}</span> {lv.title}
+                  </th>
+                  <td>{TOPICS.filter((t) => LEVEL_OF_TOPIC.get(t.id) === lv.id).length} topics</td>
+                </tr>
+              ))}
+              <tr>
+                <th scope="row">
+                  <span className="tour-numeral">+</span> Architecture challenges
+                </th>
+                <td>{COMPANY_QUESTIONS.length} cases</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="tour-note">The challenges open once every topic exam is passed.</p>
         </>
       ),
     },
     {
-      title: 'The study loop for every topic',
+      short: 'Finding your way',
+      title: 'Five places, one search',
       body: (
         <>
-          <p>Each topic page has a study path at the top. Follow it left to right:</p>
-          <ol className="tour-loop">
-            {LOOP.map(({ icon: Icon, label, why }, i) => (
-              <motion.li
-                key={label}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.08 * i, duration: 0.22, ease: 'easeOut' }}
-              >
-                <span className="tour-loop-icon">
-                  <Icon size={18} aria-hidden />
-                </span>
-                <span>
-                  <strong>{label}</strong>
-                  <span className="muted small"> · {why}</span>
-                </span>
-              </motion.li>
-            ))}
-          </ol>
+          <p className="tour-lead">The masthead at the top of every page holds everything.</p>
+          <dl className="tour-defs">
+            <div>
+              <dt>Today</dt>
+              <dd>Your next step, where you left off, and your study record.</dd>
+            </div>
+            <div>
+              <dt>Syllabus</dt>
+              <dd>Every level, phase and topic, with your status beside each.</dd>
+            </div>
+            <div>
+              <dt>Practice</dt>
+              <dd>Drill the exam questions you got wrong.</dd>
+            </div>
+            <div>
+              <dt>Weak areas</dt>
+              <dd>The sections behind your mistakes, and how to fix them.</dd>
+            </div>
+            <div>
+              <dt>Challenges</dt>
+              <dd>Real architecture interviews with a mock-interview timer.</dd>
+            </div>
+          </dl>
+          <ul className="tour-keys" aria-label="Keyboard shortcuts">
+            <li>
+              <span>
+                <kbd>⌘K</kbd> or <kbd>/</kbd>
+              </span>
+              search any topic, section or challenge
+            </li>
+            <li>
+              <span>
+                <kbd>?</kbd>
+              </span>
+              open this guide again
+            </li>
+          </ul>
         </>
       ),
     },
     {
-      title: 'Where things are',
+      short: 'Inside a topic',
+      title: 'Work through a topic left to right',
       body: (
-        <ul className="tour-places">
-          {PLACES.map(({ icon: Icon, label, why }) => (
-            <li key={label}>
-              <Icon size={18} aria-hidden />
-              <span>
-                <strong>{label}</strong> <span className="muted">· {why}</span>
-              </span>
+        <>
+          <ol className="tour-flow" aria-label="Topic tabs, in order">
+            <li>Read</li>
+            <li>Code Lab</li>
+            <li>Interview Qs</li>
+            <li>Estimation</li>
+            <li>Exam</li>
+          </ol>
+          <p className="tour-note">
+            A <strong>Cheat sheet</strong> tab sits alongside for quick revision.
+          </p>
+          <p className="tour-lead">Every section in Read follows the same pattern:</p>
+          <ol className="tour-pattern">
+            <li>
+              <strong>Worked example.</strong> The idea applied to a real case.
             </li>
-          ))}
-          <li>
-            <Dumbbell size={18} aria-hidden />
-            <span>
-              <strong>Your next step</strong> <span className="muted">· the dashboard always shows one obvious thing to do next.</span>
-            </span>
-          </li>
-        </ul>
+            <li>
+              <strong>Pros and cons.</strong> Each weakness comes with its fix.
+            </li>
+            <li>
+              <strong>Try it.</strong> A short coding exercise.
+            </li>
+            <li>
+              <strong>Quick check.</strong> One question to confirm it stuck.
+            </li>
+          </ol>
+          <p className="tour-note">Tick a section as read when you finish it. Some sections have an interactive figure you can step through.</p>
+        </>
       ),
     },
     {
-      title: 'Your progress is saved automatically',
+      short: 'Start',
+      title: 'Your record stays in this browser',
       body: (
-        <div className="tour-save">
-          <Save size={36} aria-hidden className="tour-save-icon" />
-          <ul>
-            <li>Everything you read, rate, draft and score is saved in this browser as you go. There is no account.</li>
+        <>
+          <ul className="tour-plain">
+            <li>Everything you read, rate, draft and score is saved here as you go. There is no account.</li>
             <li>
-              It resets only if you press <strong>Reset progress</strong> in Settings, clear this site&apos;s data, or use another browser
-              or a private window.
+              It is cleared only by <strong>Reset progress</strong> in Settings, clearing this site&apos;s data, or using another browser or
+              a private window.
             </li>
             <li>The app reopens where you left off.</li>
           </ul>
-        </div>
-      ),
-    },
-    {
-      title: 'Ready? Start here',
-      body: (
-        <p className="lead">
-          Your next step is <strong>{nextTitle}</strong>. You can reopen this guide any time with the <Compass size={14} aria-hidden />{' '}
-          Guide button or the <kbd>?</kbd> key.
-        </p>
+        </>
       ),
     },
   ];

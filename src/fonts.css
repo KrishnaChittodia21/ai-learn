@@ -8,16 +8,23 @@
   src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
 }
 @font-face {
-  font-family: 'Plus Jakarta Sans Variable';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 200 800;
-  src: url('@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2') format('woff2-variations');
-}
-@font-face {
   font-family: 'JetBrains Mono Variable';
   font-style: normal;
   font-display: swap;
   font-weight: 100 800;
   src: url('@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Newsreader Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/newsreader/files/newsreader-latin-opsz-normal.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'Newsreader Variable';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/newsreader/files/newsreader-latin-opsz-italic.woff2') format('woff2-variations');
 }

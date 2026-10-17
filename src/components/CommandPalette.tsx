@@ -1,24 +1,8 @@
 // ⌘K command palette (lazy-loaded): jump to any page, topic, section, architecture challenge or capstone.
-import { useCallback, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Command, defaultFilter } from 'cmdk';
-import { motion } from 'motion/react';
-import {
-  ArrowRight,
-  BookOpen,
-  Building,
-  Clock,
-  Compass,
-  Dumbbell,
-  FileText,
-  Hammer,
-  LayoutDashboard,
-  ListTree,
-  Moon,
-  Search,
-  Settings,
-  SunMoon,
-  Target,
-} from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { COMPANIES, COMPANY_QUESTIONS, PHASES, TOPICS, TOPIC_BY_ID } from '../content';
 import { PROJECTS } from '../content/projects';
@@ -31,24 +15,21 @@ import { useFocusTrap } from '../lib/useFocusTrap';
 
 const PHASE_TITLE = new Map(PHASES.map((ph) => [ph.id as string, `Phase ${ph.number}`]));
 
-type Icon = ComponentType<{ size?: number; 'aria-hidden'?: boolean }>;
-
 interface Item {
   id: string;
   label: string;
   hint?: string;
   href: string;
   keywords?: string[];
-  icon: Icon;
 }
 
 const PAGES: Item[] = [
-  { id: 'page:home', label: 'Dashboard', href: '/', icon: LayoutDashboard, keywords: ['home', 'progress'] },
-  { id: 'page:contents', label: 'Contents', hint: 'everything in this course', href: '/contents', icon: ListTree, keywords: ['index', 'syllabus'] },
-  { id: 'page:weak', label: 'Weak Areas', href: '/weak-areas', icon: Target, keywords: ['mistakes', 'revise'] },
-  { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', icon: Dumbbell, keywords: ['drill', 'mistakes'] },
-  { id: 'page:companies', label: 'Architecture Challenges', href: '/challenges', icon: Building, keywords: ['mock', 'interview'] },
-  { id: 'page:settings', label: 'Settings', href: '/settings', icon: Settings, keywords: ['theme', 'pass mark', 'reset'] },
+  { id: 'page:home', label: 'Dashboard', href: '/', keywords: ['home', 'progress'] },
+  { id: 'page:contents', label: 'Contents', hint: 'everything in this course', href: '/contents', keywords: ['index', 'syllabus'] },
+  { id: 'page:weak', label: 'Weak Areas', href: '/weak-areas', keywords: ['mistakes', 'revise'] },
+  { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', keywords: ['drill', 'mistakes'] },
+  { id: 'page:companies', label: 'Architecture Challenges', href: '/challenges', keywords: ['mock', 'interview'] },
+  { id: 'page:settings', label: 'Settings', href: '/settings', keywords: ['theme', 'pass mark', 'reset'] },
 ];
 
 /**
@@ -74,6 +55,7 @@ export default function CommandPalette() {
   const prefs = useUiPrefs();
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
   useFocusTrap(ref, true, closePalette);
 
   const topics = useMemo<Item[]>(
@@ -83,7 +65,6 @@ export default function CommandPalette() {
         label: t.title,
         hint: `${PHASE_TITLE.get(t.phase) ?? ''}`,
         href: `/topic/${t.id}`,
-        icon: BookOpen,
         keywords: t.tags,
       })),
     [],
@@ -95,7 +76,6 @@ export default function CommandPalette() {
           id: `section:${t.id}:${i}`,
           label: `${t.title} › ${s.heading}`,
           href: `/topic/${t.id}?tab=learn&s=${i}`,
-          icon: FileText,
         })),
       ),
     [],
@@ -108,7 +88,6 @@ export default function CommandPalette() {
         label: q.title,
         hint: `${COMPANIES.find((c) => c.id === q.company)?.name ?? q.company}${unlocked ? '' : ' · locked'}`,
         href: `/challenges/${q.id}`,
-        icon: Building,
       })),
     [unlocked],
   );
@@ -116,7 +95,7 @@ export default function CommandPalette() {
     () =>
       PROJECTS.flatMap((pr) => {
         const t = pr.topics.map((id) => TOPIC_BY_ID.get(id)).find(Boolean);
-        return t ? [{ id: `capstone:${pr.id}`, label: pr.title, hint: `capstone · ${t.title}`, href: `/topic/${t.id}?tab=capstone`, icon: Hammer }] : [];
+        return t ? [{ id: `capstone:${pr.id}`, label: pr.title, hint: `capstone · ${t.title}`, href: `/topic/${t.id}?tab=capstone` }] : [];
       }),
     [],
   );
@@ -136,16 +115,12 @@ export default function CommandPalette() {
     p.settings.theme === 'dark' || (p.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const q = search.trim();
 
-  const row = (item: Item, prefix = '') => {
-    const Icon = item.icon;
-    return (
-      <Command.Item key={prefix + item.id} value={prefix + item.id} keywords={[item.label, item.hint ?? '', ...(item.keywords ?? [])]} onSelect={() => go(item)}>
-        <Icon size={16} aria-hidden />
-        <span className="cmdk-label">{item.label}</span>
-        {item.hint && <span className="cmdk-hint">{item.hint}</span>}
-      </Command.Item>
-    );
-  };
+  const row = (item: Item, prefix = '') => (
+    <Command.Item key={prefix + item.id} value={prefix + item.id} keywords={[item.label, item.hint ?? '', ...(item.keywords ?? [])]} onSelect={() => go(item)}>
+      <span className="cmdk-label">{item.label}</span>
+      {item.hint && <span className="cmdk-hint">{item.hint}</span>}
+    </Command.Item>
+  );
 
   return (
     <div className="modal-backdrop cmdk-backdrop" onMouseDown={(e) => e.target === e.currentTarget && closePalette()}>
@@ -155,14 +130,14 @@ export default function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        initial={{ opacity: 0, y: -8, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.15, ease: 'easeOut' }}
+        initial={{ opacity: 0, y: reduce ? 0 : -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduce ? 0 : 0.14, ease: 'easeOut' }}
       >
         <Command label="Command palette" loop filter={rank}>
           <div className="cmdk-input-row">
-            <Search size={18} aria-hidden />
-            <Command.Input value={search} onValueChange={setSearch} placeholder="Search topics, sections, architecture challenges…" data-autofocus />
+            <Search size={17} aria-hidden className="cmdk-glyph" />
+            <Command.Input value={search} onValueChange={setSearch} placeholder="Search topics, sections, challenges…" data-autofocus />
             <button type="button" className="cmdk-close" onClick={closePalette} aria-label="Close search">
               <kbd>Esc</kbd>
             </button>
@@ -171,7 +146,7 @@ export default function CommandPalette() {
             <Command.Empty>No results. Try a shorter word.</Command.Empty>
             {!q && recent.length > 0 && (
               <Command.Group heading="Recent">
-                {recent.map((r) => row({ ...r, icon: Clock }, 'recent:'))}
+                {recent.map((r) => row({ ...r }, 'recent:'))}
               </Command.Group>
             )}
             <Command.Group heading="Actions">
@@ -183,8 +158,8 @@ export default function CommandPalette() {
                   go({ id: 'action:next', label: 'Go to my next step', href: s.href });
                 }}
               >
-                <ArrowRight size={16} aria-hidden />
                 <span className="cmdk-label">Go to my next step</span>
+                <span className="cmdk-hint">action</span>
               </Command.Item>
               <Command.Item
                 value="action:guide"
@@ -194,8 +169,10 @@ export default function CommandPalette() {
                   openTour();
                 }}
               >
-                <Compass size={16} aria-hidden />
                 <span className="cmdk-label">Open the guide</span>
+                <span className="cmdk-hint">
+                  <kbd>?</kbd>
+                </span>
               </Command.Item>
               <Command.Item
                 value="action:theme"
@@ -205,7 +182,6 @@ export default function CommandPalette() {
                   closePalette();
                 }}
               >
-                {isDark ? <SunMoon size={16} aria-hidden /> : <Moon size={16} aria-hidden />}
                 <span className="cmdk-label">Switch to {isDark ? 'light' : 'dark'} mode</span>
               </Command.Item>
             </Command.Group>
@@ -215,14 +191,18 @@ export default function CommandPalette() {
             {company.length > 0 && <Command.Group heading="Architecture challenges">{company.map((i) => row(i))}</Command.Group>}
             {capstones.length > 0 && <Command.Group heading="Capstone projects">{capstones.map((i) => row(i))}</Command.Group>}
           </Command.List>
-          <div className="cmdk-foot small muted">
+          <div className="cmdk-foot">
             <span>
-              <kbd>↑</kbd> <kbd>↓</kbd> move
+              <kbd>↑</kbd>
+              <kbd>↓</kbd> move
             </span>
             <span>
-              <kbd>Enter</kbd> open
+              <kbd>↵</kbd> open
             </span>
-            <span>Sections appear once you type 2+ letters</span>
+            <span>
+              <kbd>Esc</kbd> close
+            </span>
+            <span className="cmdk-foot-note">{q.length >= 2 ? 'Searching sections too' : 'Type 2+ letters to search sections'}</span>
           </div>
         </Command>
       </motion.div>

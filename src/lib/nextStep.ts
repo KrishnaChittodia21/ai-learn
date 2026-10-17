@@ -34,7 +34,7 @@ export function topicSteps(p: Progress, t: Topic, capstoneCount = 0): TopicStep[
   const boe = t.envelopeQuestions.filter((q) => p.boe[q.id]).length;
   const rec = p.tests[t.id];
   const steps: TopicStep[] = [
-    { id: 'learn', label: 'Learn', done: readCount, total: t.sections.length, complete: false, progress: `${readCount}/${t.sections.length} read` },
+    { id: 'learn', label: 'Read', done: readCount, total: t.sections.length, complete: false, progress: `${readCount}/${t.sections.length} read` },
     { id: 'code', label: codeLabLabel(t), done: cc, total: t.codeChallenges.length, complete: false, progress: `${cc}/${t.codeChallenges.length} done` },
     { id: 'interview', label: 'Interview Qs', done: iq, total: t.interviewQuestions.length, complete: false, progress: `${iq}/${t.interviewQuestions.length} rated` },
     { id: 'envelope', label: 'Estimation', done: boe, total: t.envelopeQuestions.length, complete: false, progress: `${boe}/${t.envelopeQuestions.length} done` },

@@ -1,52 +1,133 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { COMPANIES, COMPANY_QUESTIONS, TOPICS, TOPIC_BY_ID } from '../content';
 import { setDraft, setFlag, setSettings, useProgress } from '../lib/progress';
 import { companyUnlocked } from '../lib/stats';
-import { Badge, Diagram, Markdown, ProgressBar, Reveal, formatClock } from '../components/ui';
-import { Lock } from 'lucide-react';
+import { Diagram, Markdown, ProgressBar, Reveal, formatClock } from '../components/ui';
+import { ArrowLeft, Lock } from 'lucide-react';
+import type { CompanyQuestion } from '../types';
 
-function Locked() {
+const FREQ_LABEL: Record<CompanyQuestion['frequency'], string> = { 'very-high': 'Very high', high: 'High', medium: 'Medium' };
+const pad = (n: number) => String(n).padStart(2, '0');
+const categoryName = (id: string) => COMPANIES.find((c) => c.id === id)?.name ?? id;
+
+/** The challenge index as a ruled table. Locked: rows are listed but cannot be opened yet. */
+function ChallengeTable({ qs, locked, done }: { qs: CompanyQuestion[]; locked: boolean; done: Record<string, true> }) {
+  return (
+    <table className="ch-table">
+      <caption className="sr-only">Architecture challenges{locked ? ' (locked)' : ''}</caption>
+      <thead>
+        <tr>
+          <th scope="col" className="c-num">
+            No.
+          </th>
+          <th scope="col">Challenge</th>
+          <th scope="col" className="c-cat">
+            Category
+          </th>
+          <th scope="col" className="c-level">
+            Level
+          </th>
+          <th scope="col" className="c-freq">
+            Asked
+          </th>
+          <th scope="col" className="c-state">
+            Status
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {qs.map((q) => {
+          const i = COMPANY_QUESTIONS.indexOf(q);
+          const isDone = !!done[q.id];
+          return (
+            <tr key={q.id} className={isDone ? 'done' : ''}>
+              <td className="c-num">{pad(i + 1)}</td>
+              <th scope="row" className="c-title">
+                {locked ? <span className="ch-title">{q.title}</span> : <Link to={`/challenges/${q.id}`} className="ch-title">{q.title}</Link>}
+                <span className="ch-row-meta">
+                  {categoryName(q.company)} · {q.level} · asked {FREQ_LABEL[q.frequency].toLowerCase()}
+                </span>
+              </th>
+              <td className="c-cat">{categoryName(q.company)}</td>
+              <td className="c-level">{q.level}</td>
+              <td className={`c-freq f-${q.frequency}`}>{FREQ_LABEL[q.frequency]}</td>
+              <td className="c-state">
+                {locked ? (
+                  <span className="ch-state locked">Locked</span>
+                ) : isDone ? (
+                  <span className="ch-state done">
+                    <span className="ch-tick" aria-hidden /> Done
+                  </span>
+                ) : (
+                  <span className="ch-state">
+                    <span className="ch-tick" aria-hidden /> Open
+                  </span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function Locked({ detail = false }: { detail?: boolean }) {
   const p = useProgress();
   const { remaining } = companyUnlocked(p, TOPICS);
   const done = TOPICS.length - remaining.length;
+  const pct = Math.round((done / Math.max(1, TOPICS.length)) * 100);
   return (
-    <div className="page narrow">
-      <h1>
-        <Lock size={26} aria-hidden className="inline-icon" /> Architecture Challenges locked
-      </h1>
-      <p className="lead">
-        This track holds {COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges in {COMPANIES.length} categories, each
-        with a timed mock-interview mode. It unlocks after you pass <strong>every</strong> topic exam (full length, ≥{' '}
-        {p.settings.passMark}%).
-      </p>
-      <div className="card">
-        <div className="row between">
-          <strong>
-            {done}/{TOPICS.length} exams passed
-          </strong>
-          <span className="muted small">{Math.round((done / Math.max(1, TOPICS.length)) * 100)}%</span>
+    <div className="page challenges">
+      {detail && (
+        <Link to="/challenges" className="ch-back">
+          <ArrowLeft size={14} aria-hidden /> Architecture challenges
+        </Link>
+      )}
+      <header className="ch-head">
+        <p className="eyebrow">Final track</p>
+        <h1>Architecture challenges</h1>
+        <p className="lead">
+          {COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges in {COMPANIES.length} categories, each worked as a design review
+          against a mock-interview timer.
+        </p>
+      </header>
+
+      <section className="ch-lock" aria-labelledby="ch-lock-title">
+        <h2 id="ch-lock-title" className="ch-lock-title">
+          <Lock size={16} aria-hidden /> Locked until every topic exam is passed
+        </h2>
+        <p className="ch-lock-why">
+          Each challenge draws on the whole course, so the track opens once you pass <strong>every</strong> topic exam at full length with at
+          least {p.settings.passMark}%. {remaining.length} to go.
+        </p>
+        <div className="ch-lock-meter">
+          <span className="ch-lock-count">
+            {done}
+            <span>/{TOPICS.length} exams passed</span>
+          </span>
+          <ProgressBar value={pct} tone="good" />
+          <span className="ch-lock-pct">{pct}%</span>
         </div>
-        <ProgressBar value={(done / Math.max(1, TOPICS.length)) * 100} tone="good" />
-        <div className="label" style={{ marginTop: 16 }}>
-          Remaining exams
-        </div>
-        <ul className="remaining">
+        <h3 className="ch-label">Remaining exams</h3>
+        <ul className="ch-remaining">
           {remaining.map((t) => (
             <li key={t.id}>
               <Link to={`/topic/${t.id}?tab=exam`}>{t.title}</Link>
-              {p.tests[t.id] && <span className="muted small"> · best {p.tests[t.id].best}%</span>}
+              <span className="ch-best">{p.tests[t.id] ? `best ${p.tests[t.id].best}%` : 'not taken'}</span>
             </li>
           ))}
         </ul>
-      </div>
-      <div className="company-chips">
-        {COMPANIES.map((c) => (
-          <span key={c.id} className="chip locked-chip">
-            {c.name}
-          </span>
-        ))}
-      </div>
+      </section>
+
+      <section className="ch-index" aria-labelledby="ch-preview-title">
+        <div className="ch-section-head">
+          <h2 id="ch-preview-title">What unlocks</h2>
+          <p className="muted small">{COMPANIES.map((c) => c.name).join(' · ')}</p>
+        </div>
+        <ChallengeTable qs={COMPANY_QUESTIONS} locked done={p.company} />
+      </section>
     </div>
   );
 }
@@ -59,54 +140,65 @@ export function CompaniesPage() {
   const qs = COMPANY_QUESTIONS.filter((q) => filter === 'all' || q.company === filter);
   const doneCount = COMPANY_QUESTIONS.filter((q) => p.company[q.id]).length;
   return (
-    <div className="page">
-      <div className="eyebrow">Final track</div>
-      <h1>AI architecture challenges</h1>
-      <p className="lead">
-        {doneCount}/{COMPANY_QUESTIONS.length} completed. Pick a category to see what it tests and how to approach it, then design the system against the clock.
-      </p>
-      <div className="company-chips">
-        <button type="button" className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>
-          All
+    <div className="page challenges">
+      <header className="ch-head">
+        <p className="eyebrow">Final track</p>
+        <h1>Architecture challenges</h1>
+        <p className="lead">
+          Pick a category to see what it tests and how to approach it, then design the system against the clock.
+        </p>
+        <dl className="chapter-facts">
+          <div>
+            <dt>Challenges</dt>
+            <dd>{COMPANY_QUESTIONS.length}</dd>
+          </div>
+          <div>
+            <dt>Categories</dt>
+            <dd>{COMPANIES.length}</dd>
+          </div>
+          <div>
+            <dt>Completed</dt>
+            <dd>
+              {doneCount}/{COMPANY_QUESTIONS.length}
+            </dd>
+          </div>
+          <div>
+            <dt>Mock timer</dt>
+            <dd>{p.settings.mockMinutes} min</dd>
+          </div>
+        </dl>
+      </header>
+
+      <div className="ch-filter" role="group" aria-label="Filter by category">
+        <button type="button" className={`chip ${filter === 'all' ? 'on' : ''}`} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+          All <span className="ch-chip-n">{COMPANY_QUESTIONS.length}</span>
         </button>
-        {COMPANIES.map((c) => (
-          <button key={c.id} type="button" className={`chip ${filter === c.id ? 'on' : ''}`} onClick={() => setFilter(c.id)}>
-            {c.name}
-          </button>
-        ))}
-      </div>
-      {company && (
-        <div className="card info">
-          <h3>{company.name}</h3>
-          <p>
-            <strong>Focus:</strong> {company.focus}
-          </p>
-          <p>
-            <strong>How to approach it:</strong> {company.interviewStyle}
-          </p>
-        </div>
-      )}
-      <div className="card-grid">
-        {qs.map((q) => {
-          const c = COMPANIES.find((x) => x.id === q.company);
+        {COMPANIES.map((c) => {
+          const n = COMPANY_QUESTIONS.filter((q) => q.company === c.id).length;
           return (
-            <Link key={q.id} to={`/challenges/${q.id}`} className={`topic-card ${p.company[q.id] ? 'st-passed' : ''}`}>
-              <div className="topic-card-top">
-                <Badge tone="tag">{c?.name ?? q.company}</Badge>
-                <Badge tone={q.frequency === 'very-high' ? 'expert' : q.frequency === 'high' ? 'hard' : 'medium'}>
-                  {q.frequency.replace('-', ' ')}
-                </Badge>
-              </div>
-              <h3>{q.title}</h3>
-              <p className="muted small">{q.prompt}</p>
-              <div className="topic-card-foot">
-                <span className="small muted">{q.level}</span>
-                {p.company[q.id] && <span className="small status-pill st-passed">Done</span>}
-              </div>
-            </Link>
+            <button key={c.id} type="button" className={`chip ${filter === c.id ? 'on' : ''}`} aria-pressed={filter === c.id} onClick={() => setFilter(c.id)}>
+              {c.name} <span className="ch-chip-n">{n}</span>
+            </button>
           );
         })}
       </div>
+
+      {company && (
+        <dl className="ch-brief" aria-label={`${company.name}: brief`}>
+          <div>
+            <dt>What it tests</dt>
+            <dd>{company.focus}</dd>
+          </div>
+          <div>
+            <dt>How to approach it</dt>
+            <dd>{company.interviewStyle}</dd>
+          </div>
+        </dl>
+      )}
+
+      <section className="ch-index" aria-label="Challenges">
+        <ChallengeTable qs={qs} locked={false} done={p.company} />
+      </section>
     </div>
   );
 }
@@ -120,6 +212,17 @@ const STAGES = [
   'Trade-offs',
   'Follow-ups',
 ] as const;
+
+/** A revealed stage of the worksheet: a ruled section with a numbered running head. */
+function Stage({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <section className="ws-stage" aria-labelledby={`ws-stage-${n}`}>
+      <p className="ws-stage-num">Stage {pad(n)}</p>
+      <h2 id={`ws-stage-${n}`}>{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export function CompanyQuestionPage() {
   const { qid = '' } = useParams();
@@ -140,37 +243,59 @@ export function CompanyQuestionPage() {
     return () => clearInterval(t);
   }, [running]);
 
-  if (!companyUnlocked(p, TOPICS).unlocked) return <Locked />;
-  if (!q) return <div className="page">Question not found</div>;
+  if (!companyUnlocked(p, TOPICS).unlocked) return <Locked detail />;
+  if (!q)
+    return (
+      <div className="page challenges">
+        <Link to="/challenges" className="ch-back">
+          <ArrowLeft size={14} aria-hidden /> Architecture challenges
+        </Link>
+        <h1>Challenge not found</h1>
+      </div>
+    );
   const company = COMPANIES.find((c) => c.id === q.company);
   const draftKey = `co:${q.id}`;
   const done = !!p.company[q.id];
+  const full = p.settings.mockMinutes * 60;
 
   const startTimer = () => {
-    const secs = left > 0 ? left : p.settings.mockMinutes * 60;
+    const secs = left > 0 ? left : full;
     deadline.current = Date.now() + secs * 1000;
     setLeft(secs);
     setRunning(true);
   };
 
   return (
-    <div className="page">
-      <Link to="/challenges" className="muted small">
-        ← All architecture challenges
-      </Link>
-      <div className="eyebrow">
-        {company?.name} · {q.level}
-      </div>
-      <h1>{q.title}</h1>
-      <div className="card prompt-card">
-        <Markdown>{q.prompt}</Markdown>
-      </div>
+    <div className="page challenges worksheet">
+      <header className="chapter-head ws-head">
+        <p className="chapter-meta">
+          <Link to="/challenges">Architecture challenges</Link>
+          <span aria-hidden>·</span>
+          <span>{company?.name}</span>
+          <span aria-hidden>·</span>
+          <span>{q.level}</span>
+          <span aria-hidden>·</span>
+          <span>Asked: {FREQ_LABEL[q.frequency]}</span>
+          {done && <span className="ws-done-mark">Completed</span>}
+        </p>
+        <h1>{q.title}</h1>
+      </header>
 
-      <div className="card mock-bar">
-        <div>
-          <strong>Mock interview timer</strong>
-          <div className="row gap-s">
+      <section className="ws-brief" aria-labelledby="ws-brief-label">
+        <h2 id="ws-brief-label" className="ch-label">
+          The brief
+        </h2>
+        <Markdown>{q.prompt}</Markdown>
+      </section>
+
+      <section className="ws-timer" aria-label="Mock interview timer">
+        <div className="ws-timer-set">
+          <label htmlFor="ws-minutes" className="ch-label">
+            Mock interview
+          </label>
+          <span className="ws-minutes">
             <input
+              id="ws-minutes"
               type="number"
               min={5}
               max={120}
@@ -182,14 +307,16 @@ export function CompanyQuestionPage() {
                 setLeft(m * 60);
               }}
             />
-            <span className="muted small">minutes</span>
-          </div>
+            <span>min</span>
+          </span>
         </div>
-        <div className={`timer ${left <= 300 && running ? 'urgent' : ''}`}>{formatClock(left)}</div>
-        <div className="row gap-s">
+        <div className={`timer ws-clock ${left <= 300 && running ? 'urgent' : ''}`} role="timer" aria-label="Time left">
+          {formatClock(left)}
+        </div>
+        <div className="ws-timer-actions">
           {!running ? (
             <button className="btn btn-primary" type="button" onClick={startTimer}>
-              {left < p.settings.mockMinutes * 60 && left > 0 ? 'Resume' : 'Start'}
+              {left < full && left > 0 ? 'Resume' : 'Start'}
             </button>
           ) : (
             <button className="btn" type="button" onClick={() => setRunning(false)}>
@@ -201,119 +328,159 @@ export function CompanyQuestionPage() {
             type="button"
             onClick={() => {
               setRunning(false);
-              setLeft(p.settings.mockMinutes * 60);
+              setLeft(full);
             }}
           >
             Reset
           </button>
         </div>
-      </div>
+      </section>
 
-      <textarea
-        className="answer-box tall"
-        placeholder="Your whiteboard: requirements → estimation → API → data model → architecture → deep dives → trade-offs"
-        value={p.drafts[draftKey] ?? ''}
-        onChange={(e) => setDraft(draftKey, e.target.value)}
-        rows={12}
-      />
+      <section className="ws-board" aria-labelledby="ws-board-label">
+        <label id="ws-board-label" htmlFor="ws-draft" className="ch-label">
+          Your whiteboard
+        </label>
+        <textarea
+          id="ws-draft"
+          className="answer-box tall"
+          placeholder="Requirements → estimation → API → data model → architecture → deep dives → trade-offs"
+          value={p.drafts[draftKey] ?? ''}
+          onChange={(e) => setDraft(draftKey, e.target.value)}
+          rows={12}
+        />
+        <p className="ws-hint">Saved as you type. Reveal the model answer one stage at a time and compare it with yours before moving on.</p>
+      </section>
 
-      <div className="stage-bar">
-        {STAGES.map((s, i) => (
-          <button key={s} type="button" className={`stage ${i < stage ? 'done' : ''}`} onClick={() => setStage(i + 1)}>
-            {i + 1}. {s}
-          </button>
-        ))}
-      </div>
-      <p className="muted small">Reveal stages one at a time and compare each with your own answer before moving on.</p>
+      <nav className="ws-stages" aria-label="Model answer stages">
+        <ol>
+          {STAGES.map((s, i) => (
+            <li key={s}>
+              <button
+                type="button"
+                className={`ws-stage-btn ${i < stage ? 'done' : ''} ${i === stage ? 'next' : ''}`}
+                aria-current={i === stage - 1 ? 'step' : undefined}
+                onClick={() => setStage(i + 1)}
+              >
+                <span className="ws-stage-n">{i + 1}</span>
+                <span className="ws-stage-label">{s}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <p className="ws-stage-count" aria-live="polite">
+          {stage}/{STAGES.length} revealed
+        </p>
+      </nav>
 
       {stage >= 1 && (
-        <div className="card">
-          <h3>1. Clarifying questions to ask</h3>
-          <ul>
+        <Stage n={1} title="Clarifying questions to ask">
+          <ol className="ws-list">
             {q.clarifyingQuestions.map((c) => (
               <li key={c}>{c}</li>
             ))}
-          </ul>
-        </div>
+          </ol>
+        </Stage>
       )}
       {stage >= 2 && (
-        <div className="card two-col">
-          <div>
-            <h3>2. Functional requirements</h3>
-            <ul>
-              {q.functional.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
+        <Stage n={2} title="Requirements">
+          <div className="ws-req">
+            <div>
+              <h3 className="ch-label">Functional</h3>
+              <ul className="ws-list">
+                {q.functional.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="ch-label">Non-functional</h3>
+              <ul className="ws-list">
+                {q.nonFunctional.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <div>
-            <h3>Non-functional requirements</h3>
-            <ul>
-              {q.nonFunctional.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        </Stage>
       )}
       {stage >= 3 && (
-        <div className="card">
-          <h3>3. Estimation</h3>
-          <ol className="steps">
-            {q.estimation.map((s, i) => (
-              <li key={i}>
-                <span className="step-label">{s.label}</span>
-                <code className="step-calc">{s.calc}</code>
-              </li>
-            ))}
-          </ol>
-        </div>
+        <Stage n={3} title="Estimation">
+          <table className="ws-est">
+            <caption className="sr-only">Back-of-the-envelope estimation steps</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="c-num">
+                  Step
+                </th>
+                <th scope="col" className="c-qty">
+                  Quantity
+                </th>
+                <th scope="col">Working</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.estimation.map((s, i) => (
+                <tr key={i}>
+                  <td className="c-num">{pad(i + 1)}</td>
+                  <th scope="row" className="c-qty">
+                    {s.label}
+                  </th>
+                  <td className="c-calc">
+                    <code>{s.calc}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Stage>
       )}
       {stage >= 4 && (
-        <div className="card">
-          <h3>4. High-level design</h3>
-          <Markdown>{q.highLevelDesign}</Markdown>
+        <Stage n={4} title="High-level design">
+          <div className="ws-prose">
+            <Markdown>{q.highLevelDesign}</Markdown>
+          </div>
           {q.diagram && <Diagram text={q.diagram} />}
-        </div>
+        </Stage>
       )}
       {stage >= 5 && (
-        <div className="card">
-          <h3>5. Deep dives</h3>
-          {q.deepDives.map((d) => (
-            <Reveal key={d.topic} label={d.topic} defaultOpen>
-              <Markdown>{d.discussion}</Markdown>
-            </Reveal>
-          ))}
-        </div>
+        <Stage n={5} title="Deep dives">
+          <div className="ws-dives">
+            {q.deepDives.map((d) => (
+              <Reveal key={d.topic} label={d.topic} defaultOpen>
+                <Markdown>{d.discussion}</Markdown>
+              </Reveal>
+            ))}
+          </div>
+        </Stage>
       )}
       {stage >= 6 && (
-        <div className="card">
-          <h3>6. Trade-offs to state out loud</h3>
-          <ul>
+        <Stage n={6} title="Trade-offs to state out loud">
+          <ul className="ws-list">
             {q.tradeoffs.map((c) => (
               <li key={c}>{c}</li>
             ))}
           </ul>
-        </div>
+        </Stage>
       )}
       {stage >= 7 && (
-        <div className="card">
-          <h3>7. Interviewer follow-ups</h3>
-          {q.followUps.map((f) => (
-            <div key={f.q} className="followup">
-              <div className="fq">↳ {f.q}</div>
-              <Reveal label="Show answer">
-                <Markdown>{f.a}</Markdown>
-              </Reveal>
-            </div>
-          ))}
-        </div>
+        <Stage n={7} title="Interviewer follow-ups">
+          <ol className="ws-followups">
+            {q.followUps.map((f) => (
+              <li key={f.q} className="followup">
+                <p className="fq">{f.q}</p>
+                <Reveal label="Show answer">
+                  <Markdown>{f.a}</Markdown>
+                </Reveal>
+              </li>
+            ))}
+          </ol>
+        </Stage>
       )}
 
-      <div className="row gap-s wrap">
+      <div className="ws-actions">
         {stage < STAGES.length && (
           <button className="btn" type="button" onClick={() => setStage((s) => s + 1)}>
-            Reveal: {STAGES[stage]}
+            Reveal stage {stage + 1}: {STAGES[stage]}
           </button>
         )}
         <button className={`btn ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('company', q.id, !done)}>
@@ -322,19 +489,21 @@ export function CompanyQuestionPage() {
       </div>
 
       {q.relatedTopics.length > 0 && (
-        <div className="card">
-          <div className="label">Revise related topics</div>
-          <div className="row wrap gap-s">
+        <section className="ws-related" aria-labelledby="ws-related-label">
+          <h2 id="ws-related-label" className="ch-label">
+            Revise related topics
+          </h2>
+          <ul>
             {q.relatedTopics
               .map((id) => TOPIC_BY_ID.get(id))
               .filter((t) => !!t)
               .map((t) => (
-                <Link key={t!.id} to={`/topic/${t!.id}`} className="chip">
-                  {t!.title}
-                </Link>
+                <li key={t!.id}>
+                  <Link to={`/topic/${t!.id}`}>{t!.title}</Link>
+                </li>
               ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
     </div>
   );

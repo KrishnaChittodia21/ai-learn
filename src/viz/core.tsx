@@ -3,6 +3,7 @@
 // backwards, resetting and changing parameters are trivial and deterministic. Components
 // only render the current frame.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from 'lucide-react';
 
 export interface BaseFrame {
   /** one or two sentences narrating what just happened (read by screen readers) */
@@ -106,7 +107,7 @@ export function VizFrame({
 }) {
   const { frame, i, total, playing, speed } = stepper;
   const [revealed, setRevealed] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   useEffect(() => setRevealed(false), [i]);
 
   // keyboard: ←/→ step, space play/pause (only when focus is inside this card)
@@ -121,16 +122,22 @@ export function VizFrame({
     } else return;
     e.stopPropagation();
   };
+  const pad = (n: number) => String(n).padStart(Math.max(2, String(total).length), '0');
 
   return (
-    <div className="viz" ref={rootRef} tabIndex={0} onKeyDown={onKey} aria-label={`${title} interactive visualisation`}>
-      <div className="viz-head">
-        <div>
-          <div className="viz-eyebrow">▶ Interactive</div>
-          <div className="viz-title">{title}</div>
-          {blurb && <div className="viz-blurb">{blurb}</div>}
+    <figure className="viz" ref={rootRef} tabIndex={0} onKeyDown={onKey} aria-label={`${title} interactive visualisation`}>
+      <figcaption className="viz-head">
+        <div className="viz-eyebrow">
+          <span className="viz-fig">Fig.</span>
+          <span>Interactive</span>
+          <span aria-hidden>·</span>
+          <span>
+            {total} step{total === 1 ? '' : 's'}
+          </span>
         </div>
-      </div>
+        <div className="viz-title">{title}</div>
+        {blurb && <div className="viz-blurb">{blurb}</div>}
+      </figcaption>
       {controls && <div className="viz-controls">{controls}</div>}
       <div className="viz-stage">{children}</div>
       {legend && <div className="viz-legend">{legend}</div>}
@@ -138,40 +145,43 @@ export function VizFrame({
         <span className="viz-stepno">
           Step {i + 1}/{total}
         </span>{' '}
-        {frame.caption}
+        <span className="viz-caption-text">{frame.caption}</span>
       </div>
       {frame.predict && (
         <div className="viz-predict">
-          <strong>🤔 Predict:</strong> {frame.predict}{' '}
-          {!revealed ? (
-            <button type="button" className="link-btn" onClick={() => setRevealed(true)}>
-              Think, then reveal →
-            </button>
-          ) : i < total - 1 ? (
-            <button type="button" className="link-btn" onClick={stepper.next}>
-              See what happens →
-            </button>
-          ) : null}
+          <span className="viz-predict-label">Predict</span>
+          <span className="viz-predict-text">
+            {frame.predict}{' '}
+            {!revealed ? (
+              <button type="button" className="link-btn" onClick={() => setRevealed(true)}>
+                Think, then reveal →
+              </button>
+            ) : i < total - 1 ? (
+              <button type="button" className="link-btn" onClick={stepper.next}>
+                See what happens →
+              </button>
+            ) : null}
+          </span>
         </div>
       )}
-      <div className="viz-transport">
-        <button type="button" className="btn btn-xs" onClick={stepper.reset} aria-label="Reset">
-          ⏮
+      <div className="viz-transport" role="group" aria-label="Playback">
+        <button type="button" className="viz-btn" onClick={stepper.reset} aria-label="Reset" title="Reset">
+          <RotateCcw size={14} aria-hidden />
         </button>
-        <button type="button" className="btn btn-xs" onClick={stepper.prev} disabled={i === 0} aria-label="Previous step">
-          ◀
+        <button type="button" className="viz-btn" onClick={stepper.prev} disabled={i === 0} aria-label="Previous step" title="Previous step (←)">
+          <ChevronLeft size={16} aria-hidden />
         </button>
         {playing ? (
-          <button type="button" className="btn btn-xs btn-primary" onClick={stepper.pause} aria-label="Pause">
-            ❚❚ Pause
+          <button type="button" className="viz-btn viz-btn-play on" onClick={stepper.pause} aria-label="Pause" title="Pause (space)">
+            <Pause size={14} aria-hidden />
           </button>
         ) : (
-          <button type="button" className="btn btn-xs btn-primary" onClick={stepper.play} aria-label="Play">
-            ▶ Play
+          <button type="button" className="viz-btn viz-btn-play" onClick={stepper.play} aria-label="Play" title="Play (space)">
+            <Play size={14} aria-hidden />
           </button>
         )}
-        <button type="button" className="btn btn-xs" onClick={stepper.next} disabled={i === total - 1} aria-label="Next step">
-          ▶
+        <button type="button" className="viz-btn" onClick={stepper.next} disabled={i === total - 1} aria-label="Next step" title="Next step (→)">
+          <ChevronRight size={16} aria-hidden />
         </button>
         <input
           className="viz-scrub"
@@ -181,9 +191,15 @@ export function VizFrame({
           value={i}
           onChange={(e) => stepper.seek(Number(e.target.value))}
           aria-label="Scrub through steps"
+          aria-valuetext={`Step ${i + 1} of ${total}`}
+          style={{ ['--viz-pct' as string]: `${total > 1 ? (i / (total - 1)) * 100 : 100}%` }}
         />
+        <span className="viz-count" aria-hidden>
+          {pad(i + 1)}
+          <span>/{pad(total)}</span>
+        </span>
         <label className="viz-speed">
-          Speed
+          <span>Speed</span>
           <select value={speed} onChange={(e) => stepper.setSpeed(Number(e.target.value))}>
             {[0.5, 1, 2, 4].map((s) => (
               <option key={s} value={s}>
@@ -193,7 +209,7 @@ export function VizFrame({
           </select>
         </label>
       </div>
-    </div>
+    </figure>
   );
 }
 
@@ -217,7 +233,7 @@ export function Slider({
 }) {
   return (
     <label className="viz-slider">
-      <span>
+      <span className="viz-slider-label">
         {label}: <strong>{format(value)}</strong>
       </span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
@@ -239,7 +255,7 @@ export function Choice<T extends string>({
 }) {
   return (
     <div className="viz-choice" role="group" aria-label={label}>
-      <span>{label}:</span>
+      <span className="viz-choice-label">{label}:</span>
       {options.map((o) => (
         <button key={o.value} type="button" className={`chip ${value === o.value ? 'on' : ''}`} onClick={() => onChange(o.value)}>
           {o.label}

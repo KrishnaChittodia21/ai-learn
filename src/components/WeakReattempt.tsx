@@ -1,135 +1,94 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Mic, RotateCcw, Target } from 'lucide-react';
 import type { TopicWeakness } from '../lib/weak';
-import { ChartCard } from './charts/ChartCard';
-import { BarList } from './charts/BarList';
 
-/** Dashboard: the weakest topics as a bar list with per-topic actions, and how clearing a weak area works. */
-export function WeakReattempt({ weak, answered, passMark, firstExamHref }: { weak: TopicWeakness[]; answered: number; passMark: number; firstExamHref: string }) {
-  const top = weak.slice(0, 6);
+/**
+ * Today: a compact ruled ledger of the weakest topics with one-click reattempts.
+ * Hidden until the learner has answered an exam question; a single line when nothing is weak.
+ */
+export function WeakReattempt({ weak, answered, passMark }: { weak: TopicWeakness[]; answered: number; passMark: number; firstExamHref?: string }) {
+  if (!answered) return null;
+  const top = weak.slice(0, 5);
   const maxWrong = Math.max(1, ...top.map((w) => w.wrong.length));
   const totalWrong = weak.reduce((n, w) => n + w.wrong.length, 0);
-  const status = (w: TopicWeakness) => (w.attempts ? `last exam ${w.last}% (best ${w.best}%)${w.passed ? ', passed' : ', not passed'}` : 'no full exam yet');
-  const empty = !weak.length ? (
-    answered ? (
-      <>
-        <p>No weak areas right now: every exam question you have attempted is currently answered correctly.</p>
-        <Link className="btn" to="/weak-areas">
-          Open Weak Areas
-        </Link>
-      </>
-    ) : (
-      <>
-        <p>No weak areas yet. Take an exam to find them.</p>
-        <Link className="btn btn-primary" to={firstExamHref}>
-          Take an exam
-        </Link>
-      </>
-    )
-  ) : undefined;
+
+  if (!weak.length) {
+    return (
+      <section className="reattempt reattempt-clear" aria-labelledby="weak-title">
+        <h2 id="weak-title" className="section-rule-title">
+          Weak areas
+        </h2>
+        <p>
+          <span className="reattempt-ok">Clear.</span> Every exam question you have attempted is currently answered correctly.{' '}
+          <Link to="/weak-areas">Open the diagnostics</Link>
+        </p>
+      </section>
+    );
+  }
 
   return (
-    <section className="dash-section" aria-labelledby="weak-title">
-      <div className="dash-section-head">
-        <div>
-          <div className="eyebrow">
-            <Target size={14} aria-hidden /> Weak areas
-          </div>
-          <h2 id="weak-title">Weak areas &amp; how to reattempt them</h2>
-        </div>
-        <div className="row gap-s wrap">
+    <section className="reattempt" aria-labelledby="weak-title">
+      <div className="section-rule-head">
+        <h2 id="weak-title" className="section-rule-title">
+          Weak areas
+        </h2>
+        <div className="reattempt-actions">
           {totalWrong > 0 && (
-            <Link to="/practice" className="btn btn-primary">
-              <RotateCcw size={16} aria-hidden /> Practise all {totalWrong} wrong answer{totalWrong === 1 ? '' : 's'}
+            <Link to="/practice" className="btn btn-primary btn-sm">
+              Practise all {totalWrong} wrong answer{totalWrong === 1 ? '' : 's'}
             </Link>
           )}
-          <Link to="/weak-areas" className="btn">
-            Full analysis →
+          <Link to="/weak-areas" className="btn btn-sm">
+            Full analysis
           </Link>
         </div>
       </div>
-      <div className="weak-grid">
-        <ChartCard
-          title="Weakest topics"
-          subtitle="Bar = exam questions you currently have wrong. Ordered by priority: exams not yet passed and the lowest last score first."
-          empty={empty}
-          table={{
-            columns: ['Topic', 'Wrong now', 'Last exam', 'Best', 'Weakest section', 'Interview Qs partial/missed'],
-            rows: weak.map((w) => [w.topic.title, w.wrong.length, w.attempts ? `${w.last}%` : '—', w.attempts ? `${w.best}%` : '—', w.sections[0]?.heading ?? '—', w.shakyInterview]),
-          }}
-        >
-          <BarList
-            seriesLabel="Questions currently wrong per topic"
-            color="var(--dv-2)"
-            max={maxWrong}
-            rows={top.map((w) => ({
-              id: w.topic.id,
-              label: w.topic.title,
-              value: w.wrong.length,
-              display: `${w.wrong.length} wrong`,
-              detail: `${status(w)}${w.shakyInterview ? ` · ${w.shakyInterview} interview Q${w.shakyInterview === 1 ? '' : 's'} to redo` : ''}`,
-              extra: (
-                <>
-                  <span className="muted small weak-row-status">
-                    {status(w)}
-                    {w.sections[0] && <> · weakest: {w.sections[0].heading}</>}
-                  </span>
-                  <span className="weak-actions">
-                    {w.wrong.length > 0 && (
-                      <Link to={`/practice?topic=${w.topic.id}`} className="btn btn-xs">
-                        <RotateCcw size={12} aria-hidden /> Practise {w.wrong.length} wrong
-                      </Link>
-                    )}
-                    {w.sections[0] && (
-                      <Link to={`/topic/${w.topic.id}?tab=learn&s=${w.sections[0].index}`} className="btn btn-xs" title={`Revise ${w.sections[0].heading}`}>
-                        <BookOpen size={12} aria-hidden /> Revise §{w.sections[0].index + 1}
-                      </Link>
-                    )}
-                    {w.shakyInterview > 0 && (
-                      <Link to={`/topic/${w.topic.id}?tab=interview`} className="btn btn-xs">
-                        <Mic size={12} aria-hidden /> Redo {w.shakyInterview} interview Q{w.shakyInterview === 1 ? '' : 's'}
-                      </Link>
-                    )}
-                    <Link to={`/topic/${w.topic.id}/exam`} className="btn btn-xs">
-                      Retake exam
-                    </Link>
-                  </span>
-                </>
-              ),
-            }))}
-          />
-          {weak.length > top.length && (
-            <p className="small muted">
-              +{weak.length - top.length} more on the <Link to="/weak-areas">Weak Areas page</Link>.
-            </p>
-          )}
-        </ChartCard>
-        <aside className="card weak-howto" aria-labelledby="howto-title">
-          <h3 id="howto-title">How to clear a weak area</h3>
-          <ol>
-            <li>
-              <strong>Practise the wrong answers.</strong> The mistakes drill asks only the questions whose <em>latest</em> answer was
-              wrong (for one topic or all). Drill answers update each question but never count towards passing an exam.
+      <ol className="reattempt-list">
+        {top.map((w) => {
+          const sec = w.sections[0];
+          return (
+            <li key={w.topic.id} className="reattempt-row">
+              <div className="reattempt-topic">
+                <Link to={`/topic/${w.topic.id}`}>{w.topic.title}</Link>
+                <span className="reattempt-meta">
+                  {w.attempts ? (
+                    <>
+                      <span className={w.passed ? 'good' : 'bad'}>{w.passed ? 'passed' : 'not passed'}</span> · last {w.last}%
+                    </>
+                  ) : (
+                    'drill only'
+                  )}
+                  {sec && <> · weakest §{sec.index + 1} {sec.heading}</>}
+                </span>
+              </div>
+              <span className="reattempt-bar" aria-hidden>
+                <span style={{ width: `${(w.wrong.length / maxWrong) * 100}%` }} />
+              </span>
+              <span className="reattempt-num">
+                {w.wrong.length ? `${w.wrong.length} wrong` : w.shakyInterview ? `${w.shakyInterview} shaky` : 'retake'}
+              </span>
+              <span className="reattempt-links">
+                {w.wrong.length > 0 && <Link to={`/practice?topic=${w.topic.id}`}>Practise</Link>}
+                {sec && (
+                  <Link to={`/topic/${w.topic.id}?tab=learn&s=${sec.index}`} title={`Revise ${sec.heading}`}>
+                    Revise §{sec.index + 1}
+                  </Link>
+                )}
+                {w.shakyInterview > 0 && <Link to={`/topic/${w.topic.id}?tab=interview`}>Interview Qs</Link>}
+                <Link to={`/topic/${w.topic.id}/exam`}>Retake</Link>
+              </span>
             </li>
-            <li>
-              <strong>Answer it right once.</strong> A question leaves the weak list as soon as your most recent answer to it is
-              correct, in a drill or a full exam. Get it wrong again later and it comes back.
-            </li>
-            <li>
-              <strong>Revise the weakest section.</strong> Each wrong question is matched to the Learn section it most likely tests
-              (automatically, from its wording), so &ldquo;Revise&rdquo; opens that section.
-            </li>
-            <li>
-              <strong>Retake the full exam.</strong> Only a full-length exam updates your score and can pass the topic (pass mark{' '}
-              {passMark}%). A topic stays listed while an attempted exam is still unpassed, any question is still wrong, or an interview question is
-              rated partial or missed. Re-rate those after practising them.
-            </li>
-          </ol>
-          <Link to="/weak-areas" className="small">
-            See the full Weak Areas analysis →
-          </Link>
-        </aside>
-      </div>
+          );
+        })}
+      </ol>
+      <p className="reattempt-note">
+        {weak.length > top.length && (
+          <>
+            +{weak.length - top.length} more on the <Link to="/weak-areas">Weak areas</Link> page.{' '}
+          </>
+        )}
+        A question leaves this list once your latest answer to it is correct. Only a full exam updates a topic&apos;s score (pass mark{' '}
+        {passMark}%).
+      </p>
     </section>
   );
 }

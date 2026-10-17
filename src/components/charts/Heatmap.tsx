@@ -15,10 +15,14 @@ function fmt(day: string) {
  * Today is in the tab order; arrow keys move between days. */
 export function Heatmap({ weeks }: { weeks: ActivityCell[][] }) {
   const { ref, tip, bind } = useTip();
+  // a label at each month change; when two changes fall within 3 weeks, keep only the later (fuller) month
+  const changes = weeks.map((w, i) => i === 0 || w[0].day.slice(5, 7) !== weeks[i - 1][0].day.slice(5, 7));
   const monthLabel = (w: ActivityCell[], i: number) => {
+    if (!changes[i]) return '';
+    const nextChange = changes.findIndex((c, j) => j > i && c);
+    if (nextChange !== -1 && nextChange - i < 3) return '';
     const first = w[0].day;
-    const prev = i > 0 ? weeks[i - 1][0].day : '';
-    return first.slice(5, 7) !== prev.slice(5, 7) ? new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1).toLocaleDateString(undefined, { month: 'short' }) : '';
+    return new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1).toLocaleDateString(undefined, { month: 'short' });
   };
   // arrow keys move between days (only today is in the tab order)
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {

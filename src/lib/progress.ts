@@ -27,11 +27,11 @@ export interface Settings {
   mockMinutes: number;
   /** study-first lock: which practice unlocks only after every Learn section is marked read */
   studyLock: 'off' | 'exam' | 'exam-interview';
-  /** UI accent theme (optional; older saves default to indigo) */
+  /** UI signal colour (optional; unknown or older saved values fall back to vermilion) */
   accent?: Accent;
 }
 
-export type Accent = 'indigo' | 'teal' | 'rose' | 'amber';
+export type Accent = 'vermilion' | 'pine' | 'ink' | 'plum';
 
 export interface Progress {
   tests: Record<string, TestRecord>;

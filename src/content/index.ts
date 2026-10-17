@@ -1,5 +1,5 @@
 import type { Company, CompanyQuestion, Topic } from '../types';
-import { PHASES } from './phases';
+import { LEVELS, PHASES } from './phases';
 
 const topicModules = import.meta.glob<{ default: Topic }>('./topics/*.ts', { eager: true });
 
@@ -25,4 +25,7 @@ const companyModule = Object.values(companyModules)[0];
 export const COMPANIES: Company[] = companyModule?.COMPANIES ?? [];
 export const COMPANY_QUESTIONS: CompanyQuestion[] = companyModule?.COMPANY_QUESTIONS ?? [];
 
-export { PHASES };
+/** topic id → its level (beginner / intermediate / advanced) */
+export const LEVEL_OF_TOPIC = new Map(TOPICS.map((t) => [t.id, PHASES.find((ph) => ph.id === t.phase)?.level]));
+
+export { PHASES, LEVELS };

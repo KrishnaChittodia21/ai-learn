@@ -1,0 +1,511 @@
+/* ======================================================================
+   Interactive figures ("lab bench"): the chrome rendered by src/viz/core.tsx around all
+   16 widgets, plus the shared SVG classes used inside them.
+   A ruled figure: mono FIG. running head, serif title, a bench strip of parameters,
+   the drawing, a narrated step line, an optional margin-note prediction, and compact
+   square transport controls on a thin ruled scrubber.
+   Supersedes the legacy block "interactive visualisations".
+   ====================================================================== */
+.viz {
+  --viz-pad: var(--s-5);
+  margin: var(--s-6) 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  outline: none;
+  min-width: 0;
+}
+.viz:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+/* ---------- head: FIG. running head, serif title, blurb ---------- */
+.viz-head {
+  display: block;
+  padding: var(--s-4) var(--viz-pad) var(--s-3);
+}
+.viz-eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--s-1);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.viz-fig {
+  color: var(--accent);
+  font-weight: 600;
+}
+.viz-title {
+  font-family: var(--serif);
+  font-size: var(--fs-xl);
+  font-weight: 560;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  text-wrap: balance;
+}
+.viz-blurb {
+  margin-top: var(--s-1);
+  max-width: var(--measure);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ---------- parameters: the bench strip ---------- */
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3) var(--s-6);
+  margin: 0;
+  padding: var(--s-3) var(--viz-pad);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  font-size: var(--fs-sm);
+}
+.viz-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 170px;
+  flex: 0 1 220px;
+}
+.viz-slider-label,
+.viz-choice-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.viz-slider-label strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.viz-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.viz-choice .chip {
+  padding: 3px 9px;
+  font-size: var(--fs-xs);
+  border-radius: var(--radius-sm);
+}
+
+/* range inputs (parameters + scrubber): thin ruled track, square ink thumb */
+.viz input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.viz input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(var(--text), var(--text)) 0 0 / var(--viz-pct, 0%) 100% no-repeat, var(--border);
+}
+.viz input[type='range']::-moz-range-track {
+  height: 2px;
+  background: var(--border);
+}
+.viz input[type='range']::-moz-range-progress {
+  height: 2px;
+  background: var(--text);
+}
+.viz input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 14px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--text);
+}
+.viz input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 14px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--text);
+}
+.viz input[type='range']:hover::-webkit-slider-thumb,
+.viz input[type='range']:focus-visible::-webkit-slider-thumb {
+  background: var(--accent);
+}
+.viz input[type='range']:hover::-moz-range-thumb,
+.viz input[type='range']:focus-visible::-moz-range-thumb {
+  background: var(--accent);
+}
+.viz input[type='range']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* parameter sliders have no progress var: show a plain hairline track */
+.viz-slider input[type='range']::-webkit-slider-runnable-track {
+  background: var(--rule-strong);
+  height: 1px;
+}
+.viz-slider input[type='range']::-webkit-slider-thumb {
+  margin-top: -6.5px;
+}
+
+/* ---------- the drawing ---------- */
+.viz-stage {
+  margin: 0;
+  padding: var(--s-4) var(--viz-pad);
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.viz-wide {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.viz-wide:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- legend ---------- */
+.viz-legend {
+  display: block;
+  padding: var(--s-2) var(--viz-pad) var(--s-3);
+  font-size: var(--fs-xs);
+  line-height: 1.9;
+  color: var(--text-2);
+}
+/* legends are inline runs of "key + text": keep them in normal text flow so a key never orphans */
+.viz-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin: 0 5px 0 16px;
+  border-radius: 50%;
+  vertical-align: -0.5px;
+}
+.viz-legend > .viz-key:first-child,
+.viz-legend > :first-child > .viz-key:first-child {
+  margin-left: 0;
+}
+/* plain-text spans in a legend (e.g. line-style notes) start a new entry */
+.viz-legend > span:not(.viz-key) {
+  display: inline-block;
+  margin-left: 16px;
+}
+.viz-key.ring {
+  background: transparent;
+  border: 2px solid var(--text);
+}
+
+/* ---------- narration ---------- */
+.viz-caption {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin: 0;
+  padding: var(--s-3) var(--viz-pad);
+  min-height: 3.4em;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text);
+}
+.viz-stepno {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.viz-caption-text {
+  min-width: 0;
+}
+
+/* predict: a highlighted margin note */
+.viz-predict {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin: 0 var(--viz-pad) var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: 0;
+  border-left: 2px solid var(--warn);
+  background: var(--highlight);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+.viz-predict-label {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.viz-predict .link-btn {
+  font-weight: 560;
+  text-decoration-color: currentColor;
+}
+
+/* ---------- transport ---------- */
+.viz-transport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin: 0;
+  padding: var(--s-2) var(--viz-pad);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+.viz-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background var(--dur),
+    border-color var(--dur),
+    color var(--dur);
+}
+.viz-btn:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+}
+.viz-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.viz-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.viz-btn-play {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+.viz-btn-play:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.viz-btn-play.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.viz-scrub {
+  flex: 1 1 120px;
+  min-width: 100px;
+  margin: 0 var(--s-2) !important;
+}
+.viz-count {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 4.5ch;
+}
+.viz-count span {
+  color: var(--muted);
+}
+.viz-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: var(--s-3);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.viz-speed select {
+  height: 30px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0;
+  text-transform: none;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* ---------- SVG vocabulary used inside the widgets ---------- */
+.viz-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+.viz-svg text {
+  fill: var(--text);
+}
+.viz-label {
+  font-size: 12px;
+  fill: var(--text-2) !important;
+}
+.viz-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 3;
+}
+.viz-node circle {
+  fill: var(--surface-2);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  transition:
+    fill 0.35s ease,
+    stroke 0.35s ease,
+    r 0.35s ease;
+}
+.viz-node.active circle {
+  stroke-width: 3;
+}
+.viz-node.active.cb-closed circle {
+  fill: var(--good-soft);
+  stroke: var(--good);
+}
+.viz-node.active.cb-open circle {
+  fill: var(--bad-soft);
+  stroke: var(--bad);
+}
+.viz-node.active.cb-half-open circle {
+  fill: var(--warn-soft);
+  stroke: var(--warn);
+}
+.viz-node-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.viz-outage {
+  fill: var(--bad-soft);
+}
+.viz-dot {
+  transition:
+    r 0.25s ease,
+    fill 0.25s ease;
+}
+
+/* ---------- loading + back-reference (rendered by the Topic page) ---------- */
+.viz-loading {
+  margin: var(--s-6) 0;
+  padding: var(--s-5);
+  border: 1px dashed var(--border);
+  border-top: 2px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  animation: viz-breathe 1.6s ease-in-out infinite;
+}
+@keyframes viz-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+.viz-backlink {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  margin: var(--s-4) 0;
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur),
+    background var(--dur);
+}
+.viz-backlink:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.viz-backlink svg {
+  color: var(--accent);
+  flex: none;
+}
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 600px) {
+  .viz {
+    --viz-pad: var(--s-3);
+  }
+  .viz-title {
+    font-size: var(--fs-lg);
+  }
+  .viz-slider {
+    flex: 1 1 100%;
+  }
+  .viz-caption,
+  .viz-predict {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .viz-scrub {
+    order: 10;
+    flex-basis: 100%;
+    margin: var(--s-2) 0 var(--s-1) !important;
+  }
+  .viz-speed {
+    margin-left: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viz *,
+  .viz *::before,
+  .viz *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  .viz-loading {
+    animation: none;
+  }
+}

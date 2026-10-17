@@ -1,53 +1,36 @@
-// Contents: every phase, topic, section, practice tab and tool in the course on one searchable page.
+// Syllabus: every level, phase, topic and section of the course as one searchable index.
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import {
-  Building,
-  Calculator,
-  Check,
-  ChevronDown,
-  CirclePlay,
-  CodeXml,
-  Dumbbell,
-  FileText,
-  GraduationCap,
-  Hammer,
-  ListTree,
-  Lock,
-  LockOpen,
-  MessagesSquare,
-  Search,
-  Settings,
-  Target,
-} from 'lucide-react';
-import { COMPANY_QUESTIONS, PHASES, TOPICS } from '../content';
+import { Check, ChevronDown, CirclePlay, Search } from 'lucide-react';
+import { COMPANY_QUESTIONS, LEVELS, PHASES, TOPICS } from '../content';
 import { PROJECTS, projectsForTopic } from '../content/projects';
 import { useProgress } from '../lib/progress';
-import { companyUnlocked, topicCompletion, topicStatus } from '../lib/stats';
+import { companyUnlocked, topicStatus, type TopicStatus } from '../lib/stats';
 import { codeLabLabel } from '../lib/nextStep';
 import { currentlyWrong, weakTopics } from '../lib/weak';
 import { VIZ, vizForSection } from '../viz/registry';
-import { ProgressRing } from '../components/ProgressRing';
-import { shortTitle } from '../lib/labels';
 import type { Topic } from '../types';
 
 /** section → has an interactive visualisation (computed once) */
 const VIZ_SECTIONS = new Map(TOPICS.map((t) => [t.id, t.sections.map((s) => vizForSection(t.id, s.heading).length > 0)]));
-const COMPANY_BY_TOPIC = new Map(TOPICS.map((t) => [t.id, COMPANY_QUESTIONS.filter((q) => q.relatedTopics.includes(t.id)).length]));
 
-const TOTALS = {
-  phases: PHASES.filter((ph) => TOPICS.some((t) => t.phase === ph.id)).length,
-  topics: TOPICS.length,
-  sections: TOPICS.reduce((a, t) => a + t.sections.length, 0),
-  labs: TOPICS.reduce((a, t) => a + t.codeChallenges.length, 0),
-  interview: TOPICS.reduce((a, t) => a + t.interviewQuestions.length, 0),
-  drills: TOPICS.reduce((a, t) => a + t.envelopeQuestions.length, 0),
-  exam: TOPICS.reduce((a, t) => a + t.test.length, 0),
-  animations: VIZ.length,
-  exercises: TOPICS.reduce((a, t) => a + t.sections.filter((s) => s.exercise).length, 0),
-  company: COMPANY_QUESTIONS.length,
-};
+const TOTALS: [string, number][] = [
+  ['Phases', PHASES.filter((ph) => TOPICS.some((t) => t.phase === ph.id)).length],
+  ['Topics', TOPICS.length],
+  ['Sections', TOPICS.reduce((a, t) => a + t.sections.length, 0)],
+  ['Animations', VIZ.length],
+  ['Coding exercises', TOPICS.reduce((a, t) => a + t.sections.filter((s) => s.exercise).length, 0)],
+  ['Code labs', TOPICS.reduce((a, t) => a + t.codeChallenges.length, 0)],
+  ['Interview Qs', TOPICS.reduce((a, t) => a + t.interviewQuestions.length, 0)],
+  ['Estimation drills', TOPICS.reduce((a, t) => a + t.envelopeQuestions.length, 0)],
+  ['Exam questions', TOPICS.reduce((a, t) => a + t.test.length, 0)],
+  ['Challenges', COMPANY_QUESTIONS.length],
+];
+
+const NUMERALS = ['I', 'II', 'III'];
+const STATUS_LABEL: Record<TopicStatus, string> = { passed: 'Covered', 'in-progress': 'In progress', new: 'Not started' };
+const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Wrap every case-insensitive occurrence of `q` in <mark>. */
 function Hl({ text, q }: { text: string; q: string }) {
@@ -67,6 +50,8 @@ interface TopicView {
   topic: Topic;
   /** section indexes to show */
   sections: number[];
+  /** the filter matched individual sections, so list them without being asked */
+  showSections: boolean;
 }
 
 export default function ContentsPage() {
@@ -92,13 +77,15 @@ export default function ContentsPage() {
           .map((_, i) => i)
           .filter((i) => (!onlyUnread || !read.has(i)) && (!onlyViz || VIZ_SECTIONS.get(t.id)?.[i]))
           .filter((i) => topicHit || t.sections[i].heading.toLowerCase().includes(q));
-        if (sections.length || (topicHit && !onlyUnread && !onlyViz)) views.push({ topic: t, sections });
+        if (sections.length || (topicHit && !onlyUnread && !onlyViz))
+          views.push({ topic: t, sections, showSections: sections.length > 0 && (onlyUnread || onlyViz || !topicHit) });
       }
       return { ph, views, total: TOPICS.filter((x) => x.phase === ph.id).length };
     }).filter((x) => x.total > 0);
   }, [p.sections, q, onlyUnread, onlyViz]);
 
   const matchCount = phases.reduce((a, x) => a + x.views.length, 0);
+  const covered = TOPICS.filter((t) => topicStatus(p, t) === 'passed').length;
 
   // deep links (/contents#phase-<id>) jump straight there; the jump bar scrolls smoothly itself
   const jumping = useRef(false);
@@ -114,141 +101,154 @@ export default function ContentsPage() {
   const jump = (id: string) => {
     jumping.current = true;
     nav({ hash: id }, { replace: true });
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
   };
   const setAll = (value: boolean) => setCollapsed(Object.fromEntries(PHASES.map((ph) => [ph.id, value])));
 
   return (
-    <div className="page contents-page">
-      <header className="contents-head">
-        <div className="eyebrow">
-          <ListTree size={14} aria-hidden /> Contents
-        </div>
-        <h1>Everything in this course</h1>
-        <ul className="contents-totals" aria-label="Course totals">
-          <li>
-            <strong>{TOTALS.phases}</strong> phases
-          </li>
-          <li>
-            <strong>{TOTALS.topics}</strong> topics
-          </li>
-          <li>
-            <strong>{TOTALS.sections}</strong> sections
-          </li>
-          <li>
-            <strong>{TOTALS.animations}</strong> animations
-          </li>
-          <li>
-            <strong>{TOTALS.labs}</strong> code labs
-          </li>
-          <li>
-            <strong>{TOTALS.interview}</strong> interview Qs
-          </li>
-          <li>
-            <strong>{TOTALS.drills}</strong> estimation drills
-          </li>
-          <li>
-            <strong>{TOTALS.exam}</strong> exam questions
-          </li>
-          <li>
-            <strong>{TOTALS.exercises}</strong> coding exercises
-          </li>
-          <li>
-            <strong>{TOTALS.company}</strong> challenges
-          </li>
-        </ul>
+    <div className="page syllabus">
+      <header className="syl-head">
+        <p className="eyebrow">Course index</p>
+        <h1>Syllabus</h1>
+        <p className="lead">
+          Every phase, topic and section of the course. {covered} of {TOPICS.length} topics covered so far. Search it, filter it, or open any tab
+          of a topic directly.
+        </p>
+        <dl className="syl-totals" aria-label="Course totals">
+          {TOTALS.map(([label, n]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{n}</dd>
+            </div>
+          ))}
+        </dl>
       </header>
 
-      <div className="contents-tools card">
-        <label className="contents-search">
+      <div className="syl-tools" role="search">
+        <label className="syl-search">
           <Search size={16} aria-hidden />
-          <input
-            type="search"
-            placeholder="Search topics, tags and section headings…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search the contents"
-          />
+          <span className="sr-only">Search the syllabus</span>
+          <input type="search" placeholder="Search topics, tags and section headings" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <div className="row wrap gap-s">
+        <div className="syl-filters">
           <button type="button" className={`chip ${onlyUnread ? 'on' : ''}`} aria-pressed={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
             Only unread
           </button>
           <button type="button" className={`chip ${onlyViz ? 'on' : ''}`} aria-pressed={onlyViz} onClick={() => setOnlyViz((v) => !v)}>
-            <CirclePlay size={14} aria-hidden /> Only with animations
+            Only with animations
           </button>
-          <span className="spacer" />
-          <button type="button" className="link-btn small" onClick={() => setAll(false)}>
-            Expand all
-          </button>
-          <span className="muted small">·</span>
-          <button type="button" className="link-btn small" onClick={() => setAll(true)}>
-            Collapse all
-          </button>
+          <span className="syl-filters-end">
+            <span className="syl-match" aria-live="polite">
+              {filtering ? `${matchCount} topic${matchCount === 1 ? '' : 's'} match` : ''}
+            </span>
+            <button type="button" className="link-btn small" onClick={() => setAll(false)} disabled={filtering}>
+              Expand all
+            </button>
+            <button type="button" className="link-btn small" onClick={() => setAll(true)} disabled={filtering}>
+              Collapse all
+            </button>
+          </span>
         </div>
-        {filtering && (
-          <div className="small muted" aria-live="polite">
-            {matchCount} topic{matchCount === 1 ? '' : 's'} match
-          </div>
-        )}
       </div>
 
-      <nav className="jump-bar" aria-label="Jump to phase">
-        {phases.map(({ ph, views }) => (
-          <button key={ph.id} type="button" className={`chip ${views.length ? '' : 'dim'}`} onClick={() => jump(`phase-${ph.id}`)} title={ph.title}>
-            {ph.number}. {shortTitle(ph.title)}
-          </button>
-        ))}
-        <button type="button" className="chip" onClick={() => jump('phase-tools')}>
-          Practice &amp; tools
-        </button>
+      <nav className="syl-jump" aria-label="Jump to phase">
+        <ol>
+          {phases.map(({ ph, views }) => (
+            <li key={ph.id}>
+              <button
+                type="button"
+                className={filtering && !views.length ? 'dim' : ''}
+                onClick={() => jump(`phase-${ph.id}`)}
+                title={ph.title}
+                aria-label={`Phase ${ph.number}: ${ph.title}`}
+              >
+                {pad(ph.number)}
+              </button>
+            </li>
+          ))}
+          <li>
+            <button type="button" className="syl-jump-tools" onClick={() => jump('phase-tools')}>
+              Practice &amp; tools
+            </button>
+          </li>
+        </ol>
       </nav>
 
-      {phases.map(({ ph, views, total }) => {
-        if (filtering && !views.length) return null;
-        const passed = TOPICS.filter((t) => t.phase === ph.id && topicStatus(p, t) === 'passed').length;
-        const open = filtering || !collapsed[ph.id];
+      {filtering && matchCount === 0 && <p className="syl-empty">Nothing in the syllabus matches. Try a shorter search or clear the filters.</p>}
+
+      {LEVELS.map((lv, li) => {
+        const lvPhases = phases.filter((x) => x.ph.level === lv.id && (!filtering || x.views.length));
+        if (!lvPhases.length) return null;
+        const lvTopics = TOPICS.filter((t) => PHASES.some((ph) => ph.level === lv.id && ph.id === t.phase));
+        const lvPassed = lvTopics.filter((t) => topicStatus(p, t) === 'passed').length;
         return (
-          <section key={ph.id} id={`phase-${ph.id}`} className="contents-phase">
-            <button
-              type="button"
-              className="contents-phase-head"
-              aria-expanded={open}
-              onClick={() => setCollapsed((c) => ({ ...c, [ph.id]: !c[ph.id] }))}
-            >
-              <span className="phase-num">{ph.number}</span>
-              <span className="contents-phase-text">
-                <span className="contents-phase-title">
-                  <Hl text={ph.title} q={q} /> <span className={`level-badge ${ph.level}`}>{ph.level}</span>
-                </span>
-                <span className="muted small">{ph.blurb}</span>
+          <section key={lv.id} className="syl-level" aria-labelledby={`syl-level-${lv.id}`}>
+            <header className="syl-level-head">
+              <span className="syl-numeral" aria-hidden>
+                {NUMERALS[li]}
               </span>
-              <span className="contents-phase-meter">
-                <ProgressRing value={(passed / Math.max(1, total)) * 100} size={34} tone="good" />
-                <span className="small muted">
-                  {passed}/{total} passed
-                </span>
+              <div>
+                <h2 id={`syl-level-${lv.id}`}>
+                  <span className="sr-only">Level {NUMERALS[li]}: </span>
+                  {lv.title}
+                </h2>
+                <p>{lv.blurb}</p>
+              </div>
+              <span className="syl-count">
+                {lvPassed}/{lvTopics.length} covered
               </span>
-              <ChevronDown size={18} aria-hidden className={`chev-icon ${open ? '' : 'closed'}`} />
-            </button>
-            <AnimatePresence initial={false}>
-              {open && (
-                <motion.div
-                  key="body"
-                  className="collapse-anim"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: 'easeOut' }}
-                >
-                  <div className="contents-topics">
-                    {views.map((v) => (
-                      <TopicEntry key={v.topic.id} view={v} q={q} />
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            </header>
+
+            {lvPhases.map(({ ph, views, total }) => {
+              const passed = TOPICS.filter((t) => t.phase === ph.id && topicStatus(p, t) === 'passed').length;
+              const open = filtering || !collapsed[ph.id];
+              return (
+                <section key={ph.id} id={`phase-${ph.id}`} className="syl-phase" aria-labelledby={`syl-ph-${ph.id}`}>
+                  <h3 className="syl-phase-h">
+                    <button
+                      type="button"
+                      id={`syl-ph-${ph.id}`}
+                      className="syl-phase-head"
+                      aria-expanded={open}
+                      aria-controls={`syl-body-${ph.id}`}
+                      disabled={filtering}
+                      onClick={() => setCollapsed((c) => ({ ...c, [ph.id]: !c[ph.id] }))}
+                    >
+                      <span className="syl-phase-num">{pad(ph.number)}</span>
+                      <span className="syl-phase-text">
+                        <span className="syl-phase-title">
+                          <Hl text={ph.title} q={q} />
+                        </span>
+                        <span className="syl-phase-blurb">
+                          <Hl text={ph.blurb} q={q} />
+                        </span>
+                      </span>
+                      <span className={`syl-phase-count ${passed === total ? 'done' : ''}`}>
+                        {passed}/{total}
+                        <span className="sr-only"> topics covered</span>
+                      </span>
+                      <ChevronDown size={16} aria-hidden className={`syl-chev ${open ? 'open' : ''}`} />
+                    </button>
+                  </h3>
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <motion.div
+                        key="body"
+                        id={`syl-body-${ph.id}`}
+                        className="collapse-anim"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                      >
+                        <TopicTable phaseNumber={ph.number} phaseTitle={ph.title} views={views} q={q} quietHead={ph.id !== lvPhases[0].ph.id} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </section>
+              );
+            })}
           </section>
         );
       })}
@@ -258,69 +258,147 @@ export default function ContentsPage() {
   );
 }
 
-function TopicEntry({ view, q }: { view: TopicView; q: string }) {
+function TopicTable({
+  phaseNumber,
+  phaseTitle,
+  views,
+  q,
+  quietHead,
+}: {
+  phaseNumber: number;
+  phaseTitle: string;
+  views: TopicView[];
+  q: string;
+  /** column heads are printed once per level; later tables keep them for screen readers only */
+  quietHead: boolean;
+}) {
+  return (
+    <table className="syl-table">
+      <caption className="sr-only">Topics in phase {phaseNumber}, {phaseTitle}</caption>
+      <thead className={quietHead ? 'quiet' : undefined}>
+        <tr>
+          <th scope="col" className="c-num">
+            No.
+          </th>
+          <th scope="col" className="c-topic">
+            Topic
+          </th>
+          <th scope="col" className="c-sec">
+            Read
+          </th>
+          <th scope="col" className="c-status">
+            Status
+          </th>
+          <th scope="col" className="c-best">
+            Best exam
+          </th>
+          <th scope="col" className="c-open">
+            Open
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {views.map((v) => (
+          <TopicRow key={v.topic.id} view={v} phaseNumber={phaseNumber} q={q} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: number; q: string }) {
   const p = useProgress();
-  const { topic: t, sections } = view;
+  const { topic: t, sections, showSections } = view;
+  const [expanded, setExpanded] = useState(false);
   const read = new Set(p.sections[t.id] ?? []);
+  const readCount = t.sections.filter((_, i) => read.has(i)).length;
   const st = topicStatus(p, t);
   const rec = p.tests[t.id];
   const capstones = projectsForTopic(t.id).length;
-  const companyQs = COMPANY_BY_TOPIC.get(t.id) ?? 0;
   const base = `/topic/${t.id}`;
-  const chips: { label: string; to: string; count?: number; icon: typeof CodeXml }[] = [
-    { label: codeLabLabel(t), to: `${base}?tab=code`, count: t.codeChallenges.length, icon: CodeXml },
-    { label: 'Interview Qs', to: `${base}?tab=interview`, count: t.interviewQuestions.length, icon: MessagesSquare },
-    { label: 'Estimation', to: `${base}?tab=envelope`, count: t.envelopeQuestions.length, icon: Calculator },
-    { label: 'Cheat Sheet', to: `${base}?tab=cheat`, icon: FileText },
-    { label: 'Exam', to: `${base}?tab=exam`, count: t.test.length, icon: GraduationCap },
-    { label: 'Capstone', to: `${base}?tab=capstone`, count: capstones, icon: Hammer },
-    { label: 'Challenges', to: '/challenges', count: companyQs, icon: Building },
+  const open = showSections || expanded;
+  const listed = showSections ? sections : t.sections.map((_, i) => i);
+  const links: { label: string; long: string; to: string; show: boolean }[] = [
+    { label: 'Read', long: 'Read', to: `${base}?tab=learn`, show: true },
+    { label: 'Lab', long: codeLabLabel(t), to: `${base}?tab=code`, show: t.codeChallenges.length > 0 },
+    { label: 'Questions', long: 'Interview questions', to: `${base}?tab=interview`, show: t.interviewQuestions.length > 0 },
+    { label: 'Estimation', long: 'Estimation', to: `${base}?tab=envelope`, show: t.envelopeQuestions.length > 0 },
+    { label: 'Exam', long: 'Exam', to: `${base}?tab=exam`, show: t.test.length > 0 },
+    { label: 'Capstone', long: 'Capstone', to: `${base}?tab=capstone`, show: capstones > 0 },
   ];
   return (
-    <article className={`contents-topic st-${st}`}>
-      <div className="contents-topic-head">
-        <ProgressRing value={topicCompletion(p, t)} size={38} tone={st === 'passed' ? 'good' : undefined} label={`${topicCompletion(p, t)}% complete`}>
-          <span className="ring-pct">{topicCompletion(p, t)}</span>
-        </ProgressRing>
-        <div className="contents-topic-title">
-          <Link to={base}>
+    <>
+      <tr className={`syl-row st-${st}`}>
+        <td className="c-num">
+          {phaseNumber}.{t.order}
+        </td>
+        <th scope="row" className="c-topic">
+          <Link to={base} className="syl-topic-link">
             <Hl text={t.title} q={q} />
           </Link>
-          <div className="muted small">
+          <span className="syl-topic-sub">
             <Hl text={t.subtitle} q={q} />
-          </div>
-        </div>
-        <span className={`status-pill st-${st}`}>
-          {st === 'passed' ? `Passed · ${rec?.best}%` : st === 'in-progress' ? (rec ? `In progress · best ${rec.best}%` : 'In progress') : 'New'}
-        </span>
-      </div>
-      {sections.length > 0 && (
-        <ol className="contents-sections">
-          {sections.map((i) => (
-            <li key={i} className={read.has(i) ? 'read' : ''}>
-              <Link to={`${base}?tab=learn&s=${i}`}>
-                <span className="sec-num">{i + 1}</span>
-                <span className="sec-title">
-                  <Hl text={t.sections[i].heading} q={q} />
-                </span>
-                {VIZ_SECTIONS.get(t.id)?.[i] && <CirclePlay size={15} className="sec-viz" aria-label="Has an interactive animation" />}
-                {read.has(i) && <Check size={15} className="sec-read" aria-label="Read" />}
-              </Link>
-            </li>
-          ))}
-        </ol>
+          </span>
+        </th>
+        <td className="c-sec">
+          <button
+            type="button"
+            className="syl-sec-toggle"
+            aria-expanded={open}
+            disabled={showSections}
+            onClick={() => setExpanded((e) => !e)}
+            aria-label={`${readCount} of ${t.sections.length} sections read. ${open ? 'Hide' : 'Show'} sections of ${t.title}`}
+          >
+            <span>
+              {readCount}/{t.sections.length}
+            </span>
+            <ChevronDown size={13} aria-hidden className={`syl-chev ${open ? 'open' : ''}`} />
+          </button>
+        </td>
+        <td className="c-status">
+          <span className={`syl-status ${st}`}>
+            <span className="syl-tick" aria-hidden />
+            {STATUS_LABEL[st]}
+          </span>
+        </td>
+        <td className={`c-best ${st === 'passed' ? 'good' : ''}`}>
+          {rec ? `${rec.best}%` : <span className="syl-none">—<span className="sr-only">no attempt</span></span>}
+        </td>
+        <td className="c-open">
+          <ul className="syl-links">
+            {links
+              .filter((l) => l.show)
+              .map((l) => (
+                <li key={l.label}>
+                  <Link to={l.to} aria-label={`${l.long}: ${t.title}`}>
+                    {l.label}
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </td>
+      </tr>
+      {open && listed.length > 0 && (
+        <tr className="syl-secrow">
+          <td colSpan={6}>
+            <ol className="syl-sections">
+              {listed.map((i) => (
+                <li key={i} className={read.has(i) ? 'read' : ''}>
+                  <Link to={`${base}?tab=learn&s=${i}`}>
+                    <span className="syl-sec-num">§{i + 1}</span>
+                    <span className="syl-sec-title">
+                      <Hl text={t.sections[i].heading} q={q} />
+                    </span>
+                    {VIZ_SECTIONS.get(t.id)?.[i] && <CirclePlay size={14} className="syl-sec-viz" aria-label="Has an interactive animation" />}
+                    {read.has(i) && <Check size={14} className="syl-sec-read" aria-label="Read" />}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </td>
+        </tr>
       )}
-      <div className="contents-chips">
-        {chips
-          .filter((c) => c.count === undefined || c.count > 0)
-          .map(({ label, to, count, icon: Icon }) => (
-            <Link key={label} to={to} className="chip">
-              <Icon size={13} aria-hidden /> {label}
-              {count !== undefined && <span className="chip-count">{count}</span>}
-            </Link>
-          ))}
-      </div>
-    </article>
+    </>
   );
 }
 
@@ -330,56 +408,72 @@ function ToolsGroup() {
   const companyDone = COMPANY_QUESTIONS.filter((q) => p.company[q.id]).length;
   const weak = weakTopics(p, TOPICS).length;
   const mistakes = TOPICS.reduce((a, t) => a + currentlyWrong(p, t).length, 0);
+  const rows: { to: string; title: string; desc: string; state: string; flag?: boolean }[] = [
+    {
+      to: '/challenges',
+      title: 'Architecture challenges',
+      desc: `${COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges with a mock-interview timer.`,
+      state: unlocked ? `${companyDone}/${COMPANY_QUESTIONS.length} done` : `Locked · ${remaining.length} exam${remaining.length === 1 ? '' : 's'} to pass`,
+    },
+    {
+      to: '/weak-areas',
+      title: 'Weak areas',
+      desc: 'The sections behind the questions you miss.',
+      state: weak ? `${weak} topic${weak === 1 ? '' : 's'} need work` : 'Nothing yet',
+      flag: weak > 0,
+    },
+    {
+      to: '/practice',
+      title: 'Practice',
+      desc: 'A timed drill of every exam question you currently get wrong.',
+      state: `${mistakes} question${mistakes === 1 ? '' : 's'}`,
+      flag: mistakes > 0,
+    },
+    {
+      to: '/settings',
+      title: 'Settings',
+      desc: 'Pass mark, exam timing, study-first lock, theme, coach tips, guide and reset.',
+      state: '',
+    },
+  ];
   return (
-    <section id="phase-tools" className="contents-phase">
-      <div className="contents-phase-head static">
-        <span className="phase-num">
-          <Dumbbell size={16} aria-hidden />
+    <section id="phase-tools" className="syl-tools-group" aria-labelledby="syl-tools-title">
+      <header className="syl-level-head">
+        <span className="syl-numeral" aria-hidden>
+          §
         </span>
-        <span className="contents-phase-text">
-          <span className="contents-phase-title">Practice &amp; tools</span>
-          <span className="muted small">Everything outside the topic pages.</span>
-        </span>
-      </div>
-      <div className="tools-grid">
-        <Link to="/challenges" className={`tool-card ${unlocked ? '' : 'locked'}`}>
-          {unlocked ? <LockOpen size={20} aria-hidden /> : <Lock size={20} aria-hidden />}
-          <strong>Architecture Challenges</strong>
-          <span className="small muted">
-            {COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges with a timer.{' '}
-            {unlocked ? `${companyDone}/${COMPANY_QUESTIONS.length} done.` : `Locked: pass ${remaining.length} more topic exam${remaining.length === 1 ? '' : 's'}.`}
-          </span>
-        </Link>
-        {PROJECTS.length > 0 && <div className="tool-card">
-          <Hammer size={20} aria-hidden />
-          <strong>Capstone projects ({PROJECTS.length})</strong>
-          <span className="small muted">Real code projects in this repo, judged by tests.</span>
-          <ul className="tool-list">
-            {PROJECTS.map((pr) => (
-              <li key={pr.id}>
-                <Link to={`/topic/${pr.topics[0]}?tab=capstone`}>{pr.title}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>}
-        <Link to="/weak-areas" className="tool-card">
-          <Target size={20} aria-hidden />
-          <strong>Weak Areas</strong>
-          <span className="small muted">
-            The sections behind the questions you miss{weak ? `: ${weak} topic${weak === 1 ? '' : 's'} need work.` : '. Nothing yet.'}
-          </span>
-        </Link>
-        <Link to="/practice" className="tool-card">
-          <Dumbbell size={20} aria-hidden />
-          <strong>Practice</strong>
-          <span className="small muted">A timed drill of every exam question you currently get wrong ({mistakes}).</span>
-        </Link>
-        <Link to="/settings" className="tool-card">
-          <Settings size={20} aria-hidden />
-          <strong>Settings</strong>
-          <span className="small muted">Pass mark, exam timing, study-first lock, theme, coach tips, guide and reset.</span>
-        </Link>
-      </div>
+        <div>
+          <h2 id="syl-tools-title">Practice &amp; tools</h2>
+          <p>Everything outside the topic pages.</p>
+        </div>
+      </header>
+      <ul className="syl-toollist">
+        {rows.map((r) => (
+          <li key={r.to}>
+            <Link to={r.to} className="syl-tool-title">
+              {r.title}
+            </Link>
+            <span className="syl-tool-desc">{r.desc}</span>
+            <span className={`syl-tool-state ${r.flag ? 'flag' : ''}`}>{r.state}</span>
+          </li>
+        ))}
+        {PROJECTS.length > 0 && (
+          <li>
+            <span className="syl-tool-title">Capstone projects</span>
+            <span className="syl-tool-desc">
+              Real code projects in this repo, judged by tests:{' '}
+              {PROJECTS.map((pr, i) => (
+                <span key={pr.id}>
+                  {i > 0 && ', '}
+                  <Link to={`/topic/${pr.topics[0]}?tab=capstone`}>{pr.title}</Link>
+                </span>
+              ))}
+              .
+            </span>
+            <span className="syl-tool-state">{PROJECTS.length}</span>
+          </li>
+        )}
+      </ul>
     </section>
   );
 }

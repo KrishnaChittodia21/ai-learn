@@ -1,4 +1,4 @@
-# GenAI Learn
+# GenAI Field Manual
 
 A React app that takes you from zero to confident in Generative AI: **less reading, more practising**.
 
@@ -21,6 +21,12 @@ A React app that takes you from zero to confident in Generative AI: **less readi
 - **Architecture Challenges:** end-to-end GenAI system design problems. They unlock once every exam is passed.
 
 Progress is saved in your browser's localStorage. You can reset it in Settings.
+
+## Design
+
+The UI is the *Field Manual*: warm paper (or a "night desk" dark theme), ink-black type, hairline rules instead of boxes and shadows, and one signal colour (vermilion, switchable in Settings) for actions and "you are here". Headlines use Newsreader, reading text Inter, and labels and numbering JetBrains Mono.
+
+Styles live in `src/styles/`: `tokens.css` (all colours, type, spacing and radii), `base.css` (elements and primitives), `shell.css` (masthead and footer), and one file per screen. Use the tokens rather than raw values.
 
 ## Adding content
 

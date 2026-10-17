@@ -17,7 +17,6 @@ import { topicSteps } from '../lib/nextStep';
 import { StudyPath, type TabId } from '../components/StudyPath';
 import { CoachTip } from '../components/CoachTip';
 import { NextUp } from '../components/NextUp';
-import { ProgressRing } from '../components/ProgressRing';
 import { BookOpen, CirclePlay, Crosshair, Library, Lightbulb, Lock } from 'lucide-react';
 import { PREREQS } from '../content/prereqs';
 import { projectsForTopic } from '../content/projects';
@@ -117,36 +116,47 @@ export default function TopicPage() {
 
   return (
     <div className="page">
-      <div className="topic-head">
-        <div className="eyebrow row gap-s wrap">
-          {phase && <span className={`level-badge ${phase.level}`}>{phase.level}</span>}
-          <span>
-            Phase {phase?.number} · {phase?.title}
-          </span>
-        </div>
+      <header className="chapter-head">
+        <p className="chapter-meta">
+          {phase && (
+            <>
+              <span className={`level-mark ${phase.level}`}>{phase.level}</span>
+              <Link to={`/contents#phase-${phase.id}`}>
+                Phase {String(phase.number).padStart(2, '0')} · {phase.title}
+              </Link>
+              <span aria-hidden>·</span>
+              <span>
+                Topic {phase.number}.{topic.order}
+              </span>
+            </>
+          )}
+        </p>
         <h1>{topic.title}</h1>
         <p className="lead">{topic.subtitle}</p>
-        <div className="row wrap gap-s">
-          <Badge>{topic.estimatedMinutes} min</Badge>
-          {topic.tags.slice(0, 8).map((t) => (
-            <Badge key={t} tone="tag">
-              {t}
-            </Badge>
-          ))}
-        </div>
-        {topic.sources.length > 0 && <p className="muted small">Sources: {topic.sources.join(' · ')}</p>}
-        <div className="topic-progress">
-          <ProgressRing value={pct} size={34} tone={pct === 100 ? 'good' : undefined} />
-          <ProgressBar value={pct} tone={pct === 100 ? 'good' : undefined} />
-          <span className="small muted">{pct}% complete</span>
-        </div>
-        {topic.phase === 'miscellaneous' && (
-          <div className="card info small misc-note">
-            This is a <strong>question bank</strong> with short refreshers. Every concept below has a <strong>Learn this first</strong>{' '}
-            link to its full lesson; study that if the refresher isn&apos;t enough.
+        <dl className="chapter-facts">
+          <div>
+            <dt>Time</dt>
+            <dd>{topic.estimatedMinutes} min</dd>
           </div>
-        )}
-      </div>
+          <div>
+            <dt>Sections</dt>
+            <dd>{topic.sections.length}</dd>
+          </div>
+          <div>
+            <dt>Exam</dt>
+            <dd>{topic.test.length} questions</dd>
+          </div>
+          <div className="chapter-progress">
+            <dt>Progress</dt>
+            <dd>
+              <span className="chapter-progress-bar" aria-hidden>
+                <span style={{ width: `${pct}%` }} />
+              </span>
+              {topicStatus(p, topic) === 'passed' ? 'Covered' : `${pct}%`}
+            </dd>
+          </div>
+        </dl>
+      </header>
 
       <StudyPath steps={steps} active={tab} locks={locks} onSelect={selectTab} />
 
@@ -162,6 +172,29 @@ export default function TopicPage() {
       {tab === 'capstone' && <CapstoneTab projects={capstones} />}
       {tab === 'exam' && (locks.exam ? <StudyLock topic={topic} what="exam" /> : <ExamIntro topic={topic} />)}
       {!(tab === 'interview' && locks.interview) && !(tab === 'exam' && locks.exam) && nextUp}
+
+      {(topic.sources.length > 0 || topic.tags.length > 0) && (
+        <footer className="chapter-colophon">
+          {topic.tags.length > 0 && (
+            <p>
+              <span className="label">Keywords</span>
+              {topic.tags.join(' · ')}
+            </p>
+          )}
+          {topic.sources.length > 0 && (
+            <details>
+              <summary>
+                <span className="label">Sources</span> {topic.sources.length} references used for this topic
+              </summary>
+              <ol>
+                {topic.sources.map((src) => (
+                  <li key={src}>{src}</li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </footer>
+      )}
 
       <div className="pager">
         {prev ? <Link to={`/topic/${prev.id}`}>← {prev.title}</Link> : <span />}
@@ -191,9 +224,9 @@ function LearnTab({ topic }: { topic: Topic }) {
   }, [target]);
   return (
     <div className="learn">
-      <nav className="toc card">
+      <nav className="toc" aria-label="Sections in this topic">
         <div className="toc-title">
-          In this topic <span className="muted small">({read.size}/{topic.sections.length} read)</span>
+          Contents <span className="toc-count">{read.size}/{topic.sections.length} read</span>
         </div>
         <ol>
           {topic.sections.map((s, i) => (
@@ -203,17 +236,21 @@ function LearnTab({ topic }: { topic: Topic }) {
                 className="link-btn"
                 onClick={() => document.getElementById(`s-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               >
-                {s.heading}
+                <span className="toc-num">{i + 1}</span>
+                <span className="toc-text">{s.heading.split(' — ')[0]}</span>
               </button>
             </li>
           ))}
         </ol>
       </nav>
+      <div className="learn-body">
       {topic.sections.map((s, i) => (
-        <article key={s.heading} id={`s-${i}`} className="card section">
+        <article key={s.heading} id={`s-${i}`} className="section">
           <div className="section-head">
             <h2>
-              <span className="section-num">{i + 1}</span> {s.heading}
+              <span className="section-num">{i + 1}</span>
+              {s.heading.split(' — ')[0]}
+              {s.heading.includes(' — ') && <span className="section-sub">{s.heading.split(' — ').slice(1).join(' — ')}</span>}
             </h2>
             <label className="check">
               <input type="checkbox" checked={read.has(i)} onChange={() => toggleSectionRead(topic.id, i)} /> Read
@@ -255,6 +292,7 @@ function LearnTab({ topic }: { topic: Topic }) {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -600,7 +638,7 @@ export function StudyLock({ topic, what }: { topic: Topic; what: string }) {
         <Lock size={20} aria-hidden className="inline-icon" /> Study first
       </h2>
       <p>
-        The {what} for this topic unlock once you&apos;ve read every Learn section, so the questions always come after the explanation.
+        This topic&apos;s {what} opens once you&apos;ve read every section, so the questions always come after the explanation.
       </p>
       <div className="topic-progress">
         <ProgressBar value={(read.size / Math.max(1, topic.sections.length)) * 100} />

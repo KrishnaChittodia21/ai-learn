@@ -1,0 +1,120 @@
+/* ======================================================================
+   GenAI Field Manual: design tokens.
+   Direction: an engineering field manual crossed with a lab notebook. Warm paper, ink-black
+   type, hairline rules instead of shadows, one signal colour (vermilion) for action and
+   "you are here". Serif for headlines (Newsreader), Inter for reading, JetBrains Mono for
+   labels, numbering and code. Every colour is light-dark(<paper>, <night desk>).
+   Variable names are shared with legacy styles so un-migrated rules pick up the palette.
+   ====================================================================== */
+:root {
+  /* surfaces: paper → sheet → tint */
+  --bg: light-dark(#f4f1ea, #14130f);
+  --surface: light-dark(#fbfaf6, #1b1a15);
+  --surface-2: light-dark(#ece7dc, #24221c);
+  --border: light-dark(#d9d2c3, #37342b);
+  --rule-strong: light-dark(#1a1915, #eee8da);
+
+  /* ink */
+  --text: light-dark(#1a1915, #eee8da);
+  --text-2: light-dark(#4a463d, #c4bdae);
+  --muted: light-dark(#6b6558, #9b9484);
+
+  /* signal: vermilion */
+  --accent: light-dark(#b5381a, #f07a4a);
+  --accent-soft: light-dark(#f5e2d7, #3a2117);
+  --accent-text: light-dark(#ffffff, #14130f);
+
+  /* semantics: moss / ochre / brick */
+  --good: light-dark(#3d6a2a, #93c47d);
+  --good-soft: light-dark(#e3eada, #1f2a19);
+  --warn: light-dark(#875900, #e3b04b);
+  --warn-soft: light-dark(#f2e6cb, #2e2611);
+  --bad: light-dark(#a1281c, #ef7d70);
+  --bad-soft: light-dark(#f4ddd8, #34191a);
+
+  --code-bg: light-dark(#efebe2, #191813);
+  --highlight: light-dark(#fbe7a6, #4a3d12);
+
+  /* legacy aliases: flat, no gradients, no glow */
+  --brand-1: var(--accent);
+  --brand-2: var(--accent);
+  --brand-3: var(--accent);
+  --btn-from: var(--accent);
+  --btn-to: var(--accent);
+  --brand-gradient: linear-gradient(var(--accent), var(--accent));
+  --btn-gradient: linear-gradient(var(--accent), var(--accent));
+  --text-gradient: linear-gradient(var(--text), var(--text));
+  --ring: var(--accent);
+  --glow: none;
+
+  /* elevation: rules first; real shadow only for floating layers */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 1px 0 var(--border), 0 18px 48px -18px rgb(20 19 15 / 0.35);
+  --shadow: none;
+
+  /* shape: almost square; a manual, not a toy */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius: var(--radius-md);
+
+  /* type */
+  --serif: 'Newsreader Variable', 'Iowan Old Style', Georgia, serif;
+  --sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --display: var(--serif);
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.1875rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2.125rem;
+  --fs-3xl: 3rem;
+
+  /* space: 4px base */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 72px;
+
+  /* layout */
+  --measure: 68ch;
+  --page-max: 1240px;
+  --gutter: clamp(16px, 4vw, 40px);
+  --masthead: 56px;
+  --topbar: var(--masthead);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 160ms;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --shadow-lg: 0 1px 0 var(--border), 0 24px 60px -18px rgb(0 0 0 / 0.7);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --shadow-lg: 0 1px 0 var(--border), 0 24px 60px -18px rgb(0 0 0 / 0.7);
+}
+
+/* signal colour alternatives (Settings → Signal colour); vermilion is the base above */
+:root[data-accent='pine'] {
+  --accent: light-dark(#1f6b55, #5fc4a0);
+  --accent-soft: light-dark(#dcebe4, #15291f);
+}
+:root[data-accent='ink'] {
+  --accent: light-dark(#1f4e86, #7aa7e0);
+  --accent-soft: light-dark(#dde6f1, #172437);
+}
+:root[data-accent='plum'] {
+  --accent: light-dark(#7a2b6b, #d38ac4);
+  --accent-soft: light-dark(#eedcea, #2e1a2a);
+}

@@ -1,11 +1,11 @@
 import { useId, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 
-/** Circular progress indicator (SVG stroke), animated when the value changes. */
+/** Thin ink ring progress indicator (SVG stroke), animated when the value changes. */
 export function ProgressRing({
   value,
   size = 40,
-  stroke = 4,
+  stroke = 3,
   tone,
   label,
   gradient,
@@ -51,7 +51,7 @@ export function ProgressRing({
           r={r}
           strokeWidth={stroke}
           fill="none"
-          strokeLinecap="round"
+          strokeLinecap="butt"
           strokeDasharray={c}
           initial={{ strokeDashoffset: c }}
           animate={{ strokeDashoffset: c - (v / 100) * c }}

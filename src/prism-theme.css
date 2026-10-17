@@ -1,35 +1,35 @@
 /* Prism tokens (light + dark) */
 :root {
-  --tk-comment: #8a8983;
-  --tk-keyword: #7c3aed;
-  --tk-string: #15803d;
-  --tk-number: #b45309;
-  --tk-function: #2563eb;
-  --tk-class: #0e7490;
-  --tk-operator: #5c5b57;
-  --tk-property: #be185d;
+  --tk-comment: #857f72;
+  --tk-keyword: #a3311a;
+  --tk-string: #4a6b2a;
+  --tk-number: #8a5a00;
+  --tk-function: #1f4e86;
+  --tk-class: #5c3d7a;
+  --tk-operator: #5a554b;
+  --tk-property: #7a2b55;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --tk-comment: #6b6f7a;
-    --tk-keyword: #c4a7ff;
-    --tk-string: #86efac;
-    --tk-number: #fcd34d;
-    --tk-function: #93c5fd;
-    --tk-class: #67e8f9;
-    --tk-operator: #b4b5bc;
-    --tk-property: #f9a8d4;
+    --tk-comment: #8a8474;
+    --tk-keyword: #f08a62;
+    --tk-string: #a9c98f;
+    --tk-number: #e3b04b;
+    --tk-function: #8fb6e8;
+    --tk-class: #c9a6e0;
+    --tk-operator: #b8b1a2;
+    --tk-property: #e3a0bf;
   }
 }
 :root[data-theme='dark'] {
-  --tk-comment: #6b6f7a;
-  --tk-keyword: #c4a7ff;
-  --tk-string: #86efac;
-  --tk-number: #fcd34d;
-  --tk-function: #93c5fd;
-  --tk-class: #67e8f9;
-  --tk-operator: #b4b5bc;
-  --tk-property: #f9a8d4;
+  --tk-comment: #8a8474;
+  --tk-keyword: #f08a62;
+  --tk-string: #a9c98f;
+  --tk-number: #e3b04b;
+  --tk-function: #8fb6e8;
+  --tk-class: #c9a6e0;
+  --tk-operator: #b8b1a2;
+  --tk-property: #e3a0bf;
 }
 .token.comment,
 .token.prolog,

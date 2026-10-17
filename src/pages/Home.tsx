@@ -1,40 +1,42 @@
 import { useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Building2, Dumbbell, ListTree, Lock, LockOpen, Map as MapIcon, Target } from 'lucide-react';
-import { COMPANY_QUESTIONS, PHASES, TOPICS, TOPIC_BY_ID } from '../content';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
+import { COMPANY_QUESTIONS, LEVEL_OF_TOPIC, LEVELS, TOPICS, TOPIC_BY_ID } from '../content';
 import { useProgress } from '../lib/progress';
-import { companyUnlocked, topicCompletion, topicStatus } from '../lib/stats';
+import { topicStatus } from '../lib/stats';
 import { weakTopics } from '../lib/weak';
 import { nextStep } from '../lib/nextStep';
-import { phaseProgress } from '../lib/metrics';
 import { getUiPrefs } from '../lib/uiPrefs';
-import { ProgressRing } from '../components/ProgressRing';
-import { CountUp } from '../components/CountUp';
-import { NextStepCard } from '../components/NextStepCard';
-import { JourneyMap } from '../components/JourneyMap';
-import { ChartCard } from '../components/charts/ChartCard';
-import { BarList } from '../components/charts/BarList';
+import { studyStreak } from '../lib/streak';
+import { CourseMap } from '../components/CourseMap';
 import { DashboardMetrics } from '../components/DashboardMetrics';
 import { WeakReattempt } from '../components/WeakReattempt';
-import { shortTitle } from '../lib/labels';
+import { companyUnlocked, topicCompletion } from '../lib/stats';
 
 const TAB_LABELS: Record<string, string> = {
-  learn: 'Learn',
+  learn: 'Read',
   code: 'Code Lab',
-  interview: 'Interview Qs',
+  interview: 'Questions',
   envelope: 'Estimation',
-  cheat: 'Cheat Sheet',
+  cheat: 'Cheat sheet',
   capstone: 'Capstone',
   exam: 'Exam',
 };
 const PAGE_LABELS: Record<string, string> = {
-  '/contents': 'Contents',
-  '/weak-areas': 'Weak Areas',
-  '/challenges': 'Architecture Challenges',
+  '/contents': 'Syllabus',
+  '/weak-areas': 'Weak areas',
+  '/challenges': 'Architecture challenges',
   '/settings': 'Settings',
 };
+const NUMERALS = ['I', 'II', 'III'];
+const HOW = [
+  ['Read', 'a short section: one idea, a worked example, the trade-offs and how to fix each weakness.'],
+  ['Do', 'the coding exercise and the quick check under every section.'],
+  ['Drill', 'the Code Lab, scenario questions and estimation problems.'],
+  ['Pass', 'the timed exam. The topic is then marked covered on your course map.'],
+];
 
-/** Human label for a saved location, e.g. "Caching patterns · Learn · §3 Write-through". */
+/** Human label for a saved location, e.g. "Embeddings · Read · §3 Vector Similarity". */
 function describeLocation(loc: string): string | null {
   const [path, search = ''] = loc.split('?');
   const params = new URLSearchParams(search);
@@ -44,8 +46,8 @@ function describeLocation(loc: string): string | null {
     if (!t) return null;
     const tab = params.get('tab') ?? 'learn';
     const s = Number(params.get('s'));
-    const sec = tab === 'learn' && params.has('s') && t.sections[s] ? ` · §${s + 1} ${t.sections[s].heading}` : '';
-    return `${t.title} · ${TAB_LABELS[tab] ?? 'Learn'}${sec}`;
+    const sec = tab === 'learn' && params.has('s') && t.sections[s] ? ` · §${s + 1} ${t.sections[s].heading.split(' — ')[0]}` : '';
+    return `${t.title} · ${TAB_LABELS[tab] ?? 'Read'}${sec}`;
   }
   const cq = /^\/challenges\/(.+)$/.exec(path);
   if (cq) return COMPANY_QUESTIONS.find((q) => q.id === cq[1])?.title ?? null;
@@ -54,10 +56,7 @@ function describeLocation(loc: string): string | null {
 
 export default function Home() {
   const p = useProgress();
-  const navigate = useNavigate();
-  const { unlocked, remaining } = companyUnlocked(p, TOPICS);
   const weak = useMemo(() => weakTopics(p, TOPICS), [p]);
-  const readiness = TOPICS.length ? Math.round(TOPICS.reduce((a, t) => a + topicCompletion(p, t), 0) / TOPICS.length) : 0;
   const weakest = weak.find((w) => w.sections.length > 0);
   const step = nextStep(p, TOPICS, {
     companyTotal: COMPANY_QUESTIONS.length,
@@ -66,101 +65,166 @@ export default function Home() {
   const last = getUiPrefs().lastStudyLocation;
   const lastLabel = last ? describeLocation(last) : null;
   const resume = last && lastLabel && last !== step.href ? { href: last, label: lastLabel } : null;
-  const journey = PHASES.map((phase) => {
-    const topics = TOPICS.filter((t) => t.phase === phase.id);
-    return { phase, total: topics.length, passed: topics.filter((t) => topicStatus(p, t) === 'passed').length };
-  }).filter((x) => x.total > 0);
-  const phases = phaseProgress(p, TOPICS, PHASES);
-  const openPhase = (id: string) => navigate(`/contents#phase-${id}`);
+  const fresh = step.kind === 'start';
   const firstUntested = TOPICS.find((t) => !p.tests[t.id]) ?? TOPICS[0];
   const firstExamHref = firstUntested ? `/topic/${firstUntested.id}?tab=exam` : '/contents';
   const answered = Object.keys(p.mcq).length;
-  const wrongCount = Object.values(p.mcq).filter((r) => !r.lastCorrect).length;
+  const mistakes = Object.values(p.mcq).filter((r) => !r.lastCorrect).length;
+  const streak = studyStreak(p.activityDays);
+  const passed = TOPICS.filter((t) => topicStatus(p, t) === 'passed').length;
+  const inProgress = TOPICS.filter((t) => topicStatus(p, t) === 'in-progress')
+    .map((t) => ({ t, pct: topicCompletion(p, t) }))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 4);
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="page dashboard">
-      <section className="hero hero-grad">
-        <div className="aurora" aria-hidden>
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="hero-copy">
-          <div className="eyebrow">Dashboard</div>
-          <h1 className="hero-title">Your GenAI roadmap</h1>
-          <p className="lead">
-            {TOPICS.length} topics across {PHASES.length} phases, from <strong>Beginner</strong> (LLMs, prompting, embeddings) through{' '}
-            <strong>Intermediate</strong> (RAG, retrieval, evaluation) to <strong>Advanced</strong> (agents, MCP, fine-tuning, LLMOps,
-            architecture). Every section is short and comes with a worked example, a coding exercise and a quick check. Pass each
-            topic&apos;s exam to mark it covered, then take on the AI architecture challenges.
-          </p>
-          <Link to="/contents" className="btn">
-            Browse all contents <ArrowRight size={16} aria-hidden />
-          </Link>
-        </div>
-        <div className="hero-ring">
-          <ProgressRing gradient value={readiness} size={148} stroke={12} tone={readiness === 100 ? 'good' : undefined} label={`Readiness ${readiness}%`}>
-            <span className="hero-ring-value">
-              <CountUp value={readiness} suffix="%" />
-            </span>
-            <span className="hero-ring-label">readiness</span>
-          </ProgressRing>
-        </div>
-      </section>
-
-      <NextStepCard step={step} resume={resume} />
-
-      <section className="dash-section" aria-labelledby="roadmap-title">
-        <div className="dash-section-head">
-          <div>
-            <div className="eyebrow">
-              <MapIcon size={14} aria-hidden /> Your roadmap
-            </div>
-            <h2 id="roadmap-title">Beginner → Intermediate → Advanced</h2>
+    <div className="page today">
+      <section className="today-lead" aria-labelledby="today-title">
+        <div className="today-main">
+          <p className="eyebrow">{today}</p>
+          <p className="today-kicker">{fresh ? 'Start here' : 'Your next step'}</p>
+          <h1 id="today-title">{step.title}</h1>
+          <p className="lead">{step.detail}</p>
+          <div className="row wrap today-actions">
+            <Link className="btn btn-primary btn-lg" to={step.href}>
+              {fresh ? 'Open the first lesson' : step.kind === 'read' ? 'Continue reading' : 'Go'} <ArrowRight size={17} aria-hidden />
+            </Link>
+            {step.secondary && (
+              <Link className="btn btn-lg" to={step.secondary.href}>
+                {step.secondary.title}
+              </Link>
+            )}
           </div>
-          <Link to="/contents" className="small">
-            All topics in Contents →
-          </Link>
+          {resume && (
+            <Link className="resume-line" to={resume.href}>
+              <span className="resume-label">Where you left off</span>
+              <span className="resume-target">{resume.label}</span>
+              <ArrowRight size={15} aria-hidden />
+            </Link>
+          )}
         </div>
-        <JourneyMap phases={journey} unlocked={unlocked} onSelect={openPhase} />
-        <ChartCard
-          title="Progress by phase"
-          subtitle="Share of each phase's exams passed, in course order. Select a phase to open it in Contents."
-          table={{ columns: ['Phase', 'Exams passed', 'Topics', 'Share'], rows: phases.map((ph) => [`${ph.number}. ${ph.title}`, ph.passed, ph.total, `${ph.pct}%`]) }}
-        >
-          <BarList
-            seriesLabel="Exams passed per phase"
-            rows={phases.map((ph) => ({
-              id: ph.id,
-              label: `${ph.number}. ${shortTitle(ph.title)}`,
-              value: ph.pct,
-              display: `${ph.passed}/${ph.total}`,
-              detail: `${ph.pct}% of ${ph.title} passed`,
-              href: `/contents#phase-${ph.id}`,
-            }))}
-          />
-        </ChartCard>
+
+        <aside className="ledger" aria-label="Your record">
+          <h2 className="ledger-title">Record</h2>
+          <table className="ledger-levels">
+            <caption className="sr-only">Topics covered per level</caption>
+            <tbody>
+              {LEVELS.map((lv, i) => {
+                const ts = TOPICS.filter((t) => LEVEL_OF_TOPIC.get(t.id) === lv.id);
+                const done = ts.filter((t) => topicStatus(p, t) === 'passed').length;
+                return (
+                  <tr key={lv.id}>
+                    <th scope="row">
+                      <span className="ledger-numeral">{NUMERALS[i]}</span> {lv.title}
+                    </th>
+                    <td className="ledger-bar" aria-hidden>
+                      <span style={{ width: `${ts.length ? (done / ts.length) * 100 : 0}%` }} />
+                    </td>
+                    <td className="ledger-num">
+                      {done}/{ts.length}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <dl className="ledger-facts">
+            <div>
+              <dt>Topics covered</dt>
+              <dd>
+                {passed}
+                <span>/{TOPICS.length}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Exam answers</dt>
+              <dd>{answered}</dd>
+            </div>
+            <div>
+              <dt>
+                <Link to="/practice">Mistakes to drill</Link>
+              </dt>
+              <dd className={mistakes ? 'flag' : ''}>{mistakes}</dd>
+            </div>
+            <div>
+              <dt>Study streak</dt>
+              <dd>
+                {streak}
+                <span> day{streak === 1 ? '' : 's'}</span>
+              </dd>
+            </div>
+          </dl>
+        </aside>
       </section>
 
-      <DashboardMetrics p={p} topics={TOPICS} readiness={readiness} companyTotal={COMPANY_QUESTIONS.length} companyUnlocked={unlocked} firstExamHref={firstExamHref} />
+      {fresh && (
+        <section className="how" aria-labelledby="how-title">
+          <h2 id="how-title" className="section-rule-title">
+            How this manual works
+          </h2>
+          <ol className="how-steps">
+            {HOW.map(([verb, rest], i) => (
+              <li key={verb}>
+                <span className="how-num">{String(i + 1).padStart(2, '0')}</span>
+                <p>
+                  <strong>{verb}</strong> {rest}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {inProgress.length > 0 && (
+        <section className="open-topics" aria-labelledby="open-title">
+          <h2 id="open-title" className="section-rule-title">
+            On your desk
+          </h2>
+          <ul className="open-list">
+            {inProgress.map(({ t, pct }) => (
+              <li key={t.id}>
+                <Link to={`/topic/${t.id}`}>{t.title}</Link>
+                <span className="open-bar" aria-hidden>
+                  <span style={{ width: `${pct}%` }} />
+                </span>
+                <span className="open-pct">{pct}%</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="course" aria-labelledby="course-title">
+        <div className="section-rule-head">
+          <h2 id="course-title" className="section-rule-title">
+            The course
+          </h2>
+          <p className="muted small">
+            {LEVELS.length} levels · 16 phases · {TOPICS.length} topics. Pass a topic&apos;s exam to fill its tick.{' '}
+            <Link to="/contents">Open the syllabus</Link>
+          </p>
+        </div>
+        <CourseMap p={p} />
+      </section>
 
       <WeakReattempt weak={weak} answered={answered} passMark={p.settings.passMark} firstExamHref={firstExamHref} />
 
-      <nav className="dash-practice" aria-label="Practice">
-        <span className="label">Practice</span>
-        <Link to="/practice" className="chip-link">
-          <Dumbbell size={15} aria-hidden /> Mistakes drill{wrongCount > 0 && <span className="side-badge">{wrongCount}</span>}
-        </Link>
-        <Link to="/weak-areas" className="chip-link">
-          <Target size={15} aria-hidden /> Weak Areas
-        </Link>
-        <Link to="/challenges" className="chip-link" title={unlocked ? 'Architecture Challenges unlocked' : `Pass ${remaining.length} more exam${remaining.length === 1 ? '' : 's'} to unlock`}>
-          {unlocked ? <LockOpen size={15} aria-hidden /> : <Lock size={15} aria-hidden />} <Building2 size={15} aria-hidden /> Architecture challenges ({COMPANY_QUESTIONS.length})
-        </Link>
-        <Link to="/contents" className="chip-link">
-          <ListTree size={15} aria-hidden /> Contents
-        </Link>
-      </nav>
+      <section className="record" aria-labelledby="record-title">
+        <div className="section-rule-head">
+          <h2 id="record-title" className="section-rule-title">
+            Study record
+          </h2>
+        </div>
+        <DashboardMetrics
+          p={p}
+          topics={TOPICS}
+          readiness={Math.round(TOPICS.reduce((a, t) => a + topicCompletion(p, t), 0) / Math.max(1, TOPICS.length))}
+          companyTotal={COMPANY_QUESTIONS.length}
+          companyUnlocked={companyUnlocked(p, TOPICS).unlocked}
+          firstExamHref={firstExamHref}
+        />
+      </section>
     </div>
   );
 }
