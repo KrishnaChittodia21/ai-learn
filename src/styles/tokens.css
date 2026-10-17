@@ -1,69 +1,147 @@
 /* ======================================================================
-   GenAI Field Manual: design tokens.
-   Direction: an engineering field manual crossed with a lab notebook. Warm paper, ink-black
-   type, hairline rules instead of shadows, one signal colour (vermilion) for action and
-   "you are here". Serif for headlines (Newsreader), Inter for reading, JetBrains Mono for
-   labels, numbering and code. Every colour is light-dark(<paper>, <night desk>).
-   Variable names are shared with legacy styles so un-migrated rules pick up the palette.
+   GenAI.learn: "Neural Aurora" design tokens.
+   Deep-space void, aurora gradients, frosted glass. Light is the signal: things glow when they
+   are done (Ion), shimmer when they are next (Aurora), and stay dark until you reach them.
+   Space Grotesk for display/headings/numbers, Manrope for reading, JetBrains Mono for labels/code.
+
+   Theming: every colour token is light-dark(<Daylight>, <Night>). Dark is the default
+   (color-scheme: dark); the light theme only flips color-scheme. Because light-dark() resolves
+   where a token is USED, any subtree with `color-scheme: dark` (e.g. code blocks, .na-dark)
+   gets the night values of every token automatically: a "dark island".
+   Token NAMES are a contract shared by every screen stylesheet, src/viz and src/components/charts.
    ====================================================================== */
 :root {
-  /* surfaces: paper → sheet → tint */
-  --bg: light-dark(#f4f1ea, #14130f);
-  --surface: light-dark(#fbfaf6, #1b1a15);
-  --surface-2: light-dark(#ece7dc, #24221c);
-  --border: light-dark(#d9d2c3, #37342b);
-  --rule-strong: light-dark(#1a1915, #eee8da);
+  color-scheme: dark;
 
-  /* ink */
-  --text: light-dark(#1a1915, #eee8da);
-  --text-2: light-dark(#4a463d, #c4bdae);
-  --muted: light-dark(#6b6558, #9b9484);
+  /* ---------- raw palette (night) ---------- */
+  --c-void: #05040d;
+  --c-deep: #0b0920;
+  --c-nebula: light-dark(#5b3fd6, #b6a4ff);
+  --c-pulsar: light-dark(#c42a78, #ff8fc8);
+  --c-ion: light-dark(#06728a, #7ef0ff);
+  --c-solar: light-dark(#a85208, #ffc58f);
+  --c-success: light-dark(#2f7a12, #b8ff8a);
+  --c-error: light-dark(#c4204f, #ff6b8a);
+  /* the vivid orb hues: decoration only, never text */
+  --c-violet: #7c5cff;
+  --c-pink: #ff4fa3;
+  --c-cyan: #22e4ff;
 
-  /* signal: vermilion */
-  --accent: light-dark(#b5381a, #f07a4a);
-  --accent-soft: light-dark(#f5e2d7, #3a2117);
-  --accent-text: light-dark(#ffffff, #14130f);
+  /* ---------- surfaces: void → deep glass → raised ---------- */
+  --bg: light-dark(#f7f5ff, #05040d);
+  --surface: light-dark(#ffffff, #0f0d26);
+  --surface-2: light-dark(#efecfb, #1a1738);
+  --border: light-dark(rgb(91 64 214 / 0.16), rgb(214 206 255 / 0.12));
+  --rule-strong: light-dark(rgb(60 40 150 / 0.34), rgb(214 206 255 / 0.3));
 
-  /* semantics: moss / ochre / brick */
-  --good: light-dark(#3d6a2a, #93c47d);
-  --good-soft: light-dark(#e3eada, #1f2a19);
-  --warn: light-dark(#875900, #e3b04b);
-  --warn-soft: light-dark(#f2e6cb, #2e2611);
-  --bad: light-dark(#a1281c, #ef7d70);
-  --bad-soft: light-dark(#f4ddd8, #34191a);
+  /* ---------- ink ---------- */
+  --text: light-dark(#17123a, #f4f2ff);
+  --text-2: light-dark(#4a4472, #c9c4ea);
+  --muted: light-dark(#5f5987, #9a94c4);
 
-  --code-bg: light-dark(#efebe2, #191813);
-  --highlight: light-dark(#fbe7a6, #4a3d12);
+  /* ---------- signal: Nebula (actions, "you are here") ---------- */
+  --accent: var(--c-nebula);
+  --accent-2: var(--c-pulsar);
+  --accent-soft: light-dark(rgb(91 63 214 / 0.1), rgb(124 92 255 / 0.2));
+  --accent-text: light-dark(#ffffff, #0b0820);
 
-  /* legacy aliases: flat, no gradients, no glow */
-  --brand-1: var(--accent);
-  --brand-2: var(--accent);
-  --brand-3: var(--accent);
-  --btn-from: var(--accent);
-  --btn-to: var(--accent);
-  --brand-gradient: linear-gradient(var(--accent), var(--accent));
-  --btn-gradient: linear-gradient(var(--accent), var(--accent));
-  --text-gradient: linear-gradient(var(--text), var(--text));
+  /* ---------- semantics: success lime / solar / error ---------- */
+  --good: var(--c-success);
+  --good-soft: light-dark(rgb(63 154 20 / 0.12), rgb(184 255 138 / 0.12));
+  --warn: var(--c-solar);
+  --warn-soft: light-dark(rgb(226 113 29 / 0.12), rgb(255 197 143 / 0.13));
+  --bad: var(--c-error);
+  --bad-soft: light-dark(rgb(224 51 100 / 0.1), rgb(255 107 138 / 0.13));
+  --info: var(--c-ion);
+  --info-soft: light-dark(rgb(10 165 194 / 0.1), rgb(126 240 255 / 0.12));
+
+  /* code stays dark in both themes (pair with --code-text; .code/.editor/pre are dark islands) */
+  --code-bg: #120f2e;
+  --code-text: #ece9ff;
+  --code-inline-bg: light-dark(rgb(91 63 214 / 0.08), rgb(255 255 255 / 0.07));
+  --highlight: light-dark(#ffd9ec, #4b2a6e);
+
+  /* progress donut / status ramp: covered glows ion, in-progress pulsar, not started dim */
+  --st-covered: var(--c-ion);
+  --st-progress: var(--c-pulsar);
+  --st-new: light-dark(rgb(60 40 150 / 0.14), rgb(255 255 255 / 0.14));
+
+  /* ---------- gradients ---------- */
+  --grad-aurora: linear-gradient(100deg, #b6a4ff, #ff8fc8 50%, #ffc58f);
+  --grad-aurora-deep: linear-gradient(100deg, #7c5cff, #e0338a 50%, #e2711d);
+  --act-1: light-dark(#6d4ff0, #b6a4ff);
+  --act-2: light-dark(#cf2a7e, #ff8fc8);
+  --act-3: light-dark(#c25410, #ffc58f);
+  --grad-action: linear-gradient(100deg, var(--act-1), var(--act-2) 50%, var(--act-3));
+  --grad-ion: linear-gradient(90deg, #7c5cff, #7ef0ff);
+  --grad-conic: conic-gradient(from var(--a, 0deg), #7c5cff, #ff4fa3, #ffb86b, #22e4ff, #7c5cff);
+  --gtext-1: light-dark(#2a1f6b, #ffffff);
+  --gtext-2: light-dark(#6d3cf0, #c9b8ff);
+  --gtext-3: light-dark(#d6287f, #ff8fc8);
+  --gtext-4: light-dark(#0891b2, #7ef0ff);
+  --gtext: linear-gradient(100deg, var(--gtext-1) 0%, var(--gtext-2) 30%, var(--gtext-3) 55%, var(--gtext-4) 80%, var(--gtext-1) 100%);
+
+  /* ---------- glass ---------- */
+  --glass-1: light-dark(rgb(255 255 255 / 0.86), rgb(255 255 255 / 0.07));
+  --glass-2: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.02));
+  --glass-bg: linear-gradient(160deg, var(--glass-1), var(--glass-2));
+  --glass-border: light-dark(rgb(91 64 214 / 0.14), rgb(255 255 255 / 0.09));
+  --glass-blur: 18px;
+  --shadow-c: light-dark(rgb(60 40 150 / 0.28), rgb(0 0 0 / 0.6));
+  --glass-shadow: 0 20px 56px -26px var(--shadow-c);
+  --tint: light-dark(rgb(60 40 150 / 0.05), rgb(255 255 255 / 0.04));
+  --tint-2: light-dark(rgb(60 40 150 / 0.09), rgb(255 255 255 / 0.08));
+
+  /* ---------- glow ---------- */
+  --glow-ion-c: light-dark(rgb(10 165 194 / 0.35), rgb(126 240 255 / 0.55));
+  --glow-pulsar-c: light-dark(rgb(224 51 138 / 0.3), rgb(255 79 163 / 0.6));
+  --glow-action-c: light-dark(rgb(124 92 255 / 0.5), rgb(255 79 163 / 0.7));
+  --glow-action-hover-c: light-dark(rgb(124 92 255 / 0.65), rgb(255 79 163 / 0.9));
+  --glow-ion: 0 0 16px var(--glow-ion-c);
+  --glow-pulsar: 0 0 18px var(--glow-pulsar-c);
+  --glow-action: 0 10px 36px -10px var(--glow-action-c);
+  --glow-action-hover: 0 18px 50px -12px var(--glow-action-hover-c);
+
+  /* ---------- ambient orbs ---------- */
+  --orb-violet: light-dark(rgb(124 92 255 / 0.22), rgb(124 92 255 / 0.5));
+  --orb-pink: light-dark(rgb(255 79 163 / 0.14), rgb(255 79 163 / 0.34));
+  --orb-cyan: light-dark(rgb(34 228 255 / 0.14), rgb(34 228 255 / 0.2));
+  --stars-opacity: 0.5;
+
+  /* ---------- legacy aliases (kept: used across screens) ---------- */
+  --brand-1: var(--c-nebula);
+  --brand-2: var(--c-pulsar);
+  --brand-3: var(--c-ion);
+  --btn-from: var(--act-1);
+  --btn-to: var(--act-3);
+  --brand-gradient: var(--grad-aurora);
+  --btn-gradient: var(--grad-action);
+  --text-gradient: var(--gtext);
   --ring: var(--accent);
-  --glow: none;
+  --glow: var(--glow-action);
 
-  /* elevation: rules first; real shadow only for floating layers */
-  --shadow-sm: none;
-  --shadow-md: none;
-  --shadow-lg: 0 1px 0 var(--border), 0 18px 48px -18px rgb(20 19 15 / 0.35);
-  --shadow: none;
+  /* ---------- elevation ---------- */
+  --shadow-sm: 0 1px 2px light-dark(rgb(60 40 150 / 0.08), rgb(0 0 0 / 0.4));
+  --shadow-md: var(--glass-shadow);
+  --shadow-lg: 0 28px 70px -20px light-dark(rgb(60 40 150 / 0.35), rgb(0 0 0 / 0.8));
+  --shadow: var(--shadow-sm);
 
-  /* shape: almost square; a manual, not a toy */
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  /* ---------- shape: soft and round ---------- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
   --radius: var(--radius-md);
 
-  /* type */
-  --serif: 'Newsreader Variable', 'Iowan Old Style', Georgia, serif;
-  --sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --display: var(--serif);
+  /* ---------- type ---------- */
+  --f-display: 'Space Grotesk Variable', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --f-body: 'Manrope Variable', 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --f-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: var(--f-display); /* legacy name: headings now use Space Grotesk */
+  --display: var(--f-display);
+  --sans: var(--f-body);
+  --mono: var(--f-mono);
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
   --fs-md: 1rem;
@@ -72,7 +150,7 @@
   --fs-2xl: 2.125rem;
   --fs-3xl: 3rem;
 
-  /* space: 4px base */
+  /* ---------- space: 4px base ---------- */
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
@@ -82,39 +160,56 @@
   --s-7: 48px;
   --s-8: 72px;
 
-  /* layout */
+  /* ---------- layout ---------- */
   --measure: 68ch;
-  --page-max: 1240px;
+  --page-max: 1280px;
   --gutter: clamp(16px, 4vw, 40px);
-  --masthead: 56px;
+  --masthead: 76px; /* sticky glass header incl. its top inset: use for scroll-margin / sticky offsets */
   --topbar: var(--masthead);
+  --tabbar: 0px; /* height of the mobile bottom tab bar (set ≤900px) */
 
+  /* ---------- motion ---------- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur: 160ms;
-  color-scheme: light;
+  --dur: 180ms;
+  --dur-slow: 250ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-    --shadow-lg: 0 1px 0 var(--border), 0 24px 60px -18px rgb(0 0 0 / 0.7);
+/* Daylight: explicit choice, or 'system' (no data-theme) on a light OS */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --stars-opacity: 0;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --stars-opacity: 0;
   }
 }
-:root[data-theme='dark'] {
+/* force a subtree to night values (code blocks etc.) */
+.na-dark {
   color-scheme: dark;
-  --shadow-lg: 0 1px 0 var(--border), 0 24px 60px -18px rgb(0 0 0 / 0.7);
 }
 
-/* signal colour alternatives (Settings → Signal colour); vermilion is the base above */
+@media (max-width: 900px) {
+  :root {
+    --masthead: 64px;
+    --tabbar: 76px;
+  }
+}
+
+/* signal colour alternatives (Settings → Signal colour); vermilion id = Aurora Nebula default */
 :root[data-accent='pine'] {
-  --accent: light-dark(#1f6b55, #5fc4a0);
-  --accent-soft: light-dark(#dcebe4, #15291f);
+  /* Ion */
+  --accent: var(--c-ion);
+  --accent-soft: light-dark(rgb(10 165 194 / 0.1), rgb(126 240 255 / 0.16));
 }
 :root[data-accent='ink'] {
-  --accent: light-dark(#1f4e86, #7aa7e0);
-  --accent-soft: light-dark(#dde6f1, #172437);
+  /* Indigo */
+  --accent: light-dark(#3550c8, #9fb2ff);
+  --accent-soft: light-dark(rgb(53 80 200 / 0.1), rgb(159 178 255 / 0.18));
 }
 :root[data-accent='plum'] {
-  --accent: light-dark(#7a2b6b, #d38ac4);
-  --accent-soft: light-dark(#eedcea, #2e1a2a);
+  /* Pulsar */
+  --accent: var(--c-pulsar);
+  --accent-soft: light-dark(rgb(196 42 120 / 0.1), rgb(255 143 200 / 0.16));
 }

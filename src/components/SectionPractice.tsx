@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { CircleCheck, CircleX, FlaskConical, Lightbulb, Sparkles, ThumbsDown, ThumbsUp, Wrench } from 'lucide-react';
+import { Check, ChevronDown, FlaskConical, Lightbulb, X } from 'lucide-react';
 import type { ProsCons, QuickCheck, Section, SectionExercise } from '../types';
 import { setDraft, setFlag, useProgress } from '../lib/progress';
-import { Badge, CodeBlock, CodeEditor, Markdown } from './ui';
+import { CodeBlock, CodeEditor, Markdown } from './ui';
+import { normalizeLang } from '../lib/highlight';
 
 /** Practice-first extras rendered under every Learn section: worked example, pros/cons with fixes, a coding exercise and a quick check. */
 export function SectionPractice({ topicId, index, section }: { topicId: string; index: number; section: Section }) {
@@ -11,12 +12,10 @@ export function SectionPractice({ topicId, index, section }: { topicId: string; 
   return (
     <>
       {section.example && (
-        <div className="example-box">
-          <div className="example-title">
-            <Sparkles size={14} aria-hidden /> Worked example
-          </div>
+        <section className="tp-example" aria-label="Worked example">
+          <div className="tp-kicker ion">Worked example</div>
           <Markdown>{section.example}</Markdown>
-        </div>
+        </section>
       )}
       {section.prosCons && <ProsConsTable pc={section.prosCons} />}
       {section.exercise && <ExerciseCard id={`${id}-ex`} ex={section.exercise} />}
@@ -27,32 +26,28 @@ export function SectionPractice({ topicId, index, section }: { topicId: string; 
 
 function ProsConsTable({ pc }: { pc: ProsCons }) {
   return (
-    <div className="proscons">
-      <div className="proscons-col pros">
-        <div className="proscons-title">
-          <ThumbsUp size={14} aria-hidden /> Pros
-        </div>
+    <div className="tp-pc">
+      <section className="tp-pc-col tint-ion" aria-label="Pros">
+        <div className="tp-kicker ion">+ Pros</div>
         <ul>
           {pc.pros.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
-      </div>
-      <div className="proscons-col cons">
-        <div className="proscons-title">
-          <ThumbsDown size={14} aria-hidden /> Cons <span className="muted">→ how to overcome</span>
-        </div>
+      </section>
+      <section className="tp-pc-col tint-pulsar" aria-label="Cons and how to fix them">
+        <div className="tp-kicker pulsar">− Cons → how to fix</div>
         <ul>
           {pc.cons.map((c) => (
             <li key={c.con}>
-              <span>{c.con}</span>
-              <span className="fix">
-                <Wrench size={13} aria-hidden className="inline-icon" /> {c.fix}
+              {c.con}
+              <span className="tp-fix">
+                <span className="tp-fix-k">Fix →</span> {c.fix}
               </span>
             </li>
           ))}
         </ul>
-      </div>
+      </section>
     </div>
   );
 }
@@ -67,54 +62,80 @@ function ExerciseCard({ id, ex }: { id: string; ex: SectionExercise }) {
   const [open, setOpen] = useState(false);
   const [showSolution, setShowSolution] = useState(false);
   const done = !!p.cc[id];
+  const started = p.drafts[draftKey] !== undefined && p.drafts[draftKey] !== starter;
   return (
-    <div className={`exercise ${done ? 'done' : ''}`}>
-      <button type="button" className="exercise-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className="exercise-title">
-          <FlaskConical size={16} aria-hidden /> Try it: coding exercise
-        </span>
-        {done ? <Badge tone="good">Done</Badge> : <span className="small muted">{open ? 'Hide' : 'Open'}</span>}
-      </button>
-      {open && (
-        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="exercise-body">
-          <Markdown>{ex.prompt}</Markdown>
-          <div className="row between">
-            <span className="small muted">Write your solution here. It saves automatically.</span>
-            {starter && (
-              <button className="btn-ghost btn-xs" type="button" onClick={() => setDraft(draftKey, starter)}>
-                Reset
-              </button>
+    <div className={`gborder tp-ex-border ${done ? 'done' : ''}`}>
+      <section className={`gborder-in tp-ex ${open ? 'open' : ''}`} aria-label="Try it: coding exercise">
+        <button type="button" className="tp-ex-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <span className="tp-ex-title">
+            <FlaskConical size={18} aria-hidden className="tp-ex-icon" /> Try it · coding exercise
+          </span>
+          <span className="tp-ex-meta">
+            {done ? (
+              <span className="tp-ex-done">
+                <Check size={13} strokeWidth={3} aria-hidden /> solved
+              </span>
+            ) : (
+              <>
+                {normalizeLang(lang)}
+                {ex.hints.length > 0 && ` · ${ex.hints.length} hint${ex.hints.length === 1 ? '' : 's'}`}
+                {started && ' · draft saved'}
+              </>
             )}
-          </div>
-          <CodeEditor value={code} onChange={(v) => setDraft(draftKey, v)} language={lang} />
-          <div className="hints">
-            {ex.hints.slice(0, hints).map((h, i) => (
-              <div key={i} className="hint">
-                <Lightbulb size={15} aria-hidden className="inline-icon" /> <strong>Hint {i + 1}:</strong> {h}
+            <ChevronDown size={16} aria-hidden className="tp-ex-chev" />
+          </span>
+        </button>
+        <div className="tp-ex-body">
+          <Markdown>{ex.prompt}</Markdown>
+          {!open ? (
+            <div className="tp-ex-actions">
+              <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>
+                {started ? 'Continue your draft' : 'Open the editor'}
+              </button>
+            </div>
+          ) : (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="tp-ex-open">
+              <div className="tp-ex-bar">
+                <span>Write your solution here. It saves automatically.</span>
+                {starter && (
+                  <button className="btn-ghost btn-xs" type="button" onClick={() => setDraft(draftKey, starter)}>
+                    Reset
+                  </button>
+                )}
               </div>
-            ))}
-            <div className="row gap-s wrap">
-              {hints < ex.hints.length && (
-                <button className="btn btn-sm" type="button" onClick={() => setHints((h) => h + 1)}>
-                  Hint {hints + 1}/{ex.hints.length}
-                </button>
+              <CodeEditor value={code} onChange={(v) => setDraft(draftKey, v)} language={lang} />
+              {hints > 0 && (
+                <div className="hints">
+                  {ex.hints.slice(0, hints).map((h, i) => (
+                    <div key={i} className="hint">
+                      <Lightbulb size={15} aria-hidden className="inline-icon" /> <strong>Hint {i + 1}:</strong> {h}
+                    </div>
+                  ))}
+                </div>
               )}
-              <button className="btn btn-sm" type="button" onClick={() => setShowSolution((s) => !s)}>
-                {showSolution ? 'Hide solution' : 'Show solution'}
-              </button>
-              <button className={`btn btn-sm ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('cc', id, !done)}>
-                {done ? 'Mark not done' : 'Mark as done'}
-              </button>
-            </div>
-          </div>
-          {showSolution && (
-            <div className="solution">
-              <CodeBlock snippet={ex.solution} />
-              {ex.explanation && <Markdown>{ex.explanation}</Markdown>}
-            </div>
+              <div className="tp-ex-actions">
+                {hints < ex.hints.length && (
+                  <button className="btn btn-sm" type="button" onClick={() => setHints((h) => h + 1)}>
+                    Hint {hints + 1} / {ex.hints.length}
+                  </button>
+                )}
+                <button className="btn btn-sm" type="button" onClick={() => setShowSolution((s) => !s)}>
+                  {showSolution ? 'Hide solution' : 'Show solution'}
+                </button>
+                <button className={`btn btn-sm tp-ex-solve ${done ? '' : 'btn-primary'}`} type="button" onClick={() => setFlag('cc', id, !done)}>
+                  {done ? 'Mark not solved' : 'Mark as solved'}
+                </button>
+              </div>
+              {showSolution && (
+                <div className="solution">
+                  <CodeBlock snippet={ex.solution} />
+                  {ex.explanation && <Markdown>{ex.explanation}</Markdown>}
+                </div>
+              )}
+            </motion.div>
           )}
-        </motion.div>
-      )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -127,10 +148,10 @@ function QuickCheckCard({ id, qc }: { id: string; qc: QuickCheck }) {
   const answered = picked !== null;
   const right = picked === qc.correct;
   return (
-    <div className="quickcheck">
-      <div className="quickcheck-title">Quick check</div>
-      <p className="quickcheck-q">{qc.question}</p>
-      <div className="quickcheck-options" role="radiogroup" aria-label={qc.question}>
+    <section className="tp-qc" aria-label="Quick check">
+      <div className="tp-kicker solar">Quick check</div>
+      <p className="tp-qc-q">{qc.question}</p>
+      <div className="tp-qc-options" role="radiogroup" aria-label={qc.question}>
         {qc.options.map((o, i) => {
           const state = !answered ? '' : i === qc.correct ? 'correct' : i === picked ? 'wrong' : 'dim';
           return (
@@ -144,21 +165,24 @@ function QuickCheckCard({ id, qc }: { id: string; qc: QuickCheck }) {
               whileTap={answered ? undefined : { scale: 0.98 }}
               onClick={() => setDraft(key, String(i))}
             >
-              <span className="qc-letter">{String.fromCharCode(65 + i)}</span> {o}
-              {state === 'correct' && <CircleCheck size={16} aria-hidden className="qc-icon" />}
-              {state === 'wrong' && <CircleX size={16} aria-hidden className="qc-icon" />}
+              <span className="qc-letter">{String.fromCharCode(65 + i)}</span>
+              <span className="qc-text">{o}</span>
+              {state === 'correct' && <Check size={20} strokeWidth={2.6} aria-hidden className="qc-icon" />}
+              {state === 'wrong' && <X size={20} strokeWidth={2.6} aria-hidden className="qc-icon" />}
             </motion.button>
           );
         })}
       </div>
       {answered && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`qc-feedback ${right ? 'good' : 'bad'}`} aria-live="polite">
-          <strong>{right ? 'Correct.' : 'Not quite.'}</strong> <Markdown>{qc.explanation}</Markdown>
+        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className={`qc-feedback ${right ? 'good' : 'bad'}`} aria-live="polite">
+          <div className="qc-feedback-text">
+            <strong>{right ? 'Correct.' : 'Not quite.'}</strong> <Markdown>{qc.explanation}</Markdown>
+          </div>
           <button type="button" className="btn-ghost btn-xs" onClick={() => setDraft(key, '')}>
             Try again
           </button>
         </motion.div>
       )}
-    </div>
+    </section>
   );
 }

@@ -1,5 +1,5 @@
-// Celebrations: a "milestone" slip in the toaster plus one small, restrained burst of paper squares in the
-// manual's own inks (lazy-loaded, skipped for reduced motion).
+// Celebrations: a "milestone" toast plus one small, restrained burst of sparks in the aurora palette
+// (nebula, pulsar, ion, solar; lazy-loaded, skipped for reduced motion).
 import { showToast } from './toast';
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -25,7 +25,7 @@ export function celebrate(title: string, detail?: string) {
   if (reducedMotion()) return;
   import('canvas-confetti')
     .then(({ default: confetti }) => {
-      const colors = ['--text', '--accent', '--good', '--border'].map(tokenHex).filter((c): c is string => !!c);
+      const colors = ['--c-nebula', '--c-pulsar', '--c-ion', '--c-solar'].map(tokenHex).filter((c): c is string => !!c);
       const narrow = window.innerWidth < 600;
       // one short burst rising from the toaster corner: a stamp, not a party
       confetti({
@@ -37,7 +37,7 @@ export function celebrate(title: string, detail?: string) {
         decay: 0.9,
         ticks: 130,
         scalar: 0.75,
-        shapes: ['square'],
+        shapes: ['circle', 'square'],
         origin: narrow ? { x: 0.5, y: 0.8 } : { x: 0.86, y: 0.8 },
         colors: colors.length ? colors : undefined,
         disableForReducedMotion: true,

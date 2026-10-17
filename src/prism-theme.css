@@ -1,35 +1,13 @@
-/* Prism tokens (light + dark) */
+/* Prism tokens: code blocks stay dark (--code-bg) in both themes, so one Aurora night palette. */
 :root {
-  --tk-comment: #857f72;
-  --tk-keyword: #a3311a;
-  --tk-string: #4a6b2a;
-  --tk-number: #8a5a00;
-  --tk-function: #1f4e86;
-  --tk-class: #5c3d7a;
-  --tk-operator: #5a554b;
-  --tk-property: #7a2b55;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --tk-comment: #8a8474;
-    --tk-keyword: #f08a62;
-    --tk-string: #a9c98f;
-    --tk-number: #e3b04b;
-    --tk-function: #8fb6e8;
-    --tk-class: #c9a6e0;
-    --tk-operator: #b8b1a2;
-    --tk-property: #e3a0bf;
-  }
-}
-:root[data-theme='dark'] {
-  --tk-comment: #8a8474;
-  --tk-keyword: #f08a62;
-  --tk-string: #a9c98f;
-  --tk-number: #e3b04b;
-  --tk-function: #8fb6e8;
-  --tk-class: #c9a6e0;
-  --tk-operator: #b8b1a2;
-  --tk-property: #e3a0bf;
+  --tk-comment: #8f89b8;
+  --tk-keyword: #ff8fc8;
+  --tk-string: #b8ff8a;
+  --tk-number: #ffc58f;
+  --tk-function: #7ef0ff;
+  --tk-class: #c9b8ff;
+  --tk-operator: #c9c4ea;
+  --tk-property: #b6a4ff;
 }
 .token.comment,
 .token.prolog,

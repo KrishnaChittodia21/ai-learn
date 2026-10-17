@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Compass, Database, Palette, Target, Timer } from 'lucide-react';
 import { resetProgress, setSettings, useProgress, type Accent, type Settings } from '../lib/progress';
 import { saveUiPrefs, useUiPrefs } from '../lib/uiPrefs';
 import { openTour } from '../lib/guide';
 
+// stored ids stay vermilion/pine/ink/plum so saved settings keep working; the names follow Neural Aurora
 const ACCENTS: { id: Accent; label: string }[] = [
-  { id: 'vermilion', label: 'Vermilion' },
-  { id: 'pine', label: 'Pine' },
-  { id: 'ink', label: 'Ink blue' },
-  { id: 'plum', label: 'Plum' },
+  { id: 'vermilion', label: 'Aurora' },
+  { id: 'pine', label: 'Ion' },
+  { id: 'ink', label: 'Indigo' },
+  { id: 'plum', label: 'Pulsar' },
 ];
 const THEMES: [Settings['theme'], string][] = [
   ['system', 'System'],
@@ -40,13 +41,16 @@ function Row({ label, htmlFor, labelId, help, children }: { label: string; htmlF
   );
 }
 
-function Group({ id, title, children, danger }: { id: string; title: string; children: ReactNode; danger?: boolean }) {
+function Group({ id, title, icon, children, danger }: { id: string; title: string; icon: ReactNode; children: ReactNode; danger?: boolean }) {
   return (
     <section className={`set-group ${danger ? 'danger' : ''}`} aria-labelledby={`set-${id}`}>
       <h2 id={`set-${id}`} className="set-group-title">
+        <span className="set-group-icon" aria-hidden>
+          {icon}
+        </span>
         {title}
       </h2>
-      {children}
+      <div className="set-rows">{children}</div>
     </section>
   );
 }
@@ -74,12 +78,14 @@ export default function SettingsPage() {
   return (
     <div className="page narrow settings">
       <header className="set-head">
-        <p className="eyebrow">Preferences</p>
-        <h1>Settings</h1>
+        <p className="set-kicker">Preferences</p>
+        <h1>
+          <span className="gtext">Settings</span>
+        </h1>
         <p className="lead">Saved in this browser and applied straight away.</p>
       </header>
 
-      <Group id="exams" title="Exams">
+      <Group id="exams" title="Exams" icon={<Timer size={16} />}>
         <Row label="Pass mark" htmlFor="set-pass" help="Applies to future attempts. Exams you already passed stay passed.">
           <div className="set-range">
             <input
@@ -113,7 +119,7 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="practice" title="Practice">
+      <Group id="practice" title="Practice" icon={<Target size={16} />}>
         <Row
           label="Study-first lock"
           labelId="set-lock-label"
@@ -137,7 +143,7 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="appearance" title="Appearance">
+      <Group id="appearance" title="Appearance" icon={<Palette size={16} />}>
         <Row label="Theme" labelId="set-theme-label">
           <Segmented labelledBy="set-theme-label" value={s.theme} options={THEMES} onChange={(v) => setSettings({ theme: v })} />
         </Row>
@@ -151,8 +157,8 @@ export default function SettingsPage() {
               const on = accent === a.id;
               return (
                 <button key={a.id} type="button" className={`set-swatch ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => setSettings({ accent: a.id })}>
-                  <span className={`accent-dot accent-dot-${a.id}`} aria-hidden>
-                    {on && <Check size={14} strokeWidth={3} />}
+                  <span className={`set-swatch-dot sw-${a.id}`} aria-hidden>
+                    {on && <Check size={15} strokeWidth={3} />}
                   </span>
                   <span className="set-swatch-label">{a.label}</span>
                 </button>
@@ -162,7 +168,7 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="guide" title="Guide">
+      <Group id="guide" title="Guide" icon={<Compass size={16} />}>
         <Row label="Coach tips" htmlFor="set-tips" help="A short tip the first time you open each kind of tab.">
           <input id="set-tips" className="set-switch" type="checkbox" checked={tipsOn} onChange={(e) => saveUiPrefs({ coachTips: e.target.checked })} />
         </Row>
@@ -187,7 +193,7 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="data" title="Data" danger>
+      <Group id="data" title="Data" icon={<Database size={16} />} danger>
         <Row label="Reset progress" help="Clears exam results, read markers, ratings and drafts. Settings are kept. This cannot be undone.">
           <button
             className="btn btn-danger btn-sm"

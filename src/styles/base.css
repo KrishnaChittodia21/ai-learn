@@ -1,60 +1,79 @@
 /* ======================================================================
-   Base elements and primitives (buttons, chips, badges, progress, rules).
+   Base elements and Neural Aurora primitives: glass, gradient text, buttons, chips, badges,
+   progress, dots, forms, motion utilities. Screen stylesheets build on these class names.
    ====================================================================== */
+@property --a {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 * {
   box-sizing: border-box;
+}
+html {
+  background: var(--bg);
 }
 html,
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
   font-size: 16px;
-  line-height: 1.6;
-  font-feature-settings: 'cv11', 'ss01';
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+body {
+  background: var(--bg);
+  min-height: 100vh;
+  overflow-x: clip;
 }
 ::selection {
   background: var(--highlight);
   color: var(--text);
 }
 a {
-  color: var(--text);
+  color: var(--accent);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
-  transition: text-decoration-color var(--dur), color var(--dur);
+  transition:
+    text-decoration-color var(--dur),
+    color var(--dur);
 }
 a:hover {
-  color: var(--accent);
+  color: var(--text);
   text-decoration-color: var(--accent);
 }
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 h1,
 h2,
 h3,
 h4 {
-  font-family: var(--serif);
-  font-weight: 560;
-  line-height: 1.15;
-  letter-spacing: -0.012em;
+  font-family: var(--display);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   margin: 0 0 0.45em;
-  font-optical-sizing: auto;
   text-wrap: balance;
+  color: var(--text);
 }
 h1 {
   font-size: clamp(2rem, 1.4rem + 2.4vw, var(--fs-3xl));
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
 }
 h2 {
   font-size: var(--fs-xl);
+  letter-spacing: -0.025em;
 }
 h3 {
   font-size: var(--fs-lg);
@@ -83,13 +102,12 @@ hr {
 }
 kbd {
   font-family: var(--mono);
-  font-size: 0.78em;
+  font-size: 0.75em;
   font-weight: 500;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  border-radius: var(--radius-sm);
-  padding: 0 5px;
-  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: var(--tint);
   color: var(--text-2);
 }
 .sr-only {
@@ -104,6 +122,14 @@ kbd {
   border: 0;
 }
 
+/* code blocks are dark islands in both themes: every token inside resolves to its night value */
+.code,
+.editor,
+.na-dark {
+  color-scheme: dark;
+  color: var(--code-text);
+}
+
 /* ---------- text utilities ---------- */
 .muted {
   color: var(--muted);
@@ -116,17 +142,28 @@ kbd {
 }
 .lead {
   font-size: var(--fs-lg);
-  line-height: 1.55;
+  line-height: 1.65;
   color: var(--text-2);
   max-width: var(--measure);
 }
-/* eyebrow / label: the manual's mono running heads */
+.display {
+  font-family: var(--display);
+  letter-spacing: -0.03em;
+}
+.num {
+  font-family: var(--display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+/* eyebrow / label: mono running heads */
 .eyebrow,
-.label {
+.label,
+.lbl {
   font-family: var(--mono);
   font-size: var(--fs-xs);
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
   display: flex;
@@ -146,6 +183,20 @@ kbd {
   vertical-align: -2px;
 }
 
+/* shimmering gradient text (headline moments only; one or two per screen) */
+.gtext {
+  background-image: var(--gtext);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: na-shimmer 7s linear infinite;
+}
+.gtext.still {
+  animation: none;
+}
+
 /* ---------- layout utilities ---------- */
 .row {
   display: flex;
@@ -162,18 +213,60 @@ kbd {
   gap: var(--s-2);
 }
 
-/* a "card" is a sheet: flat paper with a hairline, no shadow, no big radius */
+/* ---------- surfaces ---------- */
+/* glass: 7% → 2% white, hairline, 18px blur. Use for floating chrome and hero panels. */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+  box-shadow: var(--glass-shadow);
+}
+/* card: glass look without the (costly) backdrop blur, so long lists of cards stay cheap */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
   padding: var(--s-5);
   margin-bottom: var(--s-4);
 }
 .card.info,
 .info {
-  background: var(--surface-2);
-  border-color: transparent;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* tinted glass: pros (ion), cons (pulsar), results */
+.tint-ion,
+.tint-pulsar,
+.tint-good,
+.tint-bad {
+  --tone: var(--c-ion);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 14%, transparent), color-mix(in srgb, var(--tone) 2%, transparent));
+  border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent);
+  border-radius: var(--radius-lg);
+}
+.tint-pulsar {
+  --tone: var(--c-pulsar);
+}
+.tint-good {
+  --tone: var(--good);
+}
+.tint-bad {
+  --tone: var(--bad);
+}
+/* spinning conic gradient border: ONE per screen, for "the thing to do next".
+   <div class="gborder"><div class="gborder-in">…</div></div> */
+.gborder {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: 1.5px;
+  background: var(--grad-conic);
+  animation: na-spin 8s linear infinite;
+}
+.gborder > .gborder-in {
+  border-radius: calc(var(--radius-lg) - 1.5px);
+  background: light-dark(#ffffff, #0d0b24);
+  height: 100%;
 }
 
 /* ---------- buttons ---------- */
@@ -183,59 +276,79 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
-  min-height: 38px;
+  min-height: 40px;
   padding: 0 var(--s-4);
-  border-radius: var(--radius-md);
-  font-family: var(--sans);
+  border-radius: var(--radius-pill);
+  font-family: var(--display);
   font-size: var(--fs-sm);
-  font-weight: 560;
+  font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.005em;
   text-decoration: none;
   cursor: pointer;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
   transition:
     background var(--dur),
     border-color var(--dur),
     color var(--dur),
-    transform 80ms;
+    box-shadow var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
 }
+/* secondary: hairline glass pill */
 .btn {
-  background: var(--surface);
+  background: var(--tint);
   color: var(--text);
   border: 1px solid var(--rule-strong);
 }
 .btn:hover:not(:disabled) {
-  background: var(--text);
-  color: var(--bg);
+  background: var(--tint-2);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
   text-decoration: none;
 }
 .btn:active:not(:disabled),
 .btn-ghost:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 .btn:disabled,
 .btn-ghost:disabled {
-  opacity: 0.45;
+  opacity: 0.42;
   cursor: not-allowed;
 }
+/* primary: the Aurora gradient pill (dark ink on night, white on daylight) */
 .btn.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--grad-action);
+  border-color: transparent;
   color: var(--accent-text);
+  box-shadow:
+    var(--glow-action),
+    inset 0 0 0 1px rgb(255 255 255 / 0.25);
 }
 .btn.btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 86%, var(--text));
-  border-color: color-mix(in srgb, var(--accent) 86%, var(--text));
+  background: var(--grad-action);
+  border-color: transparent;
   color: var(--accent-text);
+  transform: translateY(-2px);
+  box-shadow:
+    var(--glow-action-hover),
+    inset 0 0 0 1px rgb(255 255 255 / 0.35);
+}
+.btn.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+.btn.btn-primary:disabled {
+  box-shadow: none;
 }
 .btn.btn-danger {
-  border-color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 55%, transparent);
   color: var(--bad);
   background: transparent;
 }
 .btn.btn-danger:hover:not(:disabled) {
-  background: var(--bad);
-  color: var(--surface);
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
 }
 .btn-ghost {
   background: transparent;
@@ -244,27 +357,33 @@ kbd {
 }
 .btn-ghost:hover:not(:disabled) {
   color: var(--text);
-  background: var(--surface-2);
+  background: var(--tint-2);
   text-decoration: none;
 }
 .btn-icon {
-  width: 38px;
+  width: 40px;
   padding: 0;
 }
 .btn-lg {
-  min-height: 46px;
-  padding: 0 var(--s-5);
+  min-height: 52px;
+  padding: 0 26px;
   font-size: var(--fs-md);
 }
 .btn-sm {
-  min-height: 32px;
+  min-height: 34px;
   padding: 0 var(--s-3);
   font-size: var(--fs-sm);
 }
 .btn-xs {
-  min-height: 26px;
-  padding: 0 var(--s-2);
+  min-height: 28px;
+  padding: 0 10px;
   font-size: var(--fs-xs);
+}
+.btn-icon.btn-sm {
+  width: 34px;
+}
+.btn-icon.btn-xs {
+  width: 28px;
 }
 .link-btn {
   background: none;
@@ -276,6 +395,9 @@ kbd {
   text-decoration: underline;
   text-decoration-color: transparent;
   text-underline-offset: 3px;
+  transition:
+    color var(--dur),
+    text-decoration-color var(--dur);
 }
 .link-btn:hover {
   color: var(--accent);
@@ -285,57 +407,62 @@ kbd {
   color: var(--accent);
 }
 
-/* ---------- pills, badges, chips: mono tags with a hairline, never candy ---------- */
+/* ---------- pills, badges, chips: mono capsules with a tinted hairline ---------- */
 .pill,
 .badge {
+  --tone: var(--text-2);
   display: inline-flex;
   align-items: center;
   gap: var(--s-1);
-  padding: 1px 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 38%, transparent);
+  border-radius: var(--radius-pill);
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-2);
-  background: transparent;
+  letter-spacing: 0.08em;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 7%, transparent);
   white-space: nowrap;
 }
 .badge-tag {
-  color: var(--muted);
+  --tone: var(--muted);
 }
 .badge-good {
-  color: var(--good);
-  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+  --tone: var(--good);
+}
+.badge-easy,
+.badge-ion {
+  --tone: var(--c-ion);
 }
 .badge-medium {
-  color: var(--text-2);
+  --tone: var(--c-pulsar);
 }
 .badge-hard {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  --tone: var(--warn);
 }
 .badge-expert {
-  color: var(--bad);
-  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  --tone: var(--bad);
 }
 .chip {
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
-  padding: 5px 11px;
+  min-height: 32px;
+  padding: 5px 13px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--tint);
   color: var(--text-2);
   font-size: var(--fs-sm);
+  font-weight: 500;
   cursor: pointer;
   text-decoration: none;
   transition:
     border-color var(--dur),
     color var(--dur),
-    background var(--dur);
+    background var(--dur),
+    box-shadow var(--dur);
 }
 a.chip {
   text-decoration: none;
@@ -343,46 +470,51 @@ a.chip {
 .chip:hover {
   border-color: var(--rule-strong);
   color: var(--text);
+  background: var(--tint-2);
 }
 .chip.on {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--bg);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .chip.dim {
   opacity: 0.5;
 }
 .chip-nailed.on {
-  background: var(--good);
+  background: var(--good-soft);
   border-color: var(--good);
-  color: var(--surface);
+  color: var(--good);
 }
 .chip-partial.on {
-  background: var(--warn);
+  background: var(--warn-soft);
   border-color: var(--warn);
-  color: var(--surface);
+  color: var(--warn);
 }
 .chip-missed.on {
-  background: var(--bad);
+  background: var(--bad-soft);
   border-color: var(--bad);
-  color: var(--surface);
+  color: var(--bad);
 }
 .locked-chip {
   opacity: 0.6;
 }
 
-/* ---------- progress: a ruled bar ---------- */
+/* ---------- progress: a glowing Ion bar ---------- */
 .pbar {
   position: relative;
-  height: 4px;
+  height: 6px;
   width: 100%;
-  background: var(--surface-2);
-  border-radius: 0;
+  background: var(--tint-2);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .pbar-fill {
   height: 100%;
-  background: var(--text);
+  border-radius: inherit;
+  background: var(--grad-ion);
+  box-shadow: var(--glow-ion);
+  transition: width 600ms var(--ease-out);
 }
 .pbar-good {
   background: var(--good);
@@ -407,34 +539,23 @@ a.chip {
   height: 16px;
 }
 
-/* ---------- status dots ---------- */
+/* ---------- status dots: dark until reached, pulsar when in progress, ion when done ---------- */
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   flex: none;
   border-radius: 50%;
-  border: 1.5px solid var(--muted);
+  border: 1.5px solid var(--rule-strong);
   background: transparent;
 }
 .dot-in-progress {
-  border-color: var(--warn);
-  background: linear-gradient(90deg, var(--warn) 50%, transparent 50%);
+  border-color: var(--c-pulsar);
+  background: linear-gradient(90deg, var(--c-pulsar) 50%, transparent 50%);
 }
 .dot-passed {
-  border-color: var(--good);
-  background: var(--good);
-}
-
-/* ---------- reduced motion ---------- */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-  }
+  border-color: var(--c-ion);
+  background: var(--c-ion);
+  box-shadow: var(--glow-ion);
 }
 
 /* ---------- forms ---------- */
@@ -449,24 +570,37 @@ a.chip {
   flex-direction: column;
   gap: 6px;
   font-size: var(--fs-sm);
-  font-weight: 560;
+  font-weight: 600;
+}
+.form input[type='number'],
+.form input[type='text'],
+.form select,
+.input {
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--tint);
+  font-weight: 500;
+  transition:
+    border-color var(--dur),
+    box-shadow var(--dur);
 }
 .form input[type='number'],
 .form input[type='text'],
 .form select {
-  width: 110px;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  width: 120px;
+}
+.form select option {
   background: var(--surface);
-  font-weight: 400;
+  color: var(--text);
 }
 .form input:focus-visible,
-.form select:focus-visible {
+.form select:focus-visible,
+.input:focus-visible {
   outline: none;
-  border-color: var(--rule-strong);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 .form input[type='range'] {
   accent-color: var(--accent);
@@ -481,4 +615,143 @@ a.chip {
 /* animated disclosure wrapper (Reveal, collapsible groups) */
 .collapse-anim {
   overflow: hidden;
+}
+
+/* ======================================================================
+   Motion. Ambient ≥ 4s and never behind text being read; interaction 150–250ms.
+   ====================================================================== */
+/* rise-in on mount; stagger with .d1–.d6 or style="--i: n" */
+.rise {
+  animation: na-rise 0.9s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+.rise.d1 {
+  --i: 1;
+}
+.rise.d2 {
+  --i: 2;
+}
+.rise.d3 {
+  --i: 3;
+}
+.rise.d4 {
+  --i: 4;
+}
+.rise.d5 {
+  --i: 5;
+}
+.rise.d6 {
+  --i: 6;
+}
+/* pulse: the next step only */
+.pulse {
+  animation: na-pulse 2.4s ease-in-out infinite;
+}
+/* orbit: put inside a positioned ring; the dot rides the edge */
+.orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: na-orbit 9s linear infinite;
+}
+.orbit.slow {
+  animation-duration: 16s;
+}
+.orbit.rev {
+  animation-direction: reverse;
+  animation-duration: 12s;
+}
+.orbit-dot {
+  position: absolute;
+  top: -6px;
+  left: calc(50% - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: light-dark(var(--c-ion), #ffffff);
+  box-shadow: 0 0 14px 4px var(--glow-ion-c);
+}
+.float {
+  animation: na-float 4s ease-in-out infinite;
+}
+.grow-x {
+  transform-origin: left;
+  animation: na-grow 1.6s var(--ease-out) both;
+}
+.spin-border {
+  animation: na-spin 8s linear infinite;
+}
+
+@keyframes na-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes na-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-ion) 55%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--c-ion) 0%, transparent);
+  }
+}
+@keyframes na-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes na-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+@keyframes na-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes na-shimmer {
+  to {
+    background-position: -220% center;
+  }
+}
+@keyframes na-spin {
+  to {
+    --a: 360deg;
+  }
+}
+
+/* ---------- reduced motion: everything stops ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  .gtext,
+  .gborder,
+  .orbit,
+  .pulse,
+  .float,
+  .spin-border {
+    animation: none !important;
+  }
 }

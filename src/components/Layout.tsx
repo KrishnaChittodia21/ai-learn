@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Lock, Menu, Moon, Search, Settings, Sun, X } from 'lucide-react';
+import { ChartColumn, CircleDot, CircleHelp, Ellipsis, Flame, Lock, Moon, Search, Settings, Sparkles, Sun, Target, Trophy, X } from 'lucide-react';
 import { COMPANY_QUESTIONS, TOPICS } from '../content';
 import { setSettings, useProgress } from '../lib/progress';
 import { companyUnlocked, topicStatus } from '../lib/stats';
@@ -11,6 +11,8 @@ import WelcomeTour from './WelcomeTour';
 import { Toaster } from './Toaster';
 import { CelebrationWatcher } from './CelebrationWatcher';
 import { Footer } from './Footer';
+import { AmbientStage, BrandMark, Wordmark } from './Brand';
+import { studyStreak } from '../lib/streak';
 
 // cmdk is only needed once the palette is opened
 const CommandPalette = lazy(() => import('./CommandPalette'));
@@ -113,7 +115,7 @@ export default function Layout() {
     };
   }, []);
 
-  // Escape closes the mobile menu.
+  // Escape closes the More sheet.
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setNavOpen(false);
@@ -124,99 +126,163 @@ export default function Layout() {
   const mistakes = Object.values(p.mcq).filter((r) => !r.lastCorrect).length;
   const passedCount = TOPICS.filter((t) => topicStatus(p, t) === 'passed').length;
   const onTopic = location.pathname.startsWith('/topic/');
+  // lessons, exams and challenge write-ups: ambient orbs pause behind text being read
+  const reading = onTopic || /^\/challenges\/./.test(location.pathname);
+  const streak = studyStreak(p.activityDays);
+  const streakLabel = streak > 0 ? `${streak}-day streak` : 'Start a streak';
+  const toggleTheme = () => setSettings({ theme: isDark ? 'light' : 'dark' });
+  const themeLabel = isDark ? 'Switch to light mode' : 'Switch to dark mode';
 
-  const links = (
-    <>
-      <NavLink to="/" end className="nav-link">
-        Today
-      </NavLink>
-      <NavLink to="/contents" className={({ isActive }) => `nav-link ${isActive || onTopic ? 'active' : ''}`}>
-        Syllabus
-      </NavLink>
-      <NavLink to="/practice" className="nav-link">
-        Practice{mistakes > 0 && <span className="nav-count" aria-label={`${mistakes} mistakes to drill`}>{mistakes}</span>}
-      </NavLink>
-      <NavLink to="/weak-areas" className="nav-link">
-        Weak areas
-      </NavLink>
-      <NavLink to="/challenges" className="nav-link" title={unlocked ? undefined : 'Unlocks when every topic exam is passed'}>
-        Challenges{!unlocked && <Lock size={12} aria-label="locked" className="nav-lock" />}
-      </NavLink>
-    </>
-  );
+  const lockTitle = unlocked ? undefined : 'Unlocks when every topic exam is passed';
+  const navItems = [
+    { to: '/', label: 'Today', short: 'Today', icon: Sparkles, end: true },
+    { to: '/contents', label: 'Syllabus', short: 'Syllabus', icon: CircleDot, active: onTopic },
+    { to: '/practice', label: 'Practice', short: 'Practice', icon: ChartColumn, count: mistakes },
+    { to: '/weak-areas', label: 'Weak areas', short: 'Weak', icon: Target },
+    { to: '/challenges', label: 'Challenges', short: 'Challenges', icon: Trophy, locked: !unlocked },
+  ];
+  const cls =
+    (base: string, extra?: boolean) =>
+    ({ isActive }: { isActive: boolean }) =>
+      `${base}${isActive || extra ? ' active' : ''}`;
 
   return (
-    <div className="shell">
+    <div className="shell" data-reading={reading ? '' : undefined}>
       <a href="#main" className="skip-link">
         Skip to content
       </a>
+      <AmbientStage />
       <header className="masthead">
-        <div className="masthead-inner">
-          <NavLink to="/" className="wordmark" aria-label="GenAI Field Manual, home">
-            <span className="wordmark-name">GenAI</span>
-            <span className="wordmark-sub">Field Manual</span>
+        <div className="masthead-inner glass">
+          <NavLink to="/" className="wordmark" aria-label="GenAI.learn, home">
+            <BrandMark />
+            <Wordmark />
           </NavLink>
           <nav className="primary-nav" aria-label="Primary">
-            {links}
+            {navItems.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end} className={cls('nav-link', n.active)} title={n.locked ? lockTitle : undefined}>
+                {n.label}
+                {!!n.count && (
+                  <span className="nav-count" aria-label={`${n.count} mistakes to drill`}>
+                    {n.count}
+                  </span>
+                )}
+                {n.locked && <Lock size={12} aria-label="locked" className="nav-lock" />}
+              </NavLink>
+            ))}
           </nav>
           <div className="masthead-tools">
-            <span className="covered" title="Topics whose exam you have passed">
-              <strong>{passedCount}</strong>/{TOPICS.length} covered
-            </span>
             <button type="button" className="search-trigger" onClick={openPalette} aria-label="Search topics and sections (⌘K)">
-              <Search size={15} aria-hidden />
+              <Search size={16} aria-hidden />
               <span className="search-trigger-text">Search</span>
               <kbd>⌘K</kbd>
             </button>
-            <button type="button" className="btn-ghost tool-btn guide-btn" onClick={openTour} title="Guide (?)">
-              Guide
+            <span className={`streak-chip${streak > 0 ? '' : ' is-zero'}`} title="Study streak: consecutive days with study activity" aria-label={streakLabel}>
+              <Flame size={15} aria-hidden className="streak-flame" />
+              <span className="streak-text">{streakLabel}</span>
+              <span className="streak-num" aria-hidden>
+                {streak}
+              </span>
+            </span>
+            <button type="button" className="tool-btn guide-btn" onClick={openTour} aria-label="Guide (?)" title="Guide (?)">
+              <CircleHelp size={18} aria-hidden />
             </button>
-            <button
-              type="button"
-              className="btn-ghost btn-icon theme-toggle"
-              onClick={() => setSettings({ theme: isDark ? 'light' : 'dark' })}
-              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={isDark ? 'Light mode' : 'Dark mode'}
-            >
-              {isDark ? <Sun size={17} aria-hidden /> : <Moon size={17} aria-hidden />}
+            <button type="button" className="tool-btn theme-toggle" onClick={toggleTheme} aria-label={themeLabel} title={isDark ? 'Light mode' : 'Dark mode'}>
+              {isDark ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
             </button>
-            <NavLink to="/settings" className="btn-ghost btn-icon" aria-label="Settings" title="Settings">
-              <Settings size={17} aria-hidden />
+            <NavLink to="/settings" className={cls('tool-btn settings-btn')} aria-label="Settings" title="Settings">
+              <Settings size={18} aria-hidden />
             </NavLink>
             <button
               type="button"
-              className="btn-ghost btn-icon menu-toggle"
+              className="tool-btn menu-toggle"
               onClick={() => setNavOpen((o) => !o)}
               aria-expanded={navOpen}
-              aria-controls="mobile-nav"
-              aria-label={navOpen ? 'Close menu' : 'Open menu'}
+              aria-controls="more-sheet"
+              aria-label={navOpen ? 'Close menu' : 'More: search, guide, theme, settings'}
             >
-              {navOpen ? <X size={19} aria-hidden /> : <Menu size={19} aria-hidden />}
+              {navOpen ? <X size={19} aria-hidden /> : <Ellipsis size={19} aria-hidden />}
             </button>
           </div>
         </div>
         <AnimatePresence>
           {navOpen && (
-            <motion.nav
-              id="mobile-nav"
-              className="mobile-nav"
-              aria-label="Primary"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.16 }}
-            >
-              {links}
-              <NavLink to="/settings" className="nav-link">
-                Settings
-              </NavLink>
-              <p className="mobile-nav-foot">
-                <strong>{passedCount}</strong>/{TOPICS.length} topics covered · {COMPANY_QUESTIONS.length} challenges
-              </p>
-            </motion.nav>
+            <>
+              <motion.button
+                key="scrim"
+                type="button"
+                className="more-scrim"
+                aria-label="Close menu"
+                tabIndex={-1}
+                onClick={() => setNavOpen(false)}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+              />
+              <motion.div
+                key="sheet"
+                id="more-sheet"
+                className="more-sheet glass"
+                initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <button
+                  type="button"
+                  className="more-item"
+                  onClick={() => {
+                    setNavOpen(false);
+                    openPalette();
+                  }}
+                >
+                  <Search size={18} aria-hidden /> Search the manual
+                </button>
+                <button
+                  type="button"
+                  className="more-item"
+                  onClick={() => {
+                    setNavOpen(false);
+                    openTour();
+                  }}
+                >
+                  <CircleHelp size={18} aria-hidden /> Guide
+                </button>
+                <button type="button" className="more-item" onClick={toggleTheme}>
+                  {isDark ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />} {isDark ? 'Light mode' : 'Dark mode'}
+                </button>
+                <NavLink to="/settings" className={cls('more-item')}>
+                  <Settings size={18} aria-hidden /> Settings
+                </NavLink>
+                <p className="more-foot">
+                  <strong>{passedCount}</strong>/{TOPICS.length} topics covered · {COMPANY_QUESTIONS.length} challenges
+                </p>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </header>
+
+      <nav className="tabbar glass" aria-label="Primary">
+        {navItems.map((n) => {
+          const Icon = n.icon;
+          return (
+            <NavLink key={n.to} to={n.to} end={n.end} className={cls('tab', n.active)} title={n.locked ? lockTitle : undefined}>
+              <span className="tab-icon">
+                <Icon size={20} aria-hidden />
+                {!!n.count && (
+                  <span className="tab-count" aria-label={`${n.count} mistakes to drill`}>
+                    {n.count > 99 ? '99+' : n.count}
+                  </span>
+                )}
+                {n.locked && <Lock size={10} aria-label="locked" className="tab-lock" />}
+              </span>
+              <span className="tab-label">{n.short}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
 
       <main id="main" className="main" tabIndex={-1}>
         <AnimatePresence mode="wait" initial={false}>

@@ -126,15 +126,37 @@ export function VizFrame({
 
   return (
     <figure className="viz" ref={rootRef} tabIndex={0} onKeyDown={onKey} aria-label={`${title} interactive visualisation`}>
-      <figcaption className="viz-head">
+      <div className="viz-bar">
         <div className="viz-eyebrow">
-          <span className="viz-fig">Fig.</span>
-          <span>Interactive</span>
+          <span className="viz-fig">Fig</span>
+          <span className="viz-eyebrow-opt" aria-hidden>
+            ·
+          </span>
+          <span className="viz-eyebrow-opt">Interactive</span>
           <span aria-hidden>·</span>
           <span>
             {total} step{total === 1 ? '' : 's'}
           </span>
         </div>
+        <div className="viz-transport-main" role="group" aria-label="Playback">
+          <button type="button" className="viz-btn" onClick={stepper.prev} disabled={i === 0} aria-label="Previous step" title="Previous step (←)">
+            <ChevronLeft size={16} strokeWidth={2.4} aria-hidden />
+          </button>
+          {playing ? (
+            <button type="button" className="viz-btn viz-btn-play on" onClick={stepper.pause} aria-label="Pause" title="Pause (space)">
+              <Pause size={14} fill="currentColor" aria-hidden />
+            </button>
+          ) : (
+            <button type="button" className="viz-btn viz-btn-play" onClick={stepper.play} aria-label="Play" title="Play (space)">
+              <Play size={14} fill="currentColor" aria-hidden />
+            </button>
+          )}
+          <button type="button" className="viz-btn" onClick={stepper.next} disabled={i === total - 1} aria-label="Next step" title="Next step (→)">
+            <ChevronRight size={16} strokeWidth={2.4} aria-hidden />
+          </button>
+        </div>
+      </div>
+      <figcaption className="viz-head">
         <div className="viz-title">{title}</div>
         {blurb && <div className="viz-blurb">{blurb}</div>}
       </figcaption>
@@ -143,7 +165,7 @@ export function VizFrame({
       {legend && <div className="viz-legend">{legend}</div>}
       <div className="viz-caption" aria-live="polite">
         <span className="viz-stepno">
-          Step {i + 1}/{total}
+          Step {i + 1} / {total} —
         </span>{' '}
         <span className="viz-caption-text">{frame.caption}</span>
       </div>
@@ -164,24 +186,9 @@ export function VizFrame({
           </span>
         </div>
       )}
-      <div className="viz-transport" role="group" aria-label="Playback">
-        <button type="button" className="viz-btn" onClick={stepper.reset} aria-label="Reset" title="Reset">
-          <RotateCcw size={14} aria-hidden />
-        </button>
-        <button type="button" className="viz-btn" onClick={stepper.prev} disabled={i === 0} aria-label="Previous step" title="Previous step (←)">
-          <ChevronLeft size={16} aria-hidden />
-        </button>
-        {playing ? (
-          <button type="button" className="viz-btn viz-btn-play on" onClick={stepper.pause} aria-label="Pause" title="Pause (space)">
-            <Pause size={14} aria-hidden />
-          </button>
-        ) : (
-          <button type="button" className="viz-btn viz-btn-play" onClick={stepper.play} aria-label="Play" title="Play (space)">
-            <Play size={14} aria-hidden />
-          </button>
-        )}
-        <button type="button" className="viz-btn" onClick={stepper.next} disabled={i === total - 1} aria-label="Next step" title="Next step (→)">
-          <ChevronRight size={16} aria-hidden />
+      <div className="viz-transport" role="group" aria-label="Timeline">
+        <button type="button" className="viz-btn viz-btn-sm" onClick={stepper.reset} aria-label="Reset" title="Reset">
+          <RotateCcw size={13} aria-hidden />
         </button>
         <input
           className="viz-scrub"
