@@ -8,7 +8,7 @@ import { weakTopics } from '../lib/weak';
 import { nextStep } from '../lib/nextStep';
 import { getUiPrefs } from '../lib/uiPrefs';
 import { studyStreak } from '../lib/streak';
-import { CourseMap } from '../components/CourseMap';
+import { ProgressPanel } from '../components/ProgressPanel';
 import { DashboardMetrics } from '../components/DashboardMetrics';
 import { WeakReattempt } from '../components/WeakReattempt';
 import { companyUnlocked, topicCompletion } from '../lib/stats';
@@ -195,18 +195,7 @@ export default function Home() {
         </section>
       )}
 
-      <section className="course" aria-labelledby="course-title">
-        <div className="section-rule-head">
-          <h2 id="course-title" className="section-rule-title">
-            The course
-          </h2>
-          <p className="muted small">
-            {LEVELS.length} levels · 16 phases · {TOPICS.length} topics. Pass a topic&apos;s exam to fill its tick.{' '}
-            <Link to="/contents">Open the syllabus</Link>
-          </p>
-        </div>
-        <CourseMap p={p} />
-      </section>
+      <ProgressPanel p={p} />
 
       <WeakReattempt weak={weak} answered={answered} passMark={p.settings.passMark} firstExamHref={firstExamHref} />
 
