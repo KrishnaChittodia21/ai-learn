@@ -8,6 +8,7 @@ import { CompaniesPage, CompanyQuestionPage } from './pages/Companies';
 import SettingsPage from './pages/Settings';
 import ContentsPage from './pages/Contents';
 import { PracticePage, WeakAreasPage } from './pages/WeakAreas';
+import AchievementsPage from './pages/Achievements';
 import { resumeLocation } from './lib/uiPrefs';
 
 // On a fresh start at the dashboard URL, reopen the page the user was last reading.
@@ -38,6 +39,7 @@ const router = createHashRouter([
       { path: 'challenges/:qid', element: <CompanyQuestionPage /> },
       { path: 'weak-areas', element: <WeakAreasPage /> },
       { path: 'practice', element: <PracticePage /> },
+      { path: 'achievements', element: <AchievementsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <Home /> },
     ],

@@ -1,0 +1,1325 @@
+/* ======================================================================
+   Achievements, Neural Aurora: round glowing glass orbs (medallions) whose ring and glow follow
+   the tier, the /achievements page, the Today trophy shelf, the unlock dialog and the header chip.
+   Every rule is scoped to one of the roots below; nothing here styles a generic class name.
+     .ach-page    the Achievements page
+     .ach-shelf   the Trophy shelf card on Today
+     .ach-cel     the unlock dialog (overlay)
+     .masthead .ach-hdr, .more-sheet .ach-more   header chip / More sheet entry
+   Tiers: bronze = solar amber · silver = ion ice · gold = shimmering aurora ring ·
+          diamond = iridescent conic ring that spins · standard (single step) = nebula ·
+          locked = dim etched dashed outline + lock.
+   ====================================================================== */
+
+:is(.ach-page, .ach-shelf, .ach-cel) {
+  /* text-safe tier colours (labels, ladder dots, pills) */
+  --ach-bronze: light-dark(#a85208, #ffc58f);
+  --ach-silver: light-dark(#14708a, #c9f8ff);
+  --ach-gold: light-dark(#c42a78, #ff8fc8);
+  --ach-diamond: light-dark(#5b3fd6, #b6a4ff);
+  --ach-standard: var(--c-nebula);
+  --ach-iris: linear-gradient(100deg, #7c5cff, #22e4ff 35%, #ff4fa3 70%, #ffb86b);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) :is(.ach-bronze) {
+  --tc: var(--ach-bronze);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) :is(.ach-silver) {
+  --tc: var(--ach-silver);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) :is(.ach-gold) {
+  --tc: var(--ach-gold);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) :is(.ach-diamond) {
+  --tc: var(--ach-diamond);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) :is(.ach-standard) {
+  --tc: var(--ach-standard);
+}
+
+/* ---------------------------------------------------------------------
+   The orb
+   --------------------------------------------------------------------- */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb {
+  --sz: 60px;
+  --r1: #d9d0ff;
+  --r2: #7c5cff;
+  --ring: linear-gradient(140deg, light-dark(#b6a4ff, #e4ddff), #7c5cff 60%, light-dark(#4a2fc4, #5b3fd6));
+  --glow: light-dark(rgb(124 92 255 / 0.32), rgb(124 92 255 / 0.6));
+  --ink: light-dark(#3b2a9e, #f0ecff);
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+  flex: none;
+  width: var(--sz);
+  height: var(--sz);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+/* the ring: a gradient annulus (masked to the border box minus the padding) */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: max(2px, calc(var(--sz) * 0.055));
+  background: var(--ring);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+/* the glow: a radial bloom behind the orb */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb::after {
+  content: '';
+  position: absolute;
+  inset: -16%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow), transparent);
+  pointer-events: none;
+}
+/* the glass core */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb-core {
+  position: absolute;
+  inset: calc(var(--sz) * 0.1);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--r1) 52%, transparent), transparent 60%),
+    radial-gradient(circle at 70% 82%, color-mix(in srgb, var(--r2) 42%, transparent), transparent 70%),
+    light-dark(#ffffff, #120f2e);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--r1) 38%, transparent),
+    inset 0 -6px 14px -6px color-mix(in srgb, var(--r2) 70%, transparent);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb-core svg {
+  width: 46%;
+  height: 46%;
+  filter: drop-shadow(0 0 5px var(--glow));
+}
+/* top gloss */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb-gloss {
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  top: 14%;
+  height: 26%;
+  border-radius: 50%;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.6), transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* sizes */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-xs {
+  --sz: 26px;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-sm {
+  --sz: 44px;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-md {
+  --sz: 60px;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-lg {
+  --sz: 92px;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-xl {
+  --sz: 132px;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-xs .ach-orb-gloss {
+  display: none;
+}
+
+/* tiers */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-bronze {
+  --r1: #ffc58f;
+  --r2: #e2711d;
+  --ring: linear-gradient(140deg, #ffe0bf, #e2711d 55%, #8a3d06);
+  --glow: light-dark(rgb(226 113 29 / 0.32), rgb(255 160 80 / 0.55));
+  --ink: light-dark(#8a3d06, #ffe6cc);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-silver {
+  --r1: #e9fdff;
+  --r2: #7ef0ff;
+  --ring: linear-gradient(140deg, light-dark(#bfefff, #ffffff), light-dark(#3aa9c4, #9fe9f7) 45%, light-dark(#26566b, #5b8aa6));
+  --glow: light-dark(rgb(10 165 194 / 0.3), rgb(126 240 255 / 0.5));
+  --ink: light-dark(#0b5f73, #f2feff);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-gold {
+  --r1: #ff8fc8;
+  --r2: #ffb86b;
+  --ring: linear-gradient(100deg, #b6a4ff, #ff8fc8 25%, #ffc58f 50%, #ff8fc8 75%, #b6a4ff);
+  --glow: light-dark(rgb(224 51 138 / 0.3), rgb(255 79 163 / 0.55));
+  --ink: light-dark(#9b1d5f, #fff1f8);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-gold::before {
+  background-size: 300% 100%;
+  animation: ach-sheen 6s linear infinite;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-diamond {
+  --r1: #7ef0ff;
+  --r2: #ff4fa3;
+  --ring: var(--grad-conic);
+  --glow: light-dark(rgb(124 92 255 / 0.34), rgb(34 228 255 / 0.45));
+  --ink: light-dark(#2a1f6b, #ffffff);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-diamond::before {
+  animation: na-spin 6s linear infinite;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-diamond .ach-orb-core {
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, #7ef0ff 45%, transparent), transparent 55%),
+    radial-gradient(circle at 75% 70%, color-mix(in srgb, #ff4fa3 38%, transparent), transparent 62%),
+    radial-gradient(circle at 25% 80%, color-mix(in srgb, #7c5cff 40%, transparent), transparent 60%),
+    light-dark(#ffffff, #120f2e);
+}
+/* locked: dim etched outline, no glow, lock tab */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-locked::before {
+  padding: 0;
+  background: none;
+  -webkit-mask: none;
+  mask: none;
+  border: 1.5px dashed var(--rule-strong);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-locked::after,
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-locked .ach-orb-gloss {
+  display: none;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-locked .ach-orb-core {
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-locked .ach-orb-core svg {
+  opacity: 0.55;
+  filter: none;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb-lock {
+  position: absolute;
+  right: -3%;
+  bottom: -3%;
+  width: max(16px, calc(var(--sz) * 0.36));
+  height: max(16px, calc(var(--sz) * 0.36));
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: light-dark(#ffffff, #1a1738);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb-lock svg {
+  width: 56%;
+  height: 56%;
+}
+
+@keyframes ach-sheen {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Shared bits: tier pill, "→ Tier" text, meter, ladder, numbers
+   --------------------------------------------------------------------- */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill {
+  --tc: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--tc) 42%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tc) 10%, transparent);
+  color: var(--tc);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-bronze {
+  --tc: var(--ach-bronze);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-silver {
+  --tc: var(--ach-silver);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-gold {
+  --tc: var(--ach-gold);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--act-1) 14%, transparent), color-mix(in srgb, var(--act-2) 14%, transparent), color-mix(in srgb, var(--act-3) 14%, transparent));
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-diamond {
+  --tc: var(--ach-diamond);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--c-ion) 50%, transparent);
+  background: linear-gradient(100deg, rgb(124 92 255 / 0.18), rgb(34 228 255 / 0.16), rgb(255 79 163 / 0.16));
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-standard {
+  --tc: var(--ach-standard);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-prog {
+  --tc: var(--c-ion);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-tpill.ach-locked {
+  --tc: var(--muted);
+}
+
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-to {
+  color: var(--tc, var(--text));
+  font-weight: 600;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-to.ach-gold {
+  background: var(--grad-action);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-to.ach-diamond {
+  background: var(--gtext);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter {
+  position: relative;
+  height: 6px;
+  width: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--tint-2);
+  overflow: hidden;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--grad-ion);
+  box-shadow: var(--glow-ion);
+  transition: width 600ms var(--ease-out);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter.ach-to-bronze > span {
+  background: linear-gradient(90deg, #c25410, #ffc58f);
+  box-shadow: 0 0 12px rgb(255 160 80 / 0.45);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter.ach-to-silver > span {
+  background: linear-gradient(90deg, light-dark(#26566b, #5b8aa6), #7ef0ff);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter.ach-to-gold > span {
+  background: var(--grad-action);
+  box-shadow: 0 0 12px var(--glow-pulsar-c);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter.ach-to-diamond > span {
+  background: var(--ach-iris);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-meter.ach-to-standard > span {
+  background: linear-gradient(90deg, #7c5cff, light-dark(#9a7dff, #b6a4ff));
+  box-shadow: 0 0 12px var(--glow-action-c);
+}
+
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-num {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-num b {
+  color: var(--text);
+  font-size: 1.0625rem;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-date {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-none {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+/* tier ladder: dots joined by a rail; reached tiers glow, the next one is ringed */
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  text-align: center;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.got:not(:first-child)::before {
+  background: color-mix(in srgb, var(--tc) 70%, transparent);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step i {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--rule-strong);
+  background: light-dark(#ffffff, #120f2e);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.got i {
+  border-color: var(--tc);
+  background: var(--tc);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tc) 70%, transparent);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.ach-gold.got i {
+  background: var(--grad-action);
+  border-color: transparent;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.ach-diamond.got i {
+  background: conic-gradient(#7c5cff, #22e4ff, #ff4fa3, #ffb86b, #7c5cff);
+  border-color: transparent;
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.nx i {
+  border-color: var(--tc);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 22%, transparent);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step b {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--text-2);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.got b,
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.nx b {
+  color: var(--text);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step small {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.got small,
+:is(.ach-page, .ach-shelf, .ach-cel) .ach-step.nx small {
+  color: var(--tc);
+}
+
+/* ---------------------------------------------------------------------
+   /achievements page
+   --------------------------------------------------------------------- */
+.ach-page .ach-head {
+  margin-bottom: var(--s-6);
+}
+.ach-page .ach-kicker {
+  margin: 0 0 var(--s-3);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ach-page .ach-title {
+  margin: 0;
+  font-size: clamp(2.5rem, 1.4rem + 4vw, 4.25rem);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  padding-bottom: 0.06em;
+}
+.ach-page .ach-lead {
+  margin: var(--s-3) 0 0;
+  max-width: var(--measure);
+  color: var(--text-2);
+}
+.ach-page .ach-readout {
+  margin: var(--s-5) 0 0;
+  padding: 20px 24px;
+  border-radius: var(--radius-xl);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.5fr);
+  gap: 18px 28px;
+  align-items: start;
+}
+.ach-page .ach-ro {
+  min-width: 0;
+}
+.ach-page .ach-ro + .ach-ro {
+  border-left: 1px solid var(--border);
+  padding-left: 28px;
+}
+.ach-page .ach-ro dt {
+  margin-bottom: 8px;
+}
+.ach-page .ach-ro dd {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.ach-page .ach-ro-num {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+.ach-page .ach-ro-num small {
+  font-size: 0.5em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.ach-page .ach-census {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.ach-page .ach-census li {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+.ach-page .ach-census i,
+.ach-shelf .ach-census-mini i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--tc);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tc) 55%, transparent);
+}
+.ach-page .ach-census .ach-gold i,
+.ach-shelf .ach-census-mini .ach-gold i {
+  border: 0;
+  background: var(--grad-action);
+}
+.ach-page .ach-census .ach-diamond i,
+.ach-shelf .ach-census-mini .ach-diamond i {
+  border: 0;
+  background: conic-gradient(#7c5cff, #22e4ff, #ff4fa3, #ffb86b, #7c5cff);
+}
+.ach-page .ach-census-n {
+  font-size: 1.375rem;
+  line-height: 1.1;
+}
+.ach-page .ach-census-n small {
+  font-size: 0.6em;
+  color: var(--muted);
+}
+.ach-page .ach-census-l {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ach-page .ach-latest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ach-page .ach-latest b {
+  display: block;
+  font-family: var(--display);
+  line-height: 1.25;
+}
+
+/* closest next (spinning border) + recently unlocked */
+.ach-page .ach-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.ach-page .ach-next-border {
+  border-radius: var(--radius-xl);
+}
+.ach-page .ach-next-border > .ach-next {
+  border-radius: calc(var(--radius-xl) - 1.5px);
+  padding: 24px 28px;
+  background: linear-gradient(160deg, light-dark(#ffffff, #120f2e), light-dark(#f6f3ff, #0b0920));
+}
+.ach-page .ach-next-head,
+.ach-page .ach-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ach-page .ach-next-head .lbl {
+  margin: 0;
+}
+.ach-page .ach-next-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px 16px;
+  margin: 18px 0 6px;
+}
+.ach-page .ach-next-arrow {
+  flex: none;
+  color: var(--muted);
+}
+.ach-page .ach-next-ghost {
+  flex: none;
+  opacity: 0.42;
+}
+.ach-page .ach-next-copy {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+}
+.ach-page .ach-next-name {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.ach-page .ach-next-req {
+  margin: 6px 0 0;
+  color: var(--text-2);
+}
+.ach-page .ach-card-meter,
+.ach-shelf .ach-card-meter {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.ach-page .ach-next .ach-ladder {
+  margin-top: 18px;
+}
+.ach-page .ach-next-tip {
+  margin: 14px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.ach-page .ach-next-tip b {
+  color: var(--text);
+}
+.ach-page .ach-runners {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.ach-page .ach-runners ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.ach-page .ach-runners li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+}
+.ach-page .ach-runners li .ach-meter {
+  grid-column: 2 / -1;
+  height: 4px;
+}
+.ach-page .ach-runner-n {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ach-page .ach-runner-v {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ach-page .ach-recent {
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: var(--radius-xl);
+}
+.ach-page .ach-h2 {
+  margin: 0;
+  font-size: 1.375rem;
+  letter-spacing: -0.02em;
+}
+.ach-page .ach-sec-head .lbl {
+  margin: 0;
+}
+.ach-page .ach-recent .ach-none {
+  margin-top: 14px;
+}
+.ach-page .ach-recent-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.ach-page .ach-recent-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+}
+.ach-page .ach-recent-list li.is-new {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ach-page .ach-recent-b {
+  min-width: 0;
+}
+.ach-page .ach-recent-b b {
+  display: block;
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ach-page .ach-recent-when {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* filters */
+.ach-page .ach-filters {
+  margin: var(--s-7) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+}
+.ach-page .ach-filter-set {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ach-page .ach-filter-set > .lbl {
+  margin-right: 4px;
+}
+.ach-page .ach-chip-n {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.ach-page .chip.on .ach-chip-n {
+  color: var(--text-2);
+}
+
+/* groups */
+.ach-page .ach-group {
+  margin-top: var(--s-7);
+  scroll-margin-top: calc(var(--masthead) + 16px);
+}
+.ach-page .ach-group-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(160px, 220px);
+  align-items: end;
+  gap: 8px 18px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ach-page .ach-group-no {
+  align-self: start;
+  padding-top: 4px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+.ach-page .ach-group-text p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+.ach-page .ach-group-count {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.ach-page .ach-group-count b {
+  color: var(--text);
+}
+.ach-page .ach-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 16px;
+}
+.ach-page .ach-li {
+  display: flex;
+  min-width: 0;
+}
+.ach-page .ach-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  transition:
+    border-color var(--dur),
+    transform var(--dur-slow) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-out);
+}
+.ach-page .ach-card:hover {
+  border-color: var(--rule-strong);
+  transform: translateY(-2px);
+}
+.ach-page .ach-card.is-earned {
+  box-shadow: 0 18px 44px -30px var(--glow-action-c);
+}
+.ach-page .ach-card.is-locked {
+  background: var(--tint);
+  border-style: dashed;
+}
+.ach-page .ach-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ach-page .ach-card-id {
+  min-width: 0;
+}
+.ach-page .ach-card-name {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.ach-page .ach-card.is-locked .ach-card-name {
+  color: var(--text-2);
+}
+.ach-page .ach-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 6px;
+}
+.ach-page .ach-card-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.ach-page .ach-req .lbl {
+  margin-bottom: 2px;
+  font-size: 0.64rem;
+}
+.ach-page .ach-card .ach-card-meter {
+  margin-top: auto;
+}
+.ach-page .ach-card-done {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--good);
+}
+.ach-page .ach-empty {
+  margin: var(--s-5) 0 0;
+  padding: var(--s-5);
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------
+   Today: trophy shelf
+   --------------------------------------------------------------------- */
+.today .ach-shelf {
+  padding: 26px 30px;
+}
+.ach-shelf .ach-shelf-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ach-shelf .ach-shelf-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(0, 2fr) minmax(240px, 1.25fr);
+  gap: 28px;
+  align-items: start;
+}
+.ach-shelf .ach-shelf-grid > * {
+  min-width: 0;
+}
+.ach-shelf .lbl {
+  margin: 0 0 10px;
+  font-size: 0.6875rem;
+}
+.ach-shelf .ach-shelf-count {
+  display: grid;
+  gap: 10px;
+}
+.ach-shelf .ach-shelf-count .lbl {
+  margin: 0;
+}
+.ach-shelf .ach-shelf-num {
+  font-size: 2.75rem;
+  line-height: 1;
+}
+.ach-shelf .ach-shelf-num span {
+  font-size: 0.45em;
+  color: var(--muted);
+}
+.ach-shelf .ach-census-mini {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.ach-shelf .ach-census-mini li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.ach-shelf .ach-census-mini i {
+  width: 10px;
+  height: 10px;
+}
+.ach-shelf .ach-shelf-row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+.ach-shelf .ach-shelf-row a {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 10px 4px 8px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--text);
+  transition: background var(--dur);
+}
+.ach-shelf .ach-shelf-row a:hover {
+  background: var(--tint-2);
+}
+.ach-shelf .ach-shelf-nm {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ach-shelf .ach-shelf-dt {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+.ach-shelf .ach-shelf-empty {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.ach-shelf .ach-shelf-next {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--tint);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    border-color var(--dur),
+    background var(--dur);
+}
+.ach-shelf .ach-shelf-next:hover {
+  border-color: var(--rule-strong);
+  background: var(--tint-2);
+}
+.ach-shelf .ach-shelf-next .lbl {
+  margin: 0;
+}
+.ach-shelf .ach-shelf-next-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ach-shelf .ach-shelf-next-b {
+  min-width: 0;
+}
+.ach-shelf .ach-shelf-next-b b {
+  display: block;
+  font-family: var(--display);
+  line-height: 1.3;
+}
+.ach-shelf .ach-shelf-req {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------------
+   Unlock dialog
+   --------------------------------------------------------------------- */
+.ach-cel-backdrop {
+  z-index: 70;
+}
+.ach-cel.modal {
+  width: min(520px, 100%);
+  padding: 34px 32px 26px;
+  text-align: center;
+}
+.ach-cel.is-many {
+  width: min(640px, 100%);
+}
+.ach-cel .ach-cel-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+}
+.ach-cel .ach-cel-single,
+.ach-cel .ach-cel-multi {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.ach-cel .ach-cel-stage {
+  position: relative;
+  width: 232px;
+  height: 232px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+.ach-cel .ach-cel-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow-action-c), transparent);
+  opacity: 0.7;
+}
+.ach-cel .ach-cel-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--c-nebula) 32%, transparent);
+}
+.ach-cel .ach-cel-ring.r1 {
+  inset: 18px;
+}
+.ach-cel .ach-cel-ring.r2 {
+  inset: 0;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--c-pulsar) 28%, transparent);
+}
+.ach-cel .ach-cel-ring.r2 .orbit-dot {
+  background: light-dark(var(--c-pulsar), #ffd6ec);
+  box-shadow: 0 0 14px 4px var(--glow-pulsar-c);
+}
+.ach-cel .ach-cel-orb {
+  position: relative;
+  display: inline-block;
+}
+.ach-cel .ach-cel-kicker {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--c-nebula) 32%, transparent);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-nebula);
+}
+.ach-cel .ach-cel-title {
+  margin: 4px 0 0;
+  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.375rem);
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+.ach-cel .ach-cel-desc {
+  margin: 4px 0 0;
+  max-width: 40ch;
+  color: var(--text-2);
+}
+.ach-cel .ach-cel-stat {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.ach-cel .ach-cel-stat b {
+  color: var(--text);
+}
+.ach-cel .ach-cel-grid {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 10px;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ach-cel .ach-cel-grid li {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  padding: 16px 8px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--tint);
+  border: 1px solid var(--border);
+}
+.ach-cel .ach-cel-grid b {
+  margin-top: 4px;
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  line-height: 1.25;
+}
+.ach-cel .ach-cel-acts {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* ---------------------------------------------------------------------
+   Header chip (desktop) + More sheet entry (≤900px)
+   --------------------------------------------------------------------- */
+.masthead .ach-hdr {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--c-nebula) 34%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--c-violet) 16%, transparent), color-mix(in srgb, var(--c-cyan) 12%, transparent));
+  color: var(--text);
+  font-family: var(--display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color var(--dur),
+    background var(--dur);
+}
+.masthead .ach-hdr:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.masthead .ach-hdr.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--c-violet) 24%, transparent);
+}
+.masthead .ach-hdr-icon {
+  color: var(--c-nebula);
+}
+.masthead .ach-hdr-num {
+  font-variant-numeric: tabular-nums;
+}
+.masthead .ach-hdr-num small {
+  font-size: 0.85em;
+  color: var(--muted);
+  font-weight: 500;
+}
+.more-sheet .ach-more-n {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--muted);
+}
+/* the masthead is capped at --page-max at every viewport width, so there is never room for a labelled
+   chip: it is always a round tool button with a count bubble (the full label lives in aria-label/title) */
+.masthead .ach-hdr {
+  position: relative;
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+  flex: none;
+}
+.masthead .ach-hdr-text,
+.masthead .ach-hdr-num small {
+  display: none;
+}
+.masthead .ach-hdr-num {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--grad-action);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  line-height: 1;
+}
+@media (max-width: 900px) {
+  .masthead .ach-hdr {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .ach-page .ach-readout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ach-page .ach-ro:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .ach-page .ach-top {
+    grid-template-columns: 1fr;
+  }
+  .ach-shelf .ach-shelf-grid {
+    grid-template-columns: minmax(150px, 0.7fr) minmax(0, 2fr);
+  }
+  .ach-shelf .ach-shelf-next {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 640px) {
+  .ach-page .ach-readout {
+    padding: 18px;
+    gap: 16px 18px;
+  }
+  .ach-page .ach-ro:nth-child(n + 3) {
+    grid-column: 1 / -1;
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  .ach-page .ach-ro:nth-child(2) {
+    padding-left: 18px;
+  }
+  .ach-page .ach-ro-num {
+    font-size: 1.875rem;
+  }
+  .ach-page .ach-next-border > .ach-next {
+    padding: 20px 18px;
+  }
+  .ach-page .ach-next-hero {
+    flex-wrap: wrap;
+  }
+  .ach-page .ach-next-copy {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+  .ach-page .ach-next-name {
+    font-size: 1.3rem;
+  }
+  .ach-page .ach-recent {
+    padding: 18px;
+  }
+  .ach-page .ach-recent-list li {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .ach-page .ach-recent-when {
+    display: none;
+  }
+  .ach-page .ach-filters {
+    margin-top: var(--s-6);
+  }
+  .ach-page .ach-group-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .ach-page .ach-group-count {
+    grid-column: 1 / -1;
+    justify-items: start;
+  }
+  .ach-page .ach-card {
+    padding: 18px;
+  }
+
+  .today .ach-shelf {
+    order: 6;
+    padding: 20px;
+  }
+  .ach-shelf .ach-shelf-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .ach-shelf .ach-shelf-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ach-cel.modal {
+    padding: 30px 18px 20px;
+  }
+  .ach-cel .ach-cel-stage {
+    width: 196px;
+    height: 196px;
+  }
+  .ach-cel .ach-cel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ach-cel .ach-cel-acts .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- reduced motion: the gold sheen and the diamond spin stop ---------- */
+@media (prefers-reduced-motion: reduce) {
+  :is(.ach-page, .ach-shelf, .ach-cel) .ach-orb::before {
+    animation: none !important;
+  }
+  .ach-page .ach-card:hover {
+    transform: none;
+  }
+}

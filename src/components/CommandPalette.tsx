@@ -29,6 +29,7 @@ const PAGES: Item[] = [
   { id: 'page:weak', label: 'Weak areas', href: '/weak-areas', keywords: ['mistakes', 'revise'] },
   { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', keywords: ['drill', 'mistakes'] },
   { id: 'page:companies', label: 'Architecture challenges', href: '/challenges', keywords: ['mock', 'interview'] },
+  { id: 'page:achievements', label: 'Achievements', hint: 'badges and tiers', href: '/achievements', keywords: ['badges', 'trophies', 'medals', 'milestones', 'rewards'] },
   { id: 'page:settings', label: 'Settings', href: '/settings', keywords: ['theme', 'pass mark', 'reset'] },
 ];
 

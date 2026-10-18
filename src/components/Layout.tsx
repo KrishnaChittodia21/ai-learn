@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { NavLink, useLocation, useOutlet } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChartColumn, CircleDot, CircleHelp, Ellipsis, Flame, Lock, Moon, Search, Settings, Sparkles, Sun, Target, Trophy, X } from 'lucide-react';
+import { ChartColumn, CircleDot, CircleHelp, Ellipsis, Flame, Lock, Medal, Moon, Search, Settings, Sparkles, Sun, Target, Trophy, X } from 'lucide-react';
 import { COMPANY_QUESTIONS, TOPICS } from '../content';
 import { setSettings, useProgress } from '../lib/progress';
 import { companyUnlocked, topicStatus } from '../lib/stats';
@@ -13,9 +13,13 @@ import { CelebrationWatcher } from './CelebrationWatcher';
 import { Footer } from './Footer';
 import { AmbientStage, BrandMark, Wordmark } from './Brand';
 import { studyStreak } from '../lib/streak';
+import { useAchievementDetection } from '../lib/useAchievements';
+import { ACHIEVEMENT_TOTAL, achievementById, TIER_LABEL } from '../content/achievements';
 
 // cmdk is only needed once the palette is opened
 const CommandPalette = lazy(() => import('./CommandPalette'));
+// the unlock dialog is only needed once a badge is earned
+const AchievementCelebration = lazy(() => import('./achievements/AchievementCelebration'));
 const ACCENT_IDS = ['pine', 'ink', 'plum'];
 
 export default function Layout() {
@@ -123,6 +127,22 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', onKey);
   }, [navOpen]);
 
+  // ---- achievements: detect + store new badges; celebrate once the guide (and search) is closed ----
+  const navigate = useNavigate();
+  const { queue: newBadges, dismiss: dismissUnlocked } = useAchievementDetection(p);
+  const showUnlocked = newBadges.length > 0 && !guide.tour && !guide.palette;
+  const viewAllAchievements = useCallback(() => {
+    dismissUnlocked();
+    navigate('/achievements');
+  }, [dismissUnlocked, navigate]);
+  const unlockedNews = !showUnlocked
+    ? ''
+    : newBadges.length === 1
+      ? `Achievement unlocked: ${achievementById[newBadges[0].id]?.name ?? ''}${TIER_LABEL[newBadges[0].tier] ? `, ${TIER_LABEL[newBadges[0].tier]} tier` : ''}`
+      : `${newBadges.length} achievements unlocked`;
+  const earnedCount = Object.keys(p.achievements ?? {}).filter((id) => achievementById[id]).length;
+  const achLabel = `Achievements: ${earnedCount} of ${ACHIEVEMENT_TOTAL} earned`;
+
   const mistakes = Object.values(p.mcq).filter((r) => !r.lastCorrect).length;
   const passedCount = TOPICS.filter((t) => topicStatus(p, t) === 'passed').length;
   const onTopic = location.pathname.startsWith('/topic/');
@@ -184,6 +204,14 @@ export default function Layout() {
                 {streak}
               </span>
             </span>
+            <NavLink to="/achievements" className={cls('ach-hdr')} aria-label={achLabel} title={achLabel}>
+              <Medal size={16} aria-hidden className="ach-hdr-icon" />
+              <span className="ach-hdr-text">Achievements</span>
+              <span className="ach-hdr-num" aria-hidden>
+                {earnedCount}
+                <small>/{ACHIEVEMENT_TOTAL}</small>
+              </span>
+            </NavLink>
             <button type="button" className="tool-btn guide-btn" onClick={openTour} aria-label="Guide (?)" title="Guide (?)">
               <CircleHelp size={18} aria-hidden />
             </button>
@@ -199,7 +227,7 @@ export default function Layout() {
               onClick={() => setNavOpen((o) => !o)}
               aria-expanded={navOpen}
               aria-controls="more-sheet"
-              aria-label={navOpen ? 'Close menu' : 'More: search, guide, theme, settings'}
+              aria-label={navOpen ? 'Close menu' : 'More: search, achievements, guide, theme, settings'}
             >
               {navOpen ? <X size={19} aria-hidden /> : <Ellipsis size={19} aria-hidden />}
             </button>
@@ -239,6 +267,12 @@ export default function Layout() {
                 >
                   <Search size={18} aria-hidden /> Search the manual
                 </button>
+                <NavLink to="/achievements" className={cls('more-item ach-more')}>
+                  <Medal size={18} aria-hidden /> Achievements
+                  <span className="ach-more-n" aria-label={`${earnedCount} of ${ACHIEVEMENT_TOTAL} earned`}>
+                    {earnedCount}/{ACHIEVEMENT_TOTAL}
+                  </span>
+                </NavLink>
                 <button
                   type="button"
                   className="more-item"
@@ -307,6 +341,15 @@ export default function Layout() {
           <CommandPalette />
         </Suspense>
       )}
+      {/* achievement unlocks wait until the guide and the search palette are closed */}
+      {showUnlocked && (
+        <Suspense fallback={null}>
+          <AchievementCelebration items={newBadges} onClose={dismissUnlocked} onViewAll={viewAllAchievements} />
+        </Suspense>
+      )}
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {unlockedNews}
+      </div>
     </div>
   );
 }
