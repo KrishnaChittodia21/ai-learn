@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "validate": "node --no-warnings scripts/validate-content.mjs",
+    "validate": "node --no-warnings scripts/validate-content.mjs && node --no-warnings scripts/validate-achievements.mjs",
     "project": "node --no-warnings scripts/run-project.mjs"
   },
   "dependencies": {

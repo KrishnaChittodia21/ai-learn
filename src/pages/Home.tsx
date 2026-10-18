@@ -12,6 +12,7 @@ import { shiftDay } from '../lib/metrics';
 import { ProgressPanel } from '../components/ProgressPanel';
 import { DashboardMetrics } from '../components/DashboardMetrics';
 import { WeakReattempt } from '../components/WeakReattempt';
+import { AchievementsSummary } from '../components/achievements/AchievementsSummary';
 
 const TAB_LABELS: Record<string, string> = {
   learn: 'Read',
@@ -283,6 +284,8 @@ export default function Home() {
         <WeakReattempt weak={weak} answered={answered} passMark={p.settings.passMark} firstExamHref={firstExamHref} />
         <Activity days={p.activityDays} />
       </section>
+
+      <AchievementsSummary p={p} />
 
       <section className="td-record" aria-labelledby="record-title">
         <div className="td-head">

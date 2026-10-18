@@ -207,7 +207,7 @@
   align-items: center;
   gap: 10px;
   height: 40px;
-  min-width: 168px;
+  min-width: 136px;
   padding: 0 8px 0 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
@@ -288,7 +288,8 @@
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   background: var(--accent-soft);
 }
-.menu-toggle {
+/* .tool-btn sets display too: qualify so the hidden toggle doesn't still take a flex gap on desktop */
+.tool-btn.menu-toggle {
   display: none;
 }
 
@@ -430,13 +431,8 @@
     display: none;
   }
 }
-@media (max-width: 1120px) {
-  .masthead-inner {
-    gap: var(--s-3);
-  }
-  .nav-link {
-    padding: 0 10px;
-  }
+/* the streak folds to its number before the nav gets squeezed */
+@media (max-width: 1240px) {
   .streak-text {
     display: none;
   }
@@ -445,6 +441,17 @@
   }
   .streak-chip {
     padding: 0 12px;
+  }
+}
+@media (max-width: 1120px) {
+  .masthead-inner {
+    gap: var(--s-2);
+  }
+  .masthead-tools {
+    gap: 6px;
+  }
+  .nav-link {
+    padding: 0 8px;
   }
 }
 @media (max-width: 1000px) {
@@ -476,7 +483,7 @@
   .settings-btn {
     display: none;
   }
-  .menu-toggle {
+  .tool-btn.menu-toggle {
     display: inline-grid;
   }
   .masthead-tools {

@@ -189,6 +189,10 @@ function STEPS(): Step[] {
             </tbody>
           </table>
           <p className="tour-note">The challenges open once every topic exam is passed.</p>
+          <p className="tour-note">
+            Along the way you earn <strong>achievements</strong>: badges for milestones that climb from bronze to diamond. They live on
+            the Achievements page and the Trophy shelf on Today.
+          </p>
         </>
       ),
     },
@@ -221,7 +225,7 @@ function STEPS(): Step[] {
             </div>
           </dl>
           <p className="tour-note tour-phone">
-            On a phone the five places sit in the <strong>tab bar</strong> at the bottom; search, the guide, theme and settings are under{' '}
+            On a phone the five places sit in the <strong>tab bar</strong> at the bottom; search, achievements, the guide, theme and settings are under{' '}
             <strong>More</strong> at the top.
           </p>
           <ul className="tour-keys" aria-label="Keyboard shortcuts">

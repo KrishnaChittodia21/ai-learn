@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { mergeEarned, type EarnedNow, type StoredAchievement } from '../content/achievements';
 
 export type Rating = 'nailed' | 'partial' | 'missed';
 
@@ -46,6 +47,12 @@ export interface Progress {
   migrations?: string[];
   /** local dates (YYYY-MM-DD) with any study activity, oldest first (max 120), for the study streak */
   activityDays?: string[];
+  /**
+   * earned badges (src/content/achievements.ts). Optional and backward-compatible: a save made before
+   * achievements existed has no key at all (undefined), which tells the detector to backfill what that
+   * progress already earned quietly instead of celebrating it as new (see useAchievements.ts).
+   */
+  achievements?: Record<string, StoredAchievement>;
   settings: Settings;
 }
 
@@ -60,6 +67,7 @@ const DEFAULT: Progress = {
   drafts: {},
   company: {},
   mcq: {},
+  achievements: {},
   // fresh progress already matches current content, so no migration applies
   migrations: ['fund-estimation-toolkit'],
   settings: { passMark: 70, secondsPerQuestion: 90, shuffle: true, theme: 'system', mockMinutes: 45, studyLock: 'exam' },
@@ -71,7 +79,11 @@ function load(): Progress {
     if (!raw) return DEFAULT;
     const parsed = JSON.parse(raw) as Partial<Progress>;
     // migrations are judged from what was saved, not from the defaults merged in
-    return migrate({ ...DEFAULT, ...parsed, settings: { ...DEFAULT.settings, ...parsed.settings } }, parsed.migrations ?? []);
+    // `achievements` stays undefined for saves from before badges existed (no default merged in)
+    return migrate(
+      { ...DEFAULT, ...parsed, achievements: parsed.achievements, settings: { ...DEFAULT.settings, ...parsed.settings } },
+      parsed.migrations ?? [],
+    );
   } catch {
     return DEFAULT;
   }
@@ -202,6 +214,20 @@ export function setSettings(s: Partial<Settings>) {
 
 export function resetProgress() {
   update((p) => ({ ...DEFAULT, settings: p.settings }), false);
+}
+
+/** Store newly earned badges / tier-ups (never a study action, never downgrades). */
+export function earnAchievements(earned: EarnedNow[], at = Date.now()) {
+  if (!earned.length) return;
+  update((p) => ({ ...p, achievements: mergeEarned(p.achievements, earned, at) }), false);
+}
+
+/**
+ * First evaluation of a save made before achievements existed: store what that progress already
+ * earned, always writing the map (even empty) so the next unlock is celebrated normally.
+ */
+export function backfillAchievements(earned: EarnedNow[], at = Date.now()) {
+  update((p) => ({ ...p, achievements: mergeEarned(p.achievements ?? {}, earned, at) }), false);
 }
 
 export function isPassed(p: Progress, topicId: string) {
