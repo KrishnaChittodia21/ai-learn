@@ -11,7 +11,8 @@ export function topicStatus(p: Progress, t: Topic): TopicStatus {
     !!p.tests[t.id] ||
     t.interviewQuestions.some((q) => p.iq[q.id]) ||
     t.envelopeQuestions.some((q) => p.boe[q.id]) ||
-    t.codeChallenges.some((c) => p.cc[c.id]);
+    t.codeChallenges.some((c) => p.cc[c.id]) ||
+    (t.promptLabs ?? []).some((l) => !!p.promptLabs?.[l.id]);
   return touched ? 'in-progress' : 'new';
 }
 

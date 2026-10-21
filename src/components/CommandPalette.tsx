@@ -100,6 +100,19 @@ export default function CommandPalette() {
       }),
     [],
   );
+  const promptLabs = useMemo<Item[]>(
+    () =>
+      TOPICS.flatMap((t) =>
+        (t.promptLabs ?? []).map((l) => ({
+          id: `prompt-lab:${l.id}`,
+          label: l.title,
+          hint: `prompt lab · ${t.title}`,
+          href: `/topic/${t.id}?tab=prompt-lab`,
+          keywords: ['prompt lab', 'prompt', 'practice'],
+        })),
+      ),
+    [],
+  );
   const recent = (prefs.recentCommands ?? []).slice(0, 5);
 
   const go = useCallback(
@@ -190,6 +203,7 @@ export default function CommandPalette() {
             <Command.Group heading="Topics">{topics.map((i) => row(i))}</Command.Group>
             {q.length >= 2 && <Command.Group heading="Sections">{sections.map((i) => row(i))}</Command.Group>}
             {company.length > 0 && <Command.Group heading="Architecture challenges">{company.map((i) => row(i))}</Command.Group>}
+            {promptLabs.length > 0 && <Command.Group heading="Prompt labs">{promptLabs.map((i) => row(i))}</Command.Group>}
             {capstones.length > 0 && <Command.Group heading="Capstone projects">{capstones.map((i) => row(i))}</Command.Group>}
           </Command.List>
           <div className="cmdk-foot">

@@ -2121,3 +2121,649 @@
     translate: none;
   }
 }
+
+/* ======================================================================
+   Prompt Lab (src/components/PromptLab.tsx): brief → SYSTEM/USER editors → live scorecard.
+   Three columns on wide screens; the brief spans the top from 1200px; one column ≤900px with a
+   sticky score summary above the bottom tab bar. The scorecard of the first unsolved lab holds
+   the screen's one spinning border.
+   ====================================================================== */
+.plab-intro {
+  max-width: none;
+}
+.plab {
+  margin: 0 0 var(--s-5);
+  padding: 26px 28px 28px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+}
+.plab.is-solved {
+  border-color: color-mix(in srgb, var(--c-ion) 40%, transparent);
+  box-shadow:
+    var(--glass-shadow),
+    0 0 40px -18px var(--glow-ion-c);
+}
+.plab-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.plab-head-text {
+  min-width: 0;
+}
+.plab-head h2 {
+  margin: 8px 0 0;
+  font-size: clamp(1.3rem, 1.1rem + 0.7vw, 1.625rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.plab-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.plab-best {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.plab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) 320px;
+  grid-template-areas: 'brief work score';
+  gap: 24px;
+  align-items: start;
+}
+.plab-brief {
+  grid-area: brief;
+  min-width: 0;
+}
+.plab-work {
+  grid-area: work;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plab-score-wrap {
+  grid-area: score;
+  min-width: 0;
+  position: sticky;
+  top: calc(var(--masthead) + 84px);
+}
+.plab-brief > .md {
+  font-size: 0.9375rem;
+  color: var(--tp-ink);
+}
+.plab-brief > .tp-kicker {
+  margin-bottom: 6px;
+}
+
+/* what the weak prompt produced: a dark island */
+.plab-bad {
+  margin: var(--s-4) 0;
+  border: 1px solid color-mix(in srgb, var(--c-error) 40%, transparent);
+  border-radius: 16px;
+  background: var(--code-bg);
+  color-scheme: dark;
+  color: var(--code-text);
+  overflow: hidden;
+  box-shadow: 0 0 34px -20px var(--c-error);
+}
+.plab-bad figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(100deg, rgb(255 107 138 / 0.18), rgb(255 79 163 / 0.05));
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-error);
+}
+.plab-bad pre {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plab-hints {
+  margin-top: var(--s-3);
+}
+.plab-hint-btn {
+  align-self: flex-start;
+}
+
+/* editors */
+.plab-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plab-autosave {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+.plab-toolbar-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plab-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.plab-editor-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-nebula);
+  cursor: text;
+}
+.plab-editor-hint {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+}
+.plab-editor-count {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.plab-editor-box {
+  max-height: 520px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.plab-editor-box textarea,
+.plab-editor-box pre {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  line-height: 1.6 !important;
+}
+.plab-editor-box textarea {
+  caret-color: #ffffff;
+}
+.plab-editor-box textarea::placeholder {
+  color: rgb(201 196 234 / 0.45);
+}
+.plab-hl-var {
+  color: #0b0820;
+  background: #7ef0ff;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgb(126 240 255 / 0.45);
+}
+.plab-hl-tag {
+  color: #ff8fc8;
+}
+.plab-hl-fence {
+  color: #ffc58f;
+}
+.plab-total {
+  align-self: flex-end;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.plab-total.over {
+  color: var(--bad);
+}
+
+/* scorecard */
+.plab-score-border {
+  border-radius: var(--radius-lg);
+}
+.plab-score-border.is-solved {
+  padding: 1.5px;
+  background: linear-gradient(120deg, var(--c-ion), var(--c-success));
+}
+.plab-score {
+  padding: 0 16px 16px;
+  border-radius: calc(var(--radius-lg) - 1.5px);
+  background: light-dark(#ffffff, #0d0b24);
+  /* taller than the screen with every check open: scroll inside, ring summary pinned on top */
+  max-height: calc(100dvh - var(--masthead) - 100px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.plab-score:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.plab-score-border:not(.gborder):not(.is-solved) > .plab-score {
+  border: 1px solid var(--glass-border);
+}
+.plab-score-top {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 -16px;
+  padding: 16px 16px 12px;
+  background: inherit;
+  border-bottom: 1px solid var(--border);
+}
+.plab-score-sum {
+  min-width: 0;
+}
+.plab-score-sum .lbl {
+  margin-bottom: 4px;
+}
+.plab-verdict {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.plab-verdict.pass {
+  color: var(--good);
+}
+.plab-score-meta {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.plab-ring {
+  position: relative;
+  flex: none;
+  width: 104px;
+  height: 104px;
+}
+.plab-ring-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--c-nebula), var(--c-pulsar) var(--p), var(--tint-2) var(--p));
+  -webkit-mask: radial-gradient(farthest-side, transparent 76%, #000 77%);
+  mask: radial-gradient(farthest-side, transparent 76%, #000 77%);
+  filter: drop-shadow(0 0 10px var(--glow-pulsar-c));
+  transition: filter var(--dur-slow);
+}
+.plab-ring.pass .plab-ring-arc {
+  background: conic-gradient(var(--c-ion), var(--c-success) var(--p), var(--tint-2) var(--p));
+  filter: drop-shadow(0 0 12px var(--glow-ion-c));
+}
+/* pass mark: a tick on the ring at passScore */
+.plab-ring-mark {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--mark));
+}
+.plab-ring-mark::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1.5px);
+  top: -3px;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 6px var(--glow-ion-c);
+}
+.plab-ring-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+.plab-ring-num {
+  font-family: var(--display);
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.plab-ring.pass .plab-ring-num {
+  color: var(--c-ion);
+}
+.plab-ring-cap {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.plab-checks {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.plab-check {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  transition:
+    background var(--dur-slow),
+    border-color var(--dur-slow),
+    box-shadow var(--dur-slow);
+}
+.plab-check.is-pass {
+  box-shadow: 0 0 22px -12px var(--good);
+}
+.plab-check-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: var(--bad);
+  border: 1px solid color-mix(in srgb, var(--bad) 50%, transparent);
+}
+.plab-check.is-pass .plab-check-icon {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 60%, transparent);
+  background: var(--good-soft);
+}
+.plab-check-body {
+  min-width: 0;
+}
+.plab-check-label {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text);
+}
+.plab-check-w {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.plab-check-why {
+  margin-top: 3px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.plab-check-detail {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.plab-honest {
+  margin: 14px 2px 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* mobile sticky summary (hidden on wide screens) */
+.plab-sticky {
+  display: none;
+}
+
+/* model answer + diff */
+.plab-model {
+  margin-top: var(--s-5);
+  padding-top: var(--s-5);
+  border-top: 1px dashed var(--border);
+  scroll-margin-top: calc(var(--masthead) + 84px);
+}
+.plab-model-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.plab-model-head h3 {
+  margin: 6px 0 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+}
+.plab-seg {
+  display: flex;
+  gap: 6px;
+}
+.plab-sbs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.plab-sbs-col {
+  min-width: 0;
+}
+.plab-sbs-k {
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.plab-sbs-k.model {
+  color: var(--c-ion);
+}
+.plab-code {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color-scheme: dark;
+  color: var(--code-text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 460px;
+  overflow: auto;
+}
+.plab-diff-wrap {
+  margin-bottom: 14px;
+}
+.plab-diff-key {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.plab-diff-key.del {
+  color: var(--bad);
+}
+.plab-diff-key.add {
+  color: var(--good);
+}
+.plab-diff {
+  padding: 10px 0;
+}
+.plab-diff-line {
+  display: block;
+  padding: 0 14px 0 2em;
+  text-indent: -2em;
+}
+.plab-diff-op {
+  display: inline-block;
+  width: 2em;
+  text-align: center;
+  color: var(--muted);
+  user-select: none;
+}
+.plab-diff-line.add {
+  background: rgb(184 255 138 / 0.14);
+}
+.plab-diff-line.add .plab-diff-op {
+  color: #b8ff8a;
+}
+.plab-diff-line.del {
+  background: rgb(255 107 138 / 0.12);
+}
+.plab-diff-line.del .plab-diff-op {
+  color: #ff6b8a;
+}
+.plab-why {
+  margin-top: var(--s-2);
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--c-ion) 30%, transparent);
+  background: var(--info-soft);
+}
+.plab-why .md {
+  font-size: 0.9375rem;
+}
+.plab-why .md > :last-child {
+  margin-bottom: 0;
+}
+.plab-followups .followups {
+  margin-top: var(--s-5);
+}
+.plab-locked-fu {
+  margin: var(--s-4) 0 0;
+}
+
+/* ≤1200px: the brief spans the top; editors + scorecard side by side */
+@media (max-width: 1200px) {
+  .plab-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-areas:
+      'brief brief'
+      'work score';
+  }
+  .plab-brief {
+    max-width: 820px;
+  }
+}
+/* ≤900px: one column: scenario → editors → scorecard, with a sticky score summary */
+@media (max-width: 900px) {
+  .plab {
+    padding: 20px 16px 22px;
+  }
+  .plab-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .plab-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+    gap: 20px;
+  }
+  .plab-brief,
+  .plab-work,
+  .plab-score-wrap {
+    grid-area: auto;
+  }
+  .plab-score-wrap {
+    position: static;
+  }
+  .plab-score {
+    max-height: none;
+    overflow: visible;
+    scroll-margin-top: calc(var(--masthead) + 84px);
+  }
+  .plab-score-top {
+    position: static;
+  }
+  .plab-sticky {
+    position: sticky;
+    bottom: calc(var(--tabbar) + 10px + env(safe-area-inset-bottom, 0px));
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 14px 6px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg), color-mix(in srgb, var(--bg) 70%, transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+    box-shadow: var(--glass-shadow);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .plab-sticky-score {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--grad-action);
+    color: var(--accent-text);
+    font-size: 0.9375rem;
+  }
+  .plab-sticky.pass .plab-sticky-score {
+    background: linear-gradient(120deg, var(--c-ion), var(--c-success));
+  }
+  .plab-sticky-text {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: var(--fs-xs);
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .plab-sticky-go {
+    flex: none;
+    font-family: var(--display);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--c-nebula);
+  }
+  .plab-sticky.pass .plab-sticky-go {
+    color: var(--good);
+  }
+  .plab-sbs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .plab-editor-box {
+    max-height: 420px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plab-check,
+  .plab-ring-arc {
+    transition: none;
+  }
+}

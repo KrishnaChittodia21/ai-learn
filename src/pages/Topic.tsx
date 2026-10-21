@@ -23,9 +23,10 @@ import { projectsForTopic } from '../content/projects';
 import { CapstoneTab } from '../components/Capstone';
 import { vizForSection } from '../viz/registry';
 import { SectionPractice } from '../components/SectionPractice';
+import { PromptLabTab } from '../components/PromptLab';
 import { currentlyWrong, weakSections } from '../lib/weak';
 
-const TAB_IDS: TabId[] = ['learn', 'code', 'interview', 'envelope', 'cheat', 'capstone', 'exam'];
+const TAB_IDS: TabId[] = ['learn', 'code', 'prompt-lab', 'interview', 'envelope', 'cheat', 'capstone', 'exam'];
 
 /** First-time tips, one per tab type (Settings → "Show coach tips"). */
 const TIPS: Record<TabId, { title: string; text: string }> = {
@@ -36,6 +37,10 @@ const TIPS: Record<TabId, { title: string; text: string }> = {
   code: {
     title: 'How to use the lab:',
     text: 'edit the starter in place (it saves automatically), open hints one at a time, then compare with the reference solution and mark it done.',
+  },
+  'prompt-lab': {
+    title: 'How to use the Prompt Lab:',
+    text: 'rewrite the weak prompt in the SYSTEM and USER boxes and watch the live scorecard: each check flips as your prompt gains structure. It grades offline, so it checks structure, not real model behaviour. Reach the pass mark, then compare with the model answer.',
   },
   interview: {
     title: 'How to practise:',
@@ -175,6 +180,7 @@ export default function TopicPage() {
       {tab !== 'learn' && (
         <div className="tp-tab-panel">
           {tab === 'code' && topic.codeChallenges.map((c, i) => <ChallengeCard key={c.id} c={c} n={i + 1} />)}
+          {tab === 'prompt-lab' && (topic.promptLabs?.length ? <PromptLabTab labs={topic.promptLabs} /> : <p className="muted">This topic has no prompt labs yet.</p>)}
           {tab === 'interview' && (locks.interview ? <StudyLock topic={topic} what="interview questions" /> : <InterviewTab topic={topic} />)}
           {tab === 'envelope' && topic.envelopeQuestions.map((q, i) => <EnvelopeCard key={q.id} q={q} n={i + 1} />)}
           {tab === 'cheat' && <CheatSheet topic={topic} />}

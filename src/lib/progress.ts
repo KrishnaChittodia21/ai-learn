@@ -20,6 +20,19 @@ export interface McqRecord {
   lastAt: string;
 }
 
+/** one Prompt Lab's state (src/components/PromptLab.tsx) */
+export interface PromptLabRecord {
+  /** the learner's current prompt (autosaved) */
+  system: string;
+  user: string;
+  /** best offline score so far, 0..100 */
+  best: number;
+  /** first time the score reached the lab's pass score (solved) */
+  solvedAt?: string;
+  /** when the model answer was first revealed */
+  revealedAt?: string;
+}
+
 export interface Settings {
   passMark: number;
   secondsPerQuestion: number;
@@ -53,6 +66,8 @@ export interface Progress {
    * progress already earned quietly instead of celebrating it as new (see useAchievements.ts).
    */
   achievements?: Record<string, StoredAchievement>;
+  /** Prompt Lab drafts and scores by lab id. Optional: saves from before Prompt Lab load without it. */
+  promptLabs?: Record<string, PromptLabRecord>;
   settings: Settings;
 }
 
@@ -68,6 +83,7 @@ const DEFAULT: Progress = {
   company: {},
   mcq: {},
   achievements: {},
+  promptLabs: {},
   // fresh progress already matches current content, so no migration applies
   migrations: ['fund-estimation-toolkit'],
   settings: { passMark: 70, secondsPerQuestion: 90, shuffle: true, theme: 'system', mockMinutes: 45, studyLock: 'exam' },
@@ -206,6 +222,47 @@ export function rateIQ(id: string, r: Rating | null) {
 
 export function setDraft(id: string, text: string) {
   update((p) => ({ ...p, drafts: { ...p.drafts, [id]: text } }));
+}
+
+const emptyLab: PromptLabRecord = { system: '', user: '', best: 0 };
+
+/** Autosave a Prompt Lab draft (does not touch the score). */
+export function setPromptDraft(id: string, draft: { system: string; user: string }) {
+  update((p) => {
+    const prev = p.promptLabs?.[id] ?? emptyLab;
+    return { ...p, promptLabs: { ...p.promptLabs, [id]: { ...prev, system: draft.system, user: draft.user } } };
+  });
+}
+
+/**
+ * Record a graded score: keeps the best, and stamps `solvedAt` the first time it reaches `passScore`.
+ * Returns true when this call solved the lab for the first time. No-op (no write) when nothing changes.
+ */
+export function recordPromptScore(id: string, score: number, passScore: number): boolean {
+  const prev = state.promptLabs?.[id];
+  // only a lab the learner has edited (a draft exists) records scores: opening the tab is not study activity
+  if (!prev) return false;
+  const firstSolve = !prev.solvedAt && score >= passScore;
+  if (score <= prev.best && !firstSolve) return false;
+  update((p) => {
+    const cur = p.promptLabs?.[id] ?? emptyLab;
+    const next: PromptLabRecord = { ...cur, best: Math.max(cur.best, score), solvedAt: cur.solvedAt ?? (firstSolve ? new Date().toISOString() : undefined) };
+    return { ...p, promptLabs: { ...p.promptLabs, [id]: next } };
+  });
+  return firstSolve;
+}
+
+/** Remember that the model answer was revealed; `draft` seeds the record when the lab was never edited. */
+export function markPromptRevealed(id: string, draft: { system: string; user: string }) {
+  if (state.promptLabs?.[id]?.revealedAt) return;
+  update((p) => {
+    const cur = p.promptLabs?.[id] ?? { ...emptyLab, ...draft };
+    return { ...p, promptLabs: { ...p.promptLabs, [id]: { ...cur, revealedAt: new Date().toISOString() } } };
+  });
+}
+
+export function isPromptLabSolved(p: Progress, id: string): boolean {
+  return !!p.promptLabs?.[id]?.solvedAt;
 }
 
 export function setSettings(s: Partial<Settings>) {

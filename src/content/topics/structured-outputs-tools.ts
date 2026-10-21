@@ -774,6 +774,141 @@ export async function chat(messages: Anthropic.MessageParam[], tools: Anthropic.
       ],
     },
   ],
+  promptLabs: [
+    {
+      id: 'structured-outputs-tools-pl-1',
+      title: 'Describe a tool the model will call correctly',
+      scenario: `Meetly is the scheduling assistant inside Acme's CRM. Reps type requests like "set up a call with Priya next Tuesday at 3" and the model calls a calendar tool that creates the event and emails invites.
+
+The tool was registered in a hurry: name \`do_calendar\`, description "Calendar stuff.", three free-text parameters. The model now calls it for **every** calendar question (including "what's on tomorrow?", which created an empty event), passes \`"next Tuesday"\` as the date, books 3 **am** in the wrong time zone, and **invents attendee emails** like \`priya@gmail.com\`. In the lab the tool definition is written into the system prompt, exactly as the model would read it.`,
+      task: `Rewrite the system prompt and the tool definition so that:
+
+- the tool has a specific **verb_noun name** (e.g. \`create_calendar_event\`) and a description that says **when to call it** and **when not to** (reading, moving or cancelling events);
+- every parameter is marked **required** (or not) with an exact format: dates as **ISO 8601** with a **time zone** offset, attendees as email addresses from the request or CRM only;
+- the model **asks a clarifying question instead of guessing** when a required value is missing or ambiguous;
+- \`{{user_request}}\` is wrapped in delimiters in the user turn, next to \`{{today}}\` and \`{{timezone}}\` so relative dates can be resolved.`,
+      starter: {
+        system: 'You are a helpful scheduling assistant.\n\nTool: do_calendar\nDescription: Calendar stuff.\nParameters: date (string), time (string), people (string)',
+        user: '{{user_request}}',
+      },
+      sampleBadOutput: `user_request = "What's on my calendar tomorrow?"
+--- tool call ---
+do_calendar({"date": "tomorrow", "time": "", "people": ""})      ← created an empty event
+
+user_request = "Set up a call with Priya next Tuesday at 3"
+--- tool call ---
+do_calendar({"date": "next Tuesday", "time": "3", "people": "priya@gmail.com"})
+← unparseable date, 3 am or 3 pm in which time zone?, and an invented email address`,
+      passScore: 80,
+      checks: [
+        {
+          kind: 'has-system',
+          minWords: 25,
+          weight: 5,
+          label: 'A real system prompt sets the assistant\'s job',
+          why: 'Tool use starts with context: who the assistant serves and what it is allowed to do.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['create_calendar_event', 'create_event', 'schedule_meeting', 'book_meeting', 'schedule_event', 'create_meeting', 'book_event', 'book_calendar_event'],
+          weight: 10,
+          label: 'A specific verb_noun tool name',
+          why: '"do_calendar" could mean read, create or delete. A name like create_calendar_event already tells the model when it applies.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['use this tool when', 'call this tool when', 'call it when', 'use it when', 'use when', 'only when', 'only call', 'only use', 'call this tool only'],
+          weight: 10,
+          label: 'Says when to call the tool',
+          why: 'The description is the main signal the model uses to pick a tool. State the trigger in plain words.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['do not call', 'do not use', "don't call", "don't use", 'never call', 'never use', 'not for', 'not to be used'],
+          weight: 15,
+          label: 'Says when NOT to call it',
+          why: 'Negative cases (reading, listing, moving, cancelling) are what stop the model creating an event for every calendar question.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['required'],
+          weight: 10,
+          label: 'Marks required parameters',
+          why: 'Required vs optional tells the model which values it must have before calling, and matches the JSON Schema `required` list.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['iso 8601', 'iso-8601', 'iso8601', 'yyyy-mm-dd', 'rfc 3339', 'rfc3339'],
+          weight: 15,
+          label: 'Dates in an exact machine format (ISO 8601)',
+          why: '"next Tuesday" and "3" cannot be parsed by your backend. A named format with an example can.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['timezone', 'time zone', 'utc offset', 'iana'],
+          weight: 10,
+          label: 'Time zones are explicit',
+          why: 'A time without a zone is a bug waiting for the first rep in another country. Give the zone and the current date as inputs.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['ask the user', 'ask the rep', 'ask for', 'clarifying question', 'ask a question', 'do not guess', "don't guess", 'never guess', 'never invent', 'do not invent', "don't invent"],
+          weight: 15,
+          label: 'Asks instead of guessing missing values',
+          why: 'An invented email sends an invite to a stranger. A one-line question costs a turn; a wrong booking costs trust.',
+        },
+        {
+          kind: 'delimits',
+          variable: 'user_request',
+          weight: 10,
+          label: 'The request is wrapped in delimiters',
+          why: 'Tags separate the rep\'s words from today\'s date, the time zone and your instructions.',
+        },
+      ],
+      modelAnswer: {
+        system: `You are Meetly, the scheduling assistant inside Acme's CRM. You help sales reps book meetings with their contacts.
+
+<tool_definition>
+name: create_calendar_event
+description: Creates a new event on the rep's calendar and emails invites to the attendees. Use this tool only when the rep asks to book, schedule or set up a meeting and every required parameter is known. Do not call it to read, list, move or cancel events (you have no tool for that yet; say so). Never call it twice for the same request.
+parameters:
+- title (string, required): short subject, e.g. "Intro call: Acme x Priya Shah".
+- start (string, required): ISO 8601 date-time with UTC offset, e.g. "2026-10-27T15:00:00+01:00". Resolve relative dates ("next Tuesday") from <today>, in the rep's time zone from <timezone>.
+- duration_minutes (integer, required): 15 to 240; use 30 if the rep does not say.
+- attendee_emails (array of strings, required): addresses exactly as written by the rep or shown in the CRM contact. Never invent one.
+</tool_definition>
+
+If a required value is missing or ambiguous (no time, "at 3" without am/pm, a contact with no known email), do not guess: ask the rep one short clarifying question instead of calling the tool.
+After the tool returns, confirm the booking in one sentence with date, time and time zone.`,
+        user: `<today>{{today}}</today>
+<timezone>{{timezone}}</timezone>
+
+<user_request>
+{{user_request}}
+</user_request>`,
+        why: 'The model chooses and fills tools almost entirely from their **name, description and parameter docs**, so that is where the fix goes. `create_calendar_event` plus "use this tool only when… / do not call it to read, list, move or cancel" removes the false triggers. Each parameter is **required** with an exact format and an example (ISO 8601 with offset), and `<today>` / `<timezone>` give the model what it needs to resolve "next Tuesday at 3" correctly. The ask-don\'t-guess rule turns ambiguity into a question instead of a wrong invite. In the real API you put the same text in the tool\'s `description` and JSON Schema (`required`, `format`, `enum`, `minimum`), turn on strict schema validation where available, and still validate arguments server-side (does that contact exist? is the email on the account?).',
+      },
+      hints: [
+        'Rename the tool to a verb_noun name such as create_calendar_event and rewrite the description: what it does, "use this tool only when…", and "do not call it to…" for reading, moving or cancelling events.',
+        'Document each parameter: type, required, and an exact format with an example. Dates: ISO 8601 with a UTC offset; attendees: emails from the request or CRM only.',
+        'Add a rule to ask a clarifying question instead of guessing, and in the user turn pass <today>{{today}}</today>, <timezone>{{timezone}}</timezone> and the request inside <user_request> tags.',
+      ],
+      followUps: [
+        {
+          q: 'If you use strict structured outputs for tool arguments, do you still need a good description?',
+          a: 'Yes. Strict mode guarantees the arguments match the schema (types, required fields, enums); it does not make them correct. "next Tuesday" is a valid string and priya@gmail.com is a valid email. Choosing the right tool, resolving dates and refusing to invent values come from the description and system prompt, and correctness still needs server-side validation.',
+        },
+        {
+          q: 'The assistant gets 25 more tools. What goes wrong and how do you keep tool selection accurate?',
+          a: 'Accuracy drops as tools overlap and the definitions eat context. Keep names distinct and descriptions explicit about boundaries, merge near-duplicates into one tool with an `action` enum, load only the tools relevant to the current task (tool search / routing), and build an eval set of requests with the expected tool and arguments, including cases where no tool should be called.',
+        },
+        {
+          q: 'How do you stop a booking being created twice when the model retries?',
+          a: 'Make the tool idempotent: the server derives or accepts an idempotency key (rep, attendees, start, title) and returns the existing event on a repeat. Also tell the model not to call it twice for one request, and return a clear tool result ("created event ev_123") so it knows the action succeeded.',
+        },
+      ],
+    },
+  ],
   interviewQuestions: [
     {
       id: 'structured-outputs-tools-iq-01',

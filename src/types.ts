@@ -100,6 +100,81 @@ export interface FollowUp {
   a: string;
 }
 
+// ---------- Prompt Lab: write a prompt, get an offline, deterministic structural score ----------
+// Grading lives in src/lib/promptChecks.ts (pure; also used by scripts/validate-content.mjs and
+// scripts/test-prompt-checks.mjs). Every check is data: a kind, a weight (all weights sum to 100),
+// a short label and a `why` line that teaches the principle behind it.
+
+/** Which part of the prompt a text check looks at. 'either' = system + user together (the default). */
+export type PromptPart = 'system' | 'user' | 'either';
+
+/** Fields every check carries. */
+interface PromptCheckBase {
+  /** points this check is worth; a lab's weights sum to 100 */
+  weight: number;
+  /** short imperative label, e.g. "Customer text stays out of the system prompt" */
+  label: string;
+  /** one line on why it matters (shown under the label) */
+  why: string;
+}
+
+/**
+ * Offline checks (see src/lib/promptChecks.ts for the exact semantics). Text matching is always
+ * case-insensitive, whitespace-collapsed and literal (never a regex). Template variables are
+ * written `{{name}}` (inner spaces allowed).
+ */
+export type PromptCheck = PromptCheckBase &
+  (
+    | { kind: 'has-system'; /** default 8 */ minWords?: number }
+    | {
+        kind: 'delimits';
+        /** variable name without braces */
+        variable: string;
+        /** allowed wrapper tag names; default: any XML-style tag except example/examples */
+        tags?: string[];
+      }
+    | { kind: 'includes'; anyOf: string[]; where?: PromptPart }
+    | { kind: 'excludes'; anyOf: string[]; where?: PromptPart }
+    | {
+        kind: 'includes-all';
+        /** every entry must appear in `where`; an entry that is an array passes if ANY of its alternatives appears */
+        allOf: (string | string[])[];
+        where?: PromptPart;
+      }
+    | { kind: 'examples'; min: number; max?: number }
+    | { kind: 'schema'; requireKeys: string[] }
+    | { kind: 'no-input-in-system'; variables: string[] }
+    | { kind: 'max-words'; limit: number; where?: PromptPart }
+  );
+
+export type PromptCheckKind = PromptCheck['kind'];
+
+export interface PromptDraft {
+  system?: string;
+  user: string;
+}
+
+/** "Fix this prompt" lab: weak starter prompt → learner rewrite, graded offline as you type. */
+export interface PromptLab {
+  id: string;
+  title: string;
+  /** markdown: the product situation */
+  scenario: string;
+  /** markdown: what to write or fix */
+  task: string;
+  /** the weak prompt the learner starts from */
+  starter: PromptDraft;
+  /** what the weak prompt produced (rendered monospace) */
+  sampleBadOutput?: string;
+  checks: PromptCheck[];
+  /** score (0–100) that counts as solved; default 80 */
+  passScore?: number;
+  /** a reference prompt that scores 100, with markdown `why` */
+  modelAnswer: PromptDraft & { why: string };
+  hints: string[];
+  followUps: FollowUp[];
+}
+
 export interface InterviewQuestion {
   id: string;
   difficulty: Difficulty;
@@ -157,6 +232,8 @@ export interface Topic {
   cheatSheet: string[];
   sections: Section[];
   codeChallenges: CodeChallenge[];
+  /** optional "write the prompt" labs, graded offline (Prompt Lab tab) */
+  promptLabs?: PromptLab[];
   interviewQuestions: InterviewQuestion[];
   envelopeQuestions: EnvelopeQuestion[];
   test: MCQ[];

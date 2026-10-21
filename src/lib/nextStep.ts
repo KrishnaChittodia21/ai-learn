@@ -4,7 +4,7 @@ import type { Topic } from '../types';
 import type { Progress } from './progress';
 
 /** The study path every topic follows. Ids match the topic page's `?tab=` values. */
-export type StepId = 'learn' | 'code' | 'interview' | 'envelope' | 'exam' | 'capstone';
+export type StepId = 'learn' | 'code' | 'prompt-lab' | 'interview' | 'envelope' | 'exam' | 'capstone';
 
 export interface TopicStep {
   id: StepId;
@@ -23,19 +23,22 @@ export function codeLabLabel(t: Topic) {
 }
 
 /**
- * The study-path steps of one topic, in order: Learn → Code Lab → Interview Qs → Estimation → Exam
+ * The study-path steps of one topic, in order: Learn → Code Lab → Prompt Lab → Interview Qs → Estimation → Exam
  * (→ Capstone when the topic has capstone projects). Steps with no content are left out.
  */
 export function topicSteps(p: Progress, t: Topic, capstoneCount = 0): TopicStep[] {
   const read = new Set(p.sections[t.id] ?? []);
   const readCount = t.sections.filter((_, i) => read.has(i)).length;
   const cc = t.codeChallenges.filter((c) => p.cc[c.id]).length;
+  const labs = t.promptLabs ?? [];
+  const pl = labs.filter((l) => p.promptLabs?.[l.id]?.solvedAt).length;
   const iq = t.interviewQuestions.filter((q) => p.iq[q.id]).length;
   const boe = t.envelopeQuestions.filter((q) => p.boe[q.id]).length;
   const rec = p.tests[t.id];
   const steps: TopicStep[] = [
     { id: 'learn', label: 'Read', done: readCount, total: t.sections.length, complete: false, progress: `${readCount}/${t.sections.length} read` },
     { id: 'code', label: codeLabLabel(t), done: cc, total: t.codeChallenges.length, complete: false, progress: `${cc}/${t.codeChallenges.length} done` },
+    { id: 'prompt-lab', label: 'Prompt Lab', done: pl, total: labs.length, complete: false, progress: `${pl}/${labs.length} solved` },
     { id: 'interview', label: 'Interview Qs', done: iq, total: t.interviewQuestions.length, complete: false, progress: `${iq}/${t.interviewQuestions.length} rated` },
     { id: 'envelope', label: 'Estimation', done: boe, total: t.envelopeQuestions.length, complete: false, progress: `${boe}/${t.envelopeQuestions.length} done` },
     {
@@ -55,7 +58,7 @@ export function topicSteps(p: Progress, t: Topic, capstoneCount = 0): TopicStep[
     .map((s) => ({ ...s, complete: s.id === 'exam' ? passed(p, t.id) : s.id !== 'capstone' && s.done >= s.total }));
 }
 
-export type NextKind = 'start' | 'read' | 'code' | 'interview' | 'envelope' | 'exam' | 'company' | 'done';
+export type NextKind = 'start' | 'read' | 'code' | 'prompt-lab' | 'interview' | 'envelope' | 'exam' | 'company' | 'done';
 
 export interface NextStep {
   title: string;
@@ -88,7 +91,8 @@ function hasAnyProgress(p: Progress): boolean {
     Object.keys(p.tests).length > 0 ||
     Object.keys(p.iq).length > 0 ||
     Object.keys(p.boe).length > 0 ||
-    Object.keys(p.cc).length > 0
+    Object.keys(p.cc).length > 0 ||
+    Object.keys(p.promptLabs ?? {}).length > 0
   );
 }
 
@@ -160,6 +164,17 @@ function primary(p: Progress, topics: Topic[], opts: NextStepOptions): NextStep 
       title: `Try the ${code.label} (${left} left)`,
       detail: `${t.title}: fix realistic code the way a senior engineer would, then compare with the reference.`,
       href: `${base}?tab=code`,
+      topic: t,
+    };
+  }
+  const lab = get('prompt-lab');
+  if (lab && !lab.complete) {
+    const left = lab.total - lab.done;
+    return {
+      kind: 'prompt-lab',
+      title: `Try the Prompt Lab (${left} left)`,
+      detail: `${t.title}: rewrite a weak prompt and watch the offline checks score it as you type.`,
+      href: `${base}?tab=prompt-lab`,
       topic: t,
     };
   }

@@ -17,6 +17,7 @@ import { AchievementsSummary } from '../components/achievements/AchievementsSumm
 const TAB_LABELS: Record<string, string> = {
   learn: 'Read',
   code: 'Code Lab',
+  'prompt-lab': 'Prompt Lab',
   interview: 'Questions',
   envelope: 'Estimation',
   cheat: 'Cheat sheet',
