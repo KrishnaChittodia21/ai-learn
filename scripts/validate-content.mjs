@@ -12,6 +12,8 @@ const files = readdirSync(dir)
   .filter((f) => f.endsWith('.ts'))
   .filter((f) => !wanted.length || wanted.includes(f.replace(/\.ts$/, '')));
 
+const { gradePrompt, DEFAULT_PASS_SCORE } = await import(pathToFileURL(join(root, 'src/lib/promptChecks.ts')).href);
+const CHECK_KINDS = new Set(['has-system', 'delimits', 'includes', 'excludes', 'includes-all', 'examples', 'schema', 'no-input-in-system', 'max-words']);
 const MIN = { sections: 2, cheatSheet: 8, codeChallenges: 2, interviewQuestions: 5, envelopeQuestions: 2, test: 12 };
 const allIds = new Map();
 let failures = 0;
@@ -40,6 +42,7 @@ for (const file of files) {
       ...(t.interviewQuestions ?? []),
       ...(t.envelopeQuestions ?? []),
       ...(t.test ?? []),
+      ...(t.promptLabs ?? []),
     ].map((x) => x.id);
     for (const id of ids) {
       if (!id) errs.push('missing id');
@@ -82,6 +85,34 @@ for (const file of files) {
     }
     for (const b of t.envelopeQuestions ?? []) {
       if (!b.steps?.length || !b.assumptions?.length) errs.push(`${b.id}: missing steps/assumptions`);
+    }
+    // prompt labs (optional): offline-graded checks must be well-formed, the starter must fail and the model answer must score 100
+    if (t.promptLabs !== undefined && !Array.isArray(t.promptLabs)) errs.push('promptLabs must be an array');
+    for (const lab of Array.isArray(t.promptLabs) ? t.promptLabs : []) {
+      const w = lab.id ?? '(prompt lab without id)';
+      for (const k of ['title', 'scenario', 'task']) if (!lab[k]?.trim?.()) errs.push(`${w}: missing ${k}`);
+      if (typeof lab.starter?.user !== 'string') errs.push(`${w}: starter.user missing`);
+      const checks = Array.isArray(lab.checks) ? lab.checks : [];
+      if (checks.length < 3) errs.push(`${w}: ${checks.length} checks (need ≥3)`);
+      for (const c of checks) {
+        if (!CHECK_KINDS.has(c.kind)) errs.push(`${w}: unknown check kind "${c.kind}"`);
+        if (!(Number.isFinite(c.weight) && c.weight > 0)) errs.push(`${w}: check "${c.label}" needs a positive weight`);
+        if (!c.label?.trim() || !c.why?.trim()) errs.push(`${w}: every check needs a label and a why`);
+        if ((c.kind === 'includes' || c.kind === 'excludes') && !c.anyOf?.length) errs.push(`${w}: ${c.kind} check "${c.label}" has no anyOf`);
+        if (c.kind === 'includes-all' && (!Array.isArray(c.allOf) || c.allOf.length < 2 || c.allOf.some((g) => (Array.isArray(g) ? !g.length : !String(g ?? '').trim()))))
+          errs.push(`${w}: includes-all check "${c.label}" needs ≥2 non-empty allOf entries`);
+      }
+      const sum = checks.reduce((a, c) => a + (Number(c.weight) || 0), 0);
+      if (sum !== 100) errs.push(`${w}: check weights sum to ${sum} (must be 100)`);
+      if ((lab.hints ?? []).length < 2) errs.push(`${w}: needs ≥2 hints`);
+      if ((lab.followUps ?? []).filter((f) => f?.q?.trim() && f?.a?.trim().length >= 40).length < 2) errs.push(`${w}: needs ≥2 follow-ups with answers`);
+      if (!lab.modelAnswer?.why || lab.modelAnswer.why.length < 80) errs.push(`${w}: modelAnswer.why missing/short (≥80 chars)`);
+      const pass = lab.passScore ?? DEFAULT_PASS_SCORE;
+      const starter = gradePrompt(lab, lab.starter).score;
+      const model = gradePrompt(lab, lab.modelAnswer);
+      if (starter >= pass) errs.push(`${w}: starter scores ${starter} (must be below the pass score ${pass})`);
+      if (model.score !== 100)
+        errs.push(`${w}: model answer scores ${model.score}, failing: ${model.results.filter((r) => !r.pass).map((r) => r.check.label).join('; ')}`);
     }
     // every item must carry interviewer follow-ups, so practice mimics a real interview
     const badFollowUps = (list, min) =>

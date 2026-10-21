@@ -521,6 +521,12 @@ function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: numb
       show: t.codeChallenges.length > 0,
     },
     {
+      label: 'Prompts',
+      long: 'Prompt Lab',
+      to: `${base}?tab=prompt-lab`,
+      show: (t.promptLabs?.length ?? 0) > 0,
+    },
+    {
       label: 'Questions',
       long: 'Interview questions',
       to: `${base}?tab=interview`,

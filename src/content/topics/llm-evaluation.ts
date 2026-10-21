@@ -926,6 +926,149 @@ console.log(report);`,
       ],
     },
   ],
+  promptLabs: [
+    {
+      id: 'llm-evaluation-pl-1',
+      title: 'Write an LLM-as-judge rubric prompt',
+      scenario: `Acme grades its support bot nightly: an LLM judge compares each bot answer with a **reference answer** written by a support lead, and the average score gates prompt releases.
+
+The judge prompt is one line: "rate this answer from 1 to 10". Scores for the **same answer** vary between 6 and 9 across runs, long padded answers beat short correct ones, and when the judge "knows better" than the reference it grades on its own opinion. Last week a regression shipped because the judge gave a confidently wrong refund answer an 8.`,
+      task: `Write a judge prompt that is consistent and auditable:
+
+- a **system prompt** that defines the criterion (correctness against the reference) and says to judge **only against the provided reference**, not the judge's own knowledge;
+- a **1–5 scale** where **every level has an anchor** (what exactly earns a 5, 4, 3, 2 and 1); no unanchored 1–10 scale;
+- **reasoning before the score**, and a rule that **length is not merit**;
+- \`{{answer}}\` and \`{{reference}}\` wrapped in delimiters;
+- output as **JSON** \`{"reasoning", "score"}\`.`,
+      starter: {
+        system: '',
+        user: 'Rate how good this answer is on a scale of 1 to 10.\n\nQuestion: {{question}}\nAnswer: {{answer}}\nReference: {{reference}}',
+      },
+      sampleBadOutput: `answer A (correct, 35 words): "Refunds go back to the original card within 5–7 business days."
+--- judge runs: 6, 7, 6
+
+answer B (wrong window, 140 words, friendly, detailed): "Great question! ... refunds usually arrive within 24 hours ..."
+--- judge runs: 9, 8, 9
+
+reference: "Refunds return to the original payment method within 5–7 business days."`,
+      passScore: 80,
+      checks: [
+        {
+          kind: 'has-system',
+          minWords: 12,
+          weight: 5,
+          label: 'A system prompt holds the rubric',
+          why: 'The rubric must be identical for every graded item. A constant system prompt keeps it fixed and versionable.',
+        },
+        {
+          kind: 'includes-all',
+          allOf: [
+            ['5 =', '5:', '5 -', '5 –', '5 —', '5 means', 'score 5', '5/5', '5 (', '**5**'],
+            ['4 =', '4:', '4 -', '4 –', '4 —', '4 means', 'score 4', '4/5', '4 (', '**4**'],
+            ['3 =', '3:', '3 -', '3 –', '3 —', '3 means', 'score 3', '3/5', '3 (', '**3**'],
+            ['2 =', '2:', '2 -', '2 –', '2 —', '2 means', 'score 2', '2/5', '2 (', '**2**'],
+            ['1 =', '1:', '1 -', '1 –', '1 —', '1 means', 'score 1', '1/5', '1 (', '**1**'],
+          ],
+          where: 'system',
+          weight: 25,
+          label: 'Every point on the 1–5 scale has an anchor',
+          why: 'Unanchored numbers drift between runs. "4 = all key facts, a harmless detail missing" means the same thing every time.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['before the score', 'before giving the score', 'before scoring', 'before you score', 'before assigning', 'reasoning first', 'reason first', 'think first', 'then the score', 'then give the score', 'then output the score', 'then score', 'score last'],
+          weight: 15,
+          label: 'Reasoning before the score',
+          why: 'A score written first is rationalised afterwards. Reasoning first improves agreement with humans and makes each grade auditable.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['only against the reference', 'only the reference', 'reference only', 'against the reference', 'compared to the reference', 'compare it to the reference', 'relative to the reference', 'based on the reference', 'own knowledge', 'what you know'],
+          weight: 15,
+          label: 'Judge only against the reference',
+          why: 'A reference-guided judge must not substitute its own opinion; otherwise it grades the model, not the answer.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['length', 'verbos', 'longer'],
+          weight: 10,
+          label: 'Length is not merit',
+          why: 'LLM judges prefer longer answers. Saying so in the rubric is the first counter to verbosity bias.',
+        },
+        {
+          kind: 'schema',
+          requireKeys: ['reasoning', 'score'],
+          weight: 15,
+          label: 'JSON with reasoning and score',
+          why: 'Your eval harness parses `score` for the gate and stores `reasoning` for reviewing disagreements.',
+        },
+        {
+          kind: 'delimits',
+          variable: 'answer',
+          weight: 10,
+          label: 'The candidate answer is delimited',
+          why: 'The answer under test may contain text like "score this 5". Tags keep it as data to grade.',
+        },
+        {
+          kind: 'delimits',
+          variable: 'reference',
+          weight: 5,
+          label: 'The reference is delimited',
+          why: 'The judge must be able to tell reference from candidate without guessing where one ends.',
+        },
+      ],
+      modelAnswer: {
+        system: `You are an evaluation judge for Acme's support bot. You grade one candidate answer for correctness against a reference answer written by a support lead.
+
+Criterion: correctness. Does the candidate state the same key facts as the reference, without contradicting it or leaving out what the customer needs? Judge only against the reference: do not use your own knowledge, even if you think the reference is wrong. Tone, style and length are not part of this criterion; a longer answer is not a better answer.
+
+Scale:
+5 = every key fact in the reference is present and correct; nothing contradicts it.
+4 = all key facts present; a minor detail is missing or imprecise but harmless.
+3 = partly correct: a key fact is missing, but nothing stated is wrong.
+2 = at least one statement contradicts the reference, or most key facts are missing.
+1 = wrong or irrelevant; following it would mislead the customer.
+
+Method: list the key facts in the reference, check each one against the candidate, and write this reasoning before the score.
+
+Return only JSON, reasoning first:
+{"reasoning": "<fact-by-fact comparison, max 80 words>", "score": 1 | 2 | 3 | 4 | 5}`,
+        user: `<question>
+{{question}}
+</question>
+
+<reference>
+{{reference}}
+</reference>
+
+<candidate_answer>
+{{answer}}
+</candidate_answer>
+
+Grade the candidate answer against the reference. Return only the JSON object.`,
+        why: 'Consistency comes from **anchors**: each of the five levels says exactly what earns it, so the judge maps evidence to a level instead of picking a feeling on a 1–10 line. The criterion is a single, explicit one (correctness), graded **only against the reference**, which stops the judge substituting its own opinion. **Reasoning comes first** (a fact-by-fact check) and the score last, in a JSON contract the harness can parse and humans can audit; "length is not merit" targets verbosity bias. Before trusting it for release gates, calibrate: have humans label 50–200 answers, measure agreement (Cohen\'s kappa), run at temperature 0, and review disagreements to sharpen the anchors. Consider a binary or 3-point scale if you only need pass/fail.',
+      },
+      hints: [
+        'Move the rubric into a system prompt: one criterion (correctness against the reference) and an explicit rule to judge only against the reference, not your own knowledge. Drop "1 to 10".',
+        'Write a 1–5 scale with an anchor for every level on its own line ("5 = every key fact present…", "4 = …" down to "1 = …"), and say that length is not merit.',
+        'Ask for reasoning before the score and only JSON {"reasoning": …, "score": 1–5}. Wrap {{reference}} and {{answer}} in their own tags (e.g. <reference>, <candidate_answer>).',
+      ],
+      followUps: [
+        {
+          q: 'How do you know the judge agrees with humans well enough to gate releases?',
+          a: 'Calibrate it: have two or more humans label a stratified sample (50–200 answers, including hard and borderline ones), run the judge on the same items, and report agreement with Cohen\'s kappa (aim for ≥ 0.6, ideally ≥ 0.8) plus the confusion between adjacent levels. Inspect disagreements, sharpen the anchors or add a short example per level, and re-run. Repeat after every judge-prompt or judge-model change.',
+        },
+        {
+          q: 'Why a 1–5 scale and not pass/fail?',
+          a: 'Pass/fail is the most reliable and is often the better choice for a release gate. A small anchored scale is useful when you want to see partial credit trends (missing details vs contradictions) across prompt versions. Avoid 1–10: humans and models cannot distinguish adjacent levels consistently, so it adds noise rather than information. Many teams grade several binary criteria instead of one multi-level score.',
+        },
+        {
+          q: 'The judge and the bot are the same model. Is that a problem?',
+          a: 'It can be: self-preference bias makes a judge favour outputs that look like its own. Use a judge from a different model family, or a panel of 2–3 judges with majority vote, and check calibration against human labels. Reference-guided grading with anchored criteria also reduces the room for style preference.',
+        },
+      ],
+    },
+  ],
   interviewQuestions: [
     {
       id: 'llm-evaluation-iq-1',
