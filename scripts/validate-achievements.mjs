@@ -87,6 +87,17 @@ topics.forEach((t, ti) => {
   };
 });
 COMPANY_QUESTIONS.forEach((q) => (full.company[q.id] = true));
+// prompt labs: solved on their own; one revealed only after solving still counts
+full.promptLabs = {};
+topics.flatMap((t) => t.promptLabs ?? []).forEach((lab, i) => {
+  full.promptLabs[lab.id] = { system: '', user: '', best: 100, solvedAt: at(3, 10), ...(i === 0 ? { revealedAt: at(3, 11) } : {}) };
+});
+// …and a lab whose answer was revealed BEFORE it was solved does not count
+const firstLab = topics.flatMap((t) => t.promptLabs ?? [])[0];
+if (firstLab) {
+  const peeked = { ...structuredClone(empty), promptLabs: { [firstLab.id]: { system: '', user: '', best: 100, revealedAt: at(3, 9), solvedAt: at(3, 10) } } };
+  if (A.evaluateAll(peeked, ctx)['prompt-smith']?.value !== 0) fail('prompt-smith: a lab solved after revealing the model answer was counted');
+}
 const evFull = A.evaluateAll(full, ctx);
 for (const a of A.ACHIEVEMENTS) {
   const ev = evFull[a.id];

@@ -3,7 +3,7 @@ import type { Topic } from '../../types';
 const topic: Topic = {
   id: 'llm-apis-streaming',
   phase: 'prompting',
-  order: 3,
+  order: 5,
   title: 'LLM APIs & Streaming',
   subtitle:
     'Call a model like a pro: messages and roles, parameters, token accounting, retries, and streaming tokens to a browser over SSE.',

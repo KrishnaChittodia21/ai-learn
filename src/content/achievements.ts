@@ -19,6 +19,7 @@
 //  tests      topic exam records (best, attempts, passedAt ISO, history of { at ISO, score }, last 10)
 //  mcq        per exam-question outcome (wrong count, lastCorrect, lastAt ISO)
 //  activityDays  local YYYY-MM-DD study days (last 120)
+//  promptLabs    Prompt Lab records (solvedAt / revealedAt ISO stamps per lab id)
 import type { Level, PhaseId, Topic } from '../types';
 import type { Progress } from '../lib/progress';
 
@@ -44,7 +45,7 @@ export interface AchievementContext {
   topicsByLevel: Map<Level, Topic[]>;
   /** architecture challenge ids */
   challenges: string[];
-  totals: { sections: number; exercises: number; quickChecks: number; codeLab: number; boe: number; iq: number };
+  totals: { sections: number; exercises: number; quickChecks: number; codeLab: number; boe: number; iq: number; promptLabs: number };
 }
 
 type Goal = number | ((ctx: AchievementContext) => number);
@@ -132,6 +133,22 @@ const drillsDone = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (t) 
 const interviewsRated = (p: Progress, ctx: AchievementContext, only?: 'nailed') =>
   sumTopics(ctx, (t) => t.interviewQuestions.filter((q) => (only ? p.iq[q.id] === only : !!p.iq[q.id])).length);
 const examsPassed = (p: Progress, topics: Topic[]) => topics.filter((t) => isPassed(p, t.id)).length;
+
+/**
+ * Prompt Labs solved on your own: solvedAt is set and the model answer was not revealed before it
+ * (no revealedAt, or revealed only after solving). Pasting the revealed answer does not count.
+ */
+function promptLabsSolvedSolo(p: Progress, ctx: AchievementContext) {
+  return sumTopics(ctx, (t) =>
+    (t.promptLabs ?? []).filter((lab) => {
+      const rec = p.promptLabs?.[lab.id];
+      const solved = time(rec?.solvedAt);
+      if (!Number.isFinite(solved)) return false;
+      const revealed = time(rec?.revealedAt);
+      return !Number.isFinite(revealed) || revealed > solved;
+    }).length,
+  );
+}
 
 /**
  * Attempts of a topic exam that failed before it was first passed. recordTest stamps passedAt just
@@ -230,6 +247,7 @@ export function buildAchievementContext({
       codeLab: sum((t) => t.codeChallenges.length),
       boe: sum((t) => t.envelopeQuestions.length),
       iq: sum((t) => t.interviewQuestions.length),
+      promptLabs: sum((t) => t.promptLabs?.length ?? 0),
     },
   };
 }
@@ -441,6 +459,25 @@ export const ACHIEVEMENTS: Achievement[] = [
     measure: (p, ctx) => interviewsRated(p, ctx),
     requirement: (goal) => `Practise and rate ${plural(goal, 'interview answer')}`,
     unit: 'answers',
+  },
+  {
+    id: 'prompt-smith',
+    name: 'Prompt Smith',
+    description: 'Prompt Labs solved on your own, before revealing the model answer.',
+    group: 'practice',
+    art: 'hammer',
+    tiers: [
+      { tier: 'bronze', goal: 1 },
+      { tier: 'silver', goal: 3 },
+      { tier: 'gold', goal: 6 },
+      { tier: 'diamond', goal: (ctx) => ctx.totals.promptLabs },
+    ],
+    measure: promptLabsSolvedSolo,
+    requirement: (goal, ctx) =>
+      goal >= ctx.totals.promptLabs
+        ? `Solve all ${goal} Prompt Labs without revealing the model answer first`
+        : `Solve ${plural(goal, 'Prompt Lab')} without revealing the model answer first`,
+    unit: 'labs solved',
   },
   {
     id: 'system-designer',

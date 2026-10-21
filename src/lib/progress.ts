@@ -85,7 +85,7 @@ const DEFAULT: Progress = {
   achievements: {},
   promptLabs: {},
   // fresh progress already matches current content, so no migration applies
-  migrations: ['fund-estimation-toolkit'],
+  migrations: ['fund-estimation-toolkit', 'prompt-engineering-split'],
   settings: { passMark: 70, secondsPerQuestion: 90, shuffle: true, theme: 'system', mockMinutes: 45, studyLock: 'exam' },
 };
 
@@ -113,6 +113,26 @@ function migrate(p: Progress, applied: string[]): Progress {
     const read = p.sections['fund-estimation'];
     if (read) p = { ...p, sections: { ...p.sections, 'fund-estimation': read.map((i) => (i >= 1 ? i + 1 : i)) } };
     done.add('fund-estimation-toolkit');
+  }
+  // prompt-engineering was split into three topics: its old section 0 (basics) moved to prompt-fundamentals /
+  // prompt-reasoning and old section 1 (templates) became section 0. Drop old-index-0 state and shift 1 → 0 for
+  // read flags, quick-check picks (qc:…-s<i>-qc), exercise drafts (ex:…-s<i>-ex) and exercise done flags (cc).
+  if (!done.has('prompt-engineering-split')) {
+    const T = 'prompt-engineering';
+    const read = p.sections[T];
+    const sections = read ? { ...p.sections, [T]: read.filter((i) => i === 1).map(() => 0) } : p.sections;
+    const remap = <V>(rec: Record<string, V>, prefix: string, suffix: string): Record<string, V> => {
+      const out: Record<string, V> = {};
+      for (const [k, v] of Object.entries(rec)) {
+        if (k === `${prefix}0${suffix}`) continue;
+        out[k === `${prefix}1${suffix}` ? `${prefix}0${suffix}` : k] = v;
+      }
+      return out;
+    };
+    const drafts = remap(remap(p.drafts, `qc:${T}-s`, '-qc'), `ex:${T}-s`, '-ex');
+    const cc = remap(p.cc, `${T}-s`, '-ex');
+    p = { ...p, sections, drafts, cc };
+    done.add('prompt-engineering-split');
   }
   return { ...p, migrations: [...done] };
 }
