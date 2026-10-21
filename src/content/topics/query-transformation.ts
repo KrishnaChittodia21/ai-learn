@@ -1130,6 +1130,141 @@ export async function productSearch(text: string, tenantId: string) {
       ],
     },
   ],
+  promptLabs: [
+    {
+      id: 'query-transformation-pl-1',
+      title: 'Step-back questions for retrieval',
+      scenario: `AskHR answers employee questions from Northwind's HR handbook (RAG over policy documents). Before retrieval, one LLM call rewrites the question into a search query, and that rewrite **only ever searches the literal, specific question**.
+
+Specific questions miss. "I joined in October and still have 7 days left, can I take them in January?" retrieves the joining checklist and the 2026 holiday calendar, but not the section that answers it: **"Annual leave: carry-over rules"**, which never mentions October, January or 7 days. The answer model then says it could not find anything.`,
+      task: `Rewrite the query prompt to use **step-back prompting**: before searching, generate a **more general "step-back" question** about the underlying policy or concept, and **keep the specific question** too, so retrieval can run both and merge the results. The prompt should:
+
+- have a **system prompt** with the role and what a good step-back question is;
+- return **only JSON** with the keys \`step_back_question\` and \`specific_question\`;
+- make the specific question **keep every detail** of the original (dates, numbers, names) as a standalone question;
+- **not answer** the question: it only writes queries;
+- include **1–2 worked examples**;
+- wrap \`{{question}}\` in delimiters in the user turn.`,
+      starter: {
+        system: '',
+        user: 'Rewrite this question as a search query: {{question}}',
+      },
+      sampleBadOutput: `question = "I joined in October and still have 7 days left, can I take them in January?"
+--- rewritten query ---
+joined October 7 days left take in January
+--- top 3 retrieved chunks ---
+1. "New starter checklist: in your first week in October..."
+2. "Public holidays 2026: 1 January (New Year's Day)..."
+3. "Requesting time off in the HR portal..."
+--- answer ---
+I couldn't find a policy about taking October days in January.`,
+      passScore: 80,
+      checks: [
+        {
+          kind: 'has-system',
+          minWords: 25,
+          weight: 10,
+          label: 'A system prompt defines the role and the method',
+          why: 'Query generation is a small, separate task. A constant system prompt describing it keeps the output predictable across very different questions.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['step-back', 'step back', 'more general', 'broader question', 'higher-level', 'underlying principle', 'underlying policy', 'underlying concept'],
+          weight: 15,
+          label: 'Asks for a more general step-back question',
+          why: 'Policy documents are written in general terms. Abstracting "7 days in January" to "carry-over rules for annual leave" matches how the answer is actually phrased.',
+        },
+        {
+          kind: 'schema',
+          requireKeys: ['step_back_question', 'specific_question'],
+          weight: 20,
+          label: 'A JSON contract with both questions',
+          why: 'Retrieval code runs both queries and fuses the results. Two named keys make that a simple parse rather than guesswork over prose.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['only the json', 'only json', 'json only', 'nothing else', 'no other text', 'no prose'],
+          weight: 10,
+          label: 'JSON only: no prose around it',
+          why: 'Any text outside the object breaks the parser and the query step falls back to the raw question.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['keep every detail', 'keep all details', 'keep every', 'keep all the', 'keep the details', 'preserve', 'standalone'],
+          weight: 10,
+          label: 'The specific question keeps every detail',
+          why: 'The step-back question finds the general rule; the specific one still has to find the exceptions and edge cases, so dates and numbers must survive.',
+        },
+        {
+          kind: 'includes',
+          anyOf: ['do not answer', "don't answer", 'never answer', 'not answer the question', 'not answer it'],
+          weight: 10,
+          label: 'Writes queries, does not answer',
+          why: 'An answer from the model\'s own memory at this stage would be ungrounded and could leak into the search as a confident wrong query.',
+        },
+        {
+          kind: 'examples',
+          min: 1,
+          max: 2,
+          weight: 15,
+          label: '1–2 worked examples',
+          why: 'How general is "general enough" is easiest to show. One or two examples set the level of abstraction without biasing every query toward one topic.',
+        },
+        {
+          kind: 'delimits',
+          variable: 'question',
+          weight: 10,
+          label: 'The question is wrapped in delimiters',
+          why: 'Employee questions are free text. Tags keep them separate from the instructions and from the examples.',
+        },
+      ],
+      modelAnswer: {
+        system: `You write search queries for AskHR, which answers employee questions from Northwind's HR handbook. Handbook sections are written as general policies, so a literal question often misses them. You do not answer the question; you only write queries.
+
+For each question, write two queries:
+- step_back_question: a more general question about the underlying policy or concept the answer depends on. Drop the personal details and name the policy area.
+- specific_question: the original question as a standalone question. Keep every detail (dates, numbers, names, places) and fix only grammar.
+
+Return only the JSON object, with no other text: {"step_back_question": string, "specific_question": string}
+
+<examples>
+<example>
+Question: my partner is due in March, how many weeks off do I get if I've been here 8 months?
+Output: {"step_back_question": "What is the parental leave policy and how does eligibility depend on length of service?", "specific_question": "How many weeks of parental leave do I get if my partner is due in March and I have worked here for 8 months?"}
+</example>
+<example>
+Question: can I expense a train upgrade to first class for a 4 hour trip to Leeds?
+Output: {"step_back_question": "What are the rules for travel class on business rail journeys?", "specific_question": "Can I expense a first-class train upgrade for a 4-hour business trip to Leeds?"}
+</example>
+</examples>`,
+        user: `<question>
+{{question}}
+</question>
+
+Write the step-back question and the specific question for this question as JSON.`,
+        why: 'The prompt gives retrieval **two ways in**. The step-back question abstracts the employee\'s situation to the **policy area the handbook is written about** ("carry-over rules for annual leave"), which is what the missed section matches; the specific question keeps every detail so retrieval can still find exceptions such as rules for mid-year joiners. Both come back in a **two-key JSON contract**, so code runs both searches (in parallel) and fuses the results, for example with reciprocal rank fusion, before the answer step sees both the general rule and the specifics. Two examples fix the level of abstraction, and the no-answer rule keeps the model from guessing policy. Trade-off: one extra LLM call before retrieval (use a small, fast model) and twice the searches; a step-back that is too general retrieves noise, so evaluate recall@k with and without it and skip it for short questions that already name a policy.',
+      },
+      hints: [
+        'Explain in the system prompt that handbook sections are written as general policies, and ask for a more general step-back question about the underlying policy plus the specific question.',
+        'Return only JSON with the keys step_back_question and specific_question; the specific one keeps every detail (dates, numbers, names) as a standalone question. Say "do not answer the question".',
+        'Add one or two <example> blocks showing a question and its JSON output, then wrap {{question}} in <question> tags in the user turn.',
+      ],
+      followUps: [
+        {
+          q: 'How do you combine the results of the two queries?',
+          a: 'Run both searches in parallel and fuse the ranked lists, for example with reciprocal rank fusion, then deduplicate and rerank against the specific question so the final context answers what was actually asked. Make sure the general rule and at least one specific match both reach the answer step; if the reranker drops all step-back results, the benefit is lost.',
+        },
+        {
+          q: 'How is step-back different from query decomposition or HyDE?',
+          a: 'Decomposition splits a multi-part question into several narrower sub-questions; step-back goes the other way, to one broader question about the underlying concept. HyDE writes a hypothetical answer and embeds that. They combine: step-back helps when documents are written at a higher level of abstraction than questions, decomposition when a question needs several facts, HyDE when question and document wording differ a lot.',
+        },
+        {
+          q: 'When would you skip the step-back query?',
+          a: 'When the question is already general ("what is the leave carry-over policy?"), when latency is tight and recall is already good, or when the corpus is FAQ-style and matches specific questions directly. Measure recall@k and answer accuracy with and without it on real questions; route only the questions that benefit, for example ones with personal details or numbers.',
+        },
+      ],
+    },
+  ],
   interviewQuestions: [
     {
       id: 'query-transformation-iq-1',

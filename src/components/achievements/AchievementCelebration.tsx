@@ -2,7 +2,7 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowRight, Sparkles, X } from 'lucide-react';
 import Badge from './Badge';
-import { tierName } from './achState';
+import { tierName, unitFor } from './achState';
 import { achievementById, tierRank, TIER_LABEL, type EarnedTier } from '../../content/achievements';
 import { useAchievementEvaluations } from '../../lib/achievements';
 import { useProgress } from '../../lib/progress';
@@ -101,7 +101,7 @@ export default function AchievementCelebration({ items, onClose, onViewAll }: { 
             </p>
             {firstEv && (firstEv.value > 1 || firstEv.next) && (
               <p className="ach-cel-stat">
-                <b className="num">{firstEv.value}</b> {first.a.unit}
+                <b className="num">{firstEv.value}</b> {unitFor(first.a.unit, firstEv.value)}
                 {firstEv.next && (
                   <>
                     {' '}

@@ -14,6 +14,7 @@ import {
   Flame,
   Gem,
   GraduationCap,
+  Hammer,
   Lock,
   MessageSquare,
   Mic,
@@ -61,6 +62,7 @@ const ART: Record<string, LucideIcon> = {
   moon: Moon,
   coffee: Coffee,
   rocket: Rocket,
+  hammer: Hammer,
 };
 
 export type BadgeSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';

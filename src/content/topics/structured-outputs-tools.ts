@@ -3,7 +3,7 @@ import type { Topic } from '../../types';
 const topic: Topic = {
   id: 'structured-outputs-tools',
   phase: 'prompting',
-  order: 2,
+  order: 4,
   title: 'Structured Outputs, Function Calling and Tool Calling',
   subtitle: 'Turn free-form text into typed data your code can trust, and let the model ask your code to act.',
   estimatedMinutes: 44,

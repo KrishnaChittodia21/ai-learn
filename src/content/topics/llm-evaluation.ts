@@ -6,8 +6,8 @@ const topic: Topic = {
   order: 3,
   title: 'LLM Evaluation, Golden Datasets and LLM-as-a-Judge',
   subtitle:
-    'Turn "it looks good to me" into numbers: build an eval harness, curate a versioned golden set, grade with a calibrated LLM judge and block prompt regressions in CI.',
-  estimatedMinutes: 52,
+    'Turn "it looks good to me" into numbers: build an eval harness, curate a versioned golden set, grade with a calibrated LLM judge, block prompt regressions in CI, then prove wins online with pairwise comparisons and error bars.',
+  estimatedMinutes: 85,
   sources: [
     'Zheng et al. 2023 — Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena (arXiv:2306.05685)',
     'Wang et al. 2023 — Large Language Models are not Fair Evaluators (position bias, arXiv:2305.17926)',
@@ -18,8 +18,15 @@ const topic: Topic = {
     'promptfoo docs — Configuration, assertions and CI/CD integration (promptfoo.dev/docs)',
     'Hamel Husain — Your AI Product Needs Evals; Creating a LLM-as-a-Judge That Drives Business Results',
     'Shankar et al. 2024 — Who Validates the Validators? Aligning LLM-Assisted Evaluation with Human Preferences (arXiv:2404.12272)',
+    'Chiang et al. 2024 — Chatbot Arena: An Open Platform for Evaluating LLMs by Human Preference (Bradley–Terry ratings, arXiv:2403.04132)',
+    'Miller 2024 — Adding Error Bars to Evals: A Statistical Approach to Language Model Evaluations (Anthropic, arXiv:2411.00640)',
+    'Bradley & Terry 1952 — Rank Analysis of Incomplete Block Designs: I. The Method of Paired Comparisons (Biometrika)',
+    'Hunter 2004 — MM Algorithms for Generalized Bradley–Terry Models (Annals of Statistics)',
+    'Kohavi, Tang & Xu 2020 — Trustworthy Online Controlled Experiments: A Practical Guide to A/B Testing (Cambridge University Press)',
+    'Efron & Tibshirani 1993 — An Introduction to the Bootstrap (Chapman & Hall)',
+    'Dubois et al. 2024 — Length-Controlled AlpacaEval: A Simple Way to Debias Automatic Evaluators (arXiv:2404.04475)',
   ],
-  tags: ['evaluation', 'evals', 'golden-dataset', 'llm-as-a-judge', 'regression-testing', 'promptfoo', 'ci', 'bias'],
+  tags: ['evaluation', 'evals', 'golden-dataset', 'llm-as-a-judge', 'regression-testing', 'promptfoo', 'ci', 'bias', 'online-evaluation', 'ab-testing', 'pairwise', 'bradley-terry', 'statistics', 'bootstrap'],
   cheatSheet: [
     'Eval = dataset of inputs (+ expected/reference) × system under test × graders → aggregate score; re-run on every change.',
     'Grader ladder: deterministic code checks (exact/regex/JSON schema) first → embedding similarity → LLM judge → human review. Cheapest that works wins.',
@@ -31,6 +38,11 @@ const topic: Topic = {
     'Binary pass/fail or pairwise A-vs-B judgements are more reliable than 1–10 scores.',
     'Prompt regression tests: promptfoo-style YAML of vars + asserts, run in CI on every prompt/model change, gate on pass-rate threshold and compare to the main-branch baseline.',
     'Noise is real: re-run with n≥3 samples or a fixed seed, and treat differences under ~2–3 points on 200 cases as noise unless a paired test says otherwise.',
+    'Online eval ladder: shadow traffic (no user exposure) → canary 1–5% → A/B randomised by user; one pre-registered success metric + guardrails (p95 latency, cost, errors, escalations) that must not regress.',
+    'Feedback: explicit (thumbs) is precise but sparse and negative-skewed; implicit (retry, rephrase, edits, escalation) is plentiful but noisy. Judge a uniform sample + all failures asynchronously; failures become golden cases.',
+    'Pairwise beats absolute scoring near the ceiling and for subjective criteria; judge both orders (disagree = tie); win rate = (wins + 0.5·ties)/n; keep a pointwise gate too.',
+    'Bradley–Terry: P(i beats j) = σ(βi − βj); fit by MLE on all comparisons with bootstrap CIs (Chatbot Arena). 64% win rate ≈ +100 Elo; online Elo is order-dependent.',
+    'Error bars: SE ≈ √(p(1−p)/n) (200 items @ 80% ≈ ±5.5 pts); average k trials per item, bootstrap ITEMS; compare A vs B paired on the same items; MDE ≈ 2.8·SD(d)/√n; one primary metric, correct for multiple comparisons.',
   ],
   sections: [
     // ───────────────────────────── 1. LLM Evaluation
@@ -775,6 +787,626 @@ export function compareToBaseline(current: Report, baseline: Report, opts: { max
       },
       source: 'promptfoo docs — Configuration, assertions and CI/CD integration',
     },
+    // ───────────────────────────── 5. Online Evaluation
+    {
+      heading: 'Online Evaluation — shadow traffic, A/B tests and user feedback',
+      body: `**Intuition:** offline evals tell you a change *should* be better. Online evals tell you whether it *is* better for real users on real traffic, which your golden set never fully represents.
+
+**Rollout ladder (lowest risk first)**
+
+| Stage | Do users see the new variant? | What you learn |
+|---|---|---|
+| Shadow traffic | No: the variant runs on a copy of live requests and its output is discarded | crashes, parse errors, latency, cost, judge scores on real inputs |
+| Canary | 1–5% of users | guardrail breaches with real users, with automatic rollback |
+| A/B test | randomised split (50/50 or 90/10) for a fixed duration | the causal effect on the success metric |
+
+**Two kinds of metrics.** The **success metric** is the one you want to move, and you pick it before the test starts: resolved-without-escalation rate, task completion, thumbs-up rate. **Guardrail metrics** must not get worse: p95 latency, cost per conversation, parse and tool errors, safety-filter hits, escalation rate. Ship only if the success metric improves **and** no guardrail breaches.
+
+**User feedback signals**
+- *Explicit:* thumbs up/down, ratings, comments. Precise but sparse (often 1–5% of sessions) and skewed toward unhappy users.
+- *Implicit:* regenerate/retry, rephrasing the same question, heavy edits to a drafted reply, copy/accept, abandonment, escalation to a human. Plentiful but noisy, so treat them as signals to investigate, not as ground truth.
+
+**LLM judge on live traffic.** Run your calibrated offline judges **asynchronously** on a sample of production traces (e.g. 2% uniform plus every thumbs-down), never in the request path. Track the judge pass rate per variant and per tag as a daily metric.
+
+**Closing the loop.** Each week, triage sampled failures (thumbs-down, retries, judge FAILs, escalations). The real failures become new golden-set cases. This sample over-represents failures, so keep the uniform sample separate (or store sampling weights) when you estimate overall quality.
+
+**Rules of thumb:** randomise by **user**, not by request, so nobody sees both variants in one conversation. Fix the duration and sample size up front instead of stopping when the graph looks good. Log the variant id on every trace and feedback event.`,
+      example: `**Shopping assistant: prompt v14 + new model (treatment) vs v13 (control).**
+
+1. **Shadow, 3 days, 10% mirrored (120k requests).** Write tools were stubbed as read-only. Parse errors 0.4% vs 0.3%, p95 latency 2.9 s vs 2.6 s. The live judge on a 2% sample (2,400 traces) scored faithfulness at 93.1% vs 90.8%. No blockers.
+2. **Canary, 5% of users, 2 days.** Guardrails held, so it was promoted.
+3. **A/B 50/50 for 14 days, about 40k users per arm, randomised by user id.**
+
+| Metric | Role | Control | Treatment | Budget |
+|---|---|---|---|---|
+| Resolved without escalation | success | 69.8% | 71.2% (+1.4 pts, 95% CI ±0.6) | must improve |
+| Thumbs-down rate | explicit feedback | 2.1% | 1.7% | — |
+| Retry / rephrase rate | implicit feedback | 6.0% | 5.1% | — |
+| p95 latency | guardrail | 2.6 s | 2.9 s | ≤ 3.0 s ✓ |
+| Cost per conversation | guardrail | $0.012 | $0.013 (+8%) | ≤ +15% ✓ |
+
+**Decision:** ship. Then 310 thumbs-down traces from the treatment arm were triaged, and 24 real failures (mostly size-conversion questions) were added to golden set v5.`,
+      diagram: `            live request
+                 │
+     assignVariant(userId) ── control ──▶ serve v13 ──┐
+                 │                                     │
+                 └── treatment ──▶ serve v14 ─────────┤
+                                                       ▼
+   (shadow: v14 on a copy, output discarded)     trace + variant id
+                                                       │
+            ┌──────────────────────┬───────────────────┼──────────────────┐
+            ▼                      ▼                   ▼                  ▼
+     explicit feedback      implicit signals    async LLM judge     guardrails
+     (thumbs, comments)     (retry, edit, esc)  (2% + all 👎)        (p95, cost)
+            └──────────────────────┴─────────┬─────────┴──────────────────┘
+                                             ▼
+                      daily rollup per arm ─▶ ship / rollback
+                                             │ failures
+                                             ▼
+                                   golden set v(n+1)`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Sticky user-level assignment and a per-arm daily rollup',
+          code: `import { createHash } from 'node:crypto';
+
+type Variant = 'control' | 'treatment';
+
+// Sticky and uniform: the same user always lands in the same arm of this experiment
+export function assignVariant(userId: string, experiment: string, treatmentPct: number): Variant {
+  const h = createHash('sha256').update(experiment + ':' + userId).digest();
+  const bucket = h.readUInt32BE(0) / 2 ** 32; // uniform in [0, 1)
+  return bucket < treatmentPct / 100 ? 'treatment' : 'control';
+}
+
+type Signal = 'thumbs_up' | 'thumbs_down' | 'retry' | 'rephrase' | 'escalated' | 'resolved';
+export type Trace = {
+  traceId: string; userId: string; variant: Variant;
+  latencyMs: number; costUsd: number; signals: Signal[];
+};
+
+const share = (xs: Trace[], ...s: Signal[]) =>
+  xs.filter((t) => t.signals.some((x) => s.includes(x))).length / Math.max(xs.length, 1);
+const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(0.95 * (xs.length - 1))] ?? 0;
+
+// One pre-registered success metric, explicit and implicit feedback, and guardrails
+export function rollup(traces: Trace[]) {
+  const arms: Record<string, Trace[]> = {};
+  for (const t of traces) (arms[t.variant] ??= []).push(t);
+  return Object.fromEntries(Object.entries(arms).map(([arm, xs]) => [arm, {
+    n: xs.length,
+    success: share(xs, 'resolved'),
+    thumbsDown: share(xs, 'thumbs_down'),
+    retryOrRephrase: share(xs, 'retry', 'rephrase'),
+    escalation: share(xs, 'escalated'),                       // guardrail
+    p95LatencyMs: p95(xs.map((t) => t.latencyMs)),            // guardrail
+    costPerTrace: xs.reduce((a, t) => a + t.costUsd, 0) / xs.length, // guardrail
+  }]));
+}`,
+        },
+        {
+          language: 'typescript',
+          title: 'Shadow traffic: serve control, evaluate the candidate silently',
+          code: `export async function handle(req: ChatRequest): Promise<string> {
+  const answer = await controlPipeline(req); // the only thing the user sees
+
+  if (hashToUnit(req.id) < 0.1) { // mirror 10% of requests
+    // fire-and-forget: never adds latency or errors to the user's request
+    void candidatePipeline({ ...req, tools: readOnlyTools }) // no emails, refunds or writes
+      .then((shadow) => logShadow({ id: req.id, control: answer, shadow }))
+      .catch((err) => logShadowError(req.id, err));
+  }
+  return answer;
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Measures real users on the real input distribution, which no golden set fully captures.',
+          'Shadow traffic finds crashes, latency and cost problems with zero user exposure.',
+          'A/B tests give a causal answer about business metrics, not just judge scores.',
+          'Production failures feed the golden set, so offline evals keep improving.',
+        ],
+        cons: [
+          {
+            con: 'Explicit feedback is sparse and biased toward unhappy users, so the thumbs-down rate alone misleads.',
+            fix: 'Combine it with implicit signals (retry, rephrase, edit ratio, escalation) and a judge on a uniform random sample, and compare rates between arms rather than reading absolute values.',
+          },
+          {
+            con: 'Peeking at results daily and stopping when the graph looks good inflates false positives.',
+            fix: 'Fix the sample size and duration before the test starts (cover at least one full weekly cycle), or use a sequential testing method designed for continuous monitoring.',
+          },
+          {
+            con: 'Shadow traffic doubles inference cost and can cause real side effects through tool calls.',
+            fix: 'Mirror only a fraction of traffic, stub or read-only every write tool in the shadow arm, and cap the shadow budget per day.',
+          },
+          {
+            con: 'Production traces contain PII, and sending them to a judge or into a dataset can breach policy.',
+            fix: 'Redact PII before judging or storing traces, set retention limits, and restrict access to the eval store.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Shadow → canary → A/B: increase user exposure only as confidence grows.',
+        'One pre-registered success metric plus guardrails that must not regress.',
+        'Explicit feedback is precise but sparse; implicit feedback is plentiful but noisy.',
+        'Run the judge asynchronously on sampled live traces; failures become new golden cases.',
+        'Randomise by user, log the variant id everywhere, and do not peek-and-stop.',
+      ],
+      exercise: {
+        prompt: `Write \`sampleTracesForReview(traces, opts)\`, which picks production traces for the weekly LLM-judge plus human review.
+
+**Acceptance criteria**
+- **Uniform sample:** a trace is included if \`hashToUnit(traceId) < opts.uniformRate\`. This is deterministic and must not depend on feedback, so it stays an unbiased estimate of overall quality. Each uniform pick has \`weight = 1 / uniformRate\`.
+- **Failure sample:** also include traces with a negative signal (\`thumbs_down\`, \`retry\`, \`escalated\`), at most \`opts.maxNegative\` of them, choosing the lowest hash first. These picks have \`weight: 0\`, so they are excluded from quality estimates.
+- A trace in both samples appears **once**, with \`reason: 'uniform'\` and \`negative: true\`.
+- Return \`{ traceId, reason, negative, weight }[]\`.`,
+        starter: {
+          language: 'typescript',
+          code: `import { createHash } from 'node:crypto';
+
+type Trace = { traceId: string; signals: string[] };
+type Pick = { traceId: string; reason: 'uniform' | 'negative'; negative: boolean; weight: number };
+
+const hashToUnit = (id: string) =>
+  createHash('sha256').update(id).digest().readUInt32BE(0) / 2 ** 32;
+
+export function sampleTracesForReview(
+  traces: Trace[],
+  opts: { uniformRate: number; maxNegative: number },
+): Pick[] {
+  // TODO: uniform picks (feedback-independent)
+  // TODO: negative picks, capped, lowest hash first
+  // TODO: dedupe
+  return [];
+}`,
+        },
+        hints: [
+          'Compute the hash once per trace, then make two passes: uniform first, negative second.',
+          'Put picks in a Map keyed by traceId, so a negative trace that is already a uniform pick just gets negative = true.',
+          'Sort the negative candidates by hash before applying the cap, so the result does not depend on input order.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `import { createHash } from 'node:crypto';
+
+type Trace = { traceId: string; signals: string[] };
+type Pick = { traceId: string; reason: 'uniform' | 'negative'; negative: boolean; weight: number };
+
+const hashToUnit = (id: string) =>
+  createHash('sha256').update(id).digest().readUInt32BE(0) / 2 ** 32;
+const NEGATIVE = new Set(['thumbs_down', 'retry', 'escalated']);
+
+export function sampleTracesForReview(
+  traces: Trace[],
+  opts: { uniformRate: number; maxNegative: number },
+): Pick[] {
+  const scored = traces.map((t) => ({
+    t, h: hashToUnit(t.traceId), neg: t.signals.some((s) => NEGATIVE.has(s)),
+  }));
+  const picks = new Map<string, Pick>();
+
+  // 1) uniform sample: ignores feedback, so its pass rate estimates overall quality
+  for (const { t, h, neg } of scored)
+    if (h < opts.uniformRate)
+      picks.set(t.traceId, { traceId: t.traceId, reason: 'uniform', negative: neg, weight: 1 / opts.uniformRate });
+
+  // 2) failure sample: over-represents problems for triage, weight 0 for estimates
+  const negatives = scored.filter((x) => x.neg).sort((a, b) => a.h - b.h);
+  let taken = 0;
+  for (const { t } of negatives) {
+    if (picks.has(t.traceId)) continue; // already in the uniform sample (flagged negative there)
+    if (taken >= opts.maxNegative) break;
+    picks.set(t.traceId, { traceId: t.traceId, reason: 'negative', negative: true, weight: 0 });
+    taken++;
+  }
+  return [...picks.values()];
+}`,
+        },
+        explanation:
+          'Two samples answer two questions. The uniform, feedback-independent sample estimates "how good are we overall?" without bias, and its weights let you scale counts back to traffic. The failure sample is deliberately biased toward problems, which makes triage efficient, so it gets weight 0 and never inflates the failure rate in dashboards. Hash-based selection makes the sample reproducible and stable across reruns.',
+      },
+      quickCheck: {
+        question:
+          'You want p95 latency, parse-error rate and live judge scores for a new prompt on real production inputs, with no user ever seeing its output. Which stage do you run?',
+        options: ['Shadow traffic', 'Canary release to 5% of users', 'A/B test', 'A larger offline golden set'],
+        correct: 0,
+        explanation:
+          'Shadow traffic runs the candidate on a copy of real requests and discards its output, so you get real-input latency, error and judge data with zero user exposure. Canary and A/B tests expose users to the candidate. An offline set does not use live inputs.',
+      },
+      source: 'Kohavi, Tang & Xu 2020 — Trustworthy Online Controlled Experiments; Anthropic and OpenAI eval guidance',
+    },
+    // ───────────────────────────── 6. Comparative Evaluation
+    {
+      heading: 'Comparative Evaluation — pairwise preference, win rate and Bradley–Terry',
+      body: `**Intuition:** humans and LLM judges are much better at saying "A is better than B" than at giving either one a stable absolute score. Comparative (pairwise) evaluation uses that: show the same input with two outputs and ask which is better.
+
+**When pairwise beats absolute (pointwise) scoring**
+- Both candidates are already "good": absolute pass rates sit near the ceiling (95% vs 96%), so the pointwise grader cannot separate them.
+- Subjective qualities (tone, clarity, writing quality) with no reference answer.
+- You need a **ranking** of several prompts or models.
+
+Pointwise still wins when there is a clear pass/fail criterion, when you need a number tracked over time against a fixed bar, or when only one system exists. Pairwise never tells you whether either output is *good enough*, because both can be bad. Keep a pointwise gate alongside it.
+
+**Running pairwise judgements well**
+- Same input and both outputs, a rubric with one criterion, and **tie** allowed.
+- **Position-bias control:** judge both orders. A win counts only if both orders agree; otherwise it is a tie.
+- **Blind:** strip model names and normalise formatting so style does not reveal identity.
+- Report **win rate = (wins + 0.5 × ties) / total** and the tie rate separately. Test whether decisive wins differ from 50% with a sign test.
+
+**From comparisons to a leaderboard**
+The **Bradley–Terry (BT)** model gives each variant a strength βᵢ, with P(i beats j) = 1 / (1 + e^(βⱼ − βᵢ)). Fit β by maximum likelihood over *all* comparisons at once (logistic regression or the MM algorithm), and bootstrap the comparisons to get confidence intervals. Chatbot Arena uses this and reports BT scores on an Elo-like scale, where a rating gap Δ means a win probability of 1/(1 + 10^(−Δ/400)).
+
+**Online Elo** updates ratings after each match (R ← R + K·(S − E)). It is cheap for streaming data, but the result depends on match order and K. For a fixed batch of comparisons, prefer a BT fit.
+
+| Win rate of A over B | Elo-scale gap |
+|---|---|
+| 50% | 0 |
+| 64% | ≈ +100 |
+| 76% | ≈ +200 |
+
+**Cost:** with order swap, each item costs 2 judge calls per pair. All-pairs among m variants is m(m−1)/2 pairs, so compare each new candidate against the current champion plus a fixed anchor instead.`,
+      example: `**Email-drafting assistant: champion v7 vs candidate v8 on 300 inputs, cross-family judge, both orders (600 judge calls).**
+
+- Pointwise "helpful: PASS" rate: v7 94.3%, v8 95.0%. Both are at the ceiling, and the 0.7-point gap is noise.
+- Pairwise, consistent verdicts only: **v8 wins 141, v7 wins 99, ties 60** (38 of the ties were order flips, i.e. position bias).
+- Win rate of v8 = (141 + 0.5 × 60) / 300 = 171 / 300 = **57.0%**. Elo-scale gap ≈ 400 × log10(0.57 / 0.43) ≈ **+49**.
+- Sign test on the 240 decisive pairs: z = (141 − 120) / √(240 × 0.25) = 21 / 7.75 ≈ **2.71**, p ≈ 0.007, so v8 is genuinely preferred.
+- The next week, v9 was compared against v8 (champion) and v7 (anchor). A BT fit on all 900 comparisons gives **v7 1000 (anchor), v8 1049, v9 1062 [95% bootstrap CI 1041–1083]**. The v8–v9 intervals overlap heavily, so v9 is not yet promoted.`,
+      diagram: `  same input ──▶ output A ┐                     ┌─ verdict(A,B)
+                           ├──▶ judge, both orders┤
+  same input ──▶ output B ┘                     └─ verdict(B,A)
+                                       agree? ──yes──▶ win    no ──▶ tie
+                                                   │
+          many comparisons (v7↔v8, v8↔v9, v7↔v9 …)  ▼
+                      Bradley–Terry MLE: P(i>j) = σ(βi − βj)
+                                       │
+                      Elo-scale ratings ± bootstrap CI ─▶ leaderboard`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Win rate, sign test and Elo-scale gap from order-swapped verdicts',
+          code: `type Verdict = 'A' | 'B' | 'tie'; // e.g. from pairwise() in the LLM-as-a-Judge section
+
+export function summarise(verdicts: Verdict[]) {
+  const n = verdicts.length;
+  const winsA = verdicts.filter((v) => v === 'A').length;
+  const winsB = verdicts.filter((v) => v === 'B').length;
+  const ties = n - winsA - winsB;
+  const winRateB = (winsB + 0.5 * ties) / n;
+
+  // sign test on decisive pairs: is B's share of non-ties different from 50%?
+  const decisive = winsA + winsB;
+  const z = decisive ? (winsB - decisive / 2) / Math.sqrt(decisive / 4) : 0;
+
+  const p = Math.min(Math.max(winRateB, 0.001), 0.999);
+  const eloGap = 400 * Math.log10(p / (1 - p)); // BT / Elo scale
+
+  return { n, winsA, winsB, ties, tieRate: ties / n, winRateB, z, significant: Math.abs(z) > 1.96, eloGap };
+}
+
+// Online Elo: fine for streaming votes, but order-dependent; prefer a BT fit for a fixed batch
+export function eloUpdate(ra: number, rb: number, scoreA: 1 | 0.5 | 0, k = 16) {
+  const expectedA = 1 / (1 + 10 ** ((rb - ra) / 400));
+  return [ra + k * (scoreA - expectedA), rb - k * (scoreA - expectedA)] as const;
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Separates strong candidates whose absolute scores are both near the ceiling.',
+          'Relative judgements are more consistent for humans and LLM judges than absolute 1–10 scores.',
+          'Bradley–Terry turns sparse comparisons among many variants into one ranked scale with confidence intervals.',
+        ],
+        cons: [
+          {
+            con: 'Pairwise only says which output is better, not whether either is acceptable; two bad answers still produce a winner.',
+            fix: 'Keep a pointwise pass/fail gate (hard asserts plus a reference-guided judge) and use pairwise only to choose among candidates that pass it.',
+          },
+          {
+            con: 'Position and verbosity bias can create a win rate out of nothing.',
+            fix: 'Judge both orders and count disagreements as ties, add "length is not a merit" to the rubric, and report mean output length per variant next to the win rate.',
+          },
+          {
+            con: 'All-pairs comparison cost grows quadratically with the number of variants.',
+            fix: 'Compare each candidate against the current champion and a fixed anchor, and fit Bradley–Terry on the resulting sparse comparison graph.',
+          },
+          {
+            con: 'Online Elo ratings drift with match order and the K-factor.',
+            fix: 'Refit Bradley–Terry by maximum likelihood on the full batch of comparisons and report bootstrap confidence intervals instead of a running Elo.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Pairwise beats pointwise near the ceiling, for subjective criteria and for ranking.',
+        'Always judge both orders; a disagreement is a tie.',
+        'Win rate = (wins + 0.5 × ties) / n; test the decisive pairs against 50%.',
+        'Bradley–Terry: P(i beats j) = σ(βi − βj); a 64% win rate ≈ +100 Elo.',
+        'Pairwise does not replace an absolute quality gate.',
+      ],
+      exercise: {
+        prompt: `Implement \`fitBradleyTerry(comparisons, anchor)\`, which returns Elo-scale ratings for every variant, with \`anchor\` fixed at 1000.
+
+Each comparison is \`{ a, b, winner: 'a' | 'b' | 'tie' }\`. A tie counts as half a win for each side.
+
+**Acceptance criteria**
+- Use the MM update pᵢ ← Wᵢ / Σⱼ nᵢⱼ / (pᵢ + pⱼ), where Wᵢ is i's (fractional) wins and nᵢⱼ is the number of comparisons between i and j. Normalise every iteration.
+- A variant that never loses must still get a **finite** rating. Add one virtual tie per observed pair.
+- Rating = 1000 + 400 × log10(pᵢ / p_anchor), rounded.`,
+        starter: {
+          language: 'typescript',
+          code: `type Cmp = { a: string; b: string; winner: 'a' | 'b' | 'tie' };
+
+export function fitBradleyTerry(cmps: Cmp[], anchor: string, iters = 500): Record<string, number> {
+  // TODO: count fractional wins per variant and games per pair
+  // TODO: add one virtual tie per observed pair
+  // TODO: MM iterations + normalisation
+  // TODO: convert to Elo scale anchored at 1000
+  return {};
+}`,
+        },
+        hints: [
+          'Key pair counts by the two names in sorted order so (a, b) and (b, a) share one counter.',
+          'A virtual tie adds 0.5 to each side\'s wins and 1 to that pair\'s game count.',
+          'Divide all strengths by their geometric mean each iteration; BT strengths are only defined up to a constant factor.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Cmp = { a: string; b: string; winner: 'a' | 'b' | 'tie' };
+
+export function fitBradleyTerry(cmps: Cmp[], anchor: string, iters = 500): Record<string, number> {
+  const players = [...new Set(cmps.flatMap((c) => [c.a, c.b]))];
+  const wins = new Map(players.map((p) => [p, 0]));
+  const games = new Map<string, { i: string; j: string; n: number }>();
+  const pairKey = (i: string, j: string) => JSON.stringify(i < j ? [i, j] : [j, i]);
+
+  for (const c of cmps) {
+    const sa = c.winner === 'a' ? 1 : c.winner === 'tie' ? 0.5 : 0;
+    wins.set(c.a, wins.get(c.a)! + sa);
+    wins.set(c.b, wins.get(c.b)! + (1 - sa));
+    const k = pairKey(c.a, c.b);
+    const g = games.get(k) ?? { i: c.a, j: c.b, n: 0 };
+    g.n++;
+    games.set(k, g);
+  }
+  // prior: one virtual tie per observed pair keeps an undefeated variant finite
+  for (const g of games.values()) {
+    wins.set(g.i, wins.get(g.i)! + 0.5);
+    wins.set(g.j, wins.get(g.j)! + 0.5);
+    g.n++;
+  }
+
+  let p = new Map(players.map((x) => [x, 1]));
+  for (let it = 0; it < iters; it++) {
+    const next = new Map<string, number>();
+    for (const i of players) {
+      let denom = 0;
+      for (const j of players) {
+        if (i === j) continue;
+        const n = games.get(pairKey(i, j))?.n ?? 0;
+        if (n) denom += n / (p.get(i)! + p.get(j)!);
+      }
+      next.set(i, wins.get(i)! / denom);
+    }
+    const logMean = players.reduce((s, x) => s + Math.log(next.get(x)!), 0) / players.length;
+    for (const x of players) next.set(x, next.get(x)! / Math.exp(logMean));
+    p = next;
+  }
+
+  const base = Math.log10(p.get(anchor)!);
+  return Object.fromEntries(
+    players.map((x) => [x, Math.round(1000 + 400 * (Math.log10(p.get(x)!) - base))]),
+  );
+}`,
+        },
+        explanation:
+          'The MM algorithm (Hunter 2004) increases the Bradley–Terry likelihood monotonically and converges whenever the comparison graph is connected. The virtual tie per pair is a light prior: without it, a variant with only wins has an infinite maximum-likelihood strength. Normalising by the geometric mean removes the free scale constant, and the final log10 × 400 transform puts strengths on the familiar Elo scale, so a 100-point gap means about a 64% expected win rate.',
+      },
+      quickCheck: {
+        question:
+          'Prompt v8 vs v7 on 200 inputs, judged in both orders: v8 wins 90, v7 wins 70, and 40 are ties. What is v8\'s win rate?',
+        options: ['45%', '50%', '55%', '56.25%'],
+        correct: 2,
+        explanation:
+          'Win rate counts a tie as half a win: (90 + 0.5 × 40) / 200 = 110 / 200 = 55%. 45% ignores ties entirely, and 56.25% (90 / 160) is v8\'s share of decisive pairs, which is the number a sign test uses, not the win rate.',
+      },
+      source: 'Chiang et al. 2024 — Chatbot Arena (Bradley–Terry ratings); Bradley & Terry 1952; Hunter 2004 — MM algorithms for Bradley–Terry models',
+    },
+    // ───────────────────────────── 7. Statistical Confidence
+    {
+      heading: 'Statistical Confidence — error bars, paired tests and sample size',
+      body: `**Intuition:** an eval score is an estimate from a sample, so it has error bars. "B scored 84%, A scored 81%" means nothing until you know how much the score would move with different items, or with fresh samples on the same items.
+
+**Two sources of noise**
+1. **Item sampling.** Your 200 items are a sample of all possible inputs. The standard error of a pass rate p over n items is about √(p(1−p)/n). At p = 0.8 and n = 200 that is 2.8 points, so the 95% CI is about **±5.5 points**.
+2. **Generation randomness.** The same item can pass on one sample and fail on the next. Run **k trials** per item and use the per-item mean. This shrinks the within-item variance by 1/k but not the item-sampling variance, so beyond k ≈ 3–5, extra items help more than extra trials.
+
+**Bootstrap confidence intervals.** Resample items with replacement 1,000–10,000 times, recompute the metric each time, and take the 2.5th and 97.5th percentiles. This works for any metric (pass rate, mean judge score, win rate, F1) with no formula. Resample **items**, or whole clusters such as every question about the same document, never individual trials, or the interval comes out too narrow.
+
+**Paired comparisons.** When A and B run on the same items, analyse the per-item **difference** dᵢ = scoreB − scoreA. Item difficulty cancels out, so the difference has a much smaller SE than two independent scores. Use a paired bootstrap on dᵢ, a paired t-test, or McNemar for pass/fail. "The two CIs overlap" is not a valid test.
+
+**Minimum detectable effect (MDE).** Before running, ask what the smallest difference is that n items could reliably detect. For a paired design at 95% confidence and 80% power: **MDE ≈ 2.8 × SD(d) / √n**. If the MDE is 6 points and you hope to see 2, the eval cannot answer your question. Add items, add trials, or use a more sensitive (pairwise) grader.
+
+**Multiple comparisons.** Test 10 prompt variants on 5 metrics and you have 50 chances at a false positive at α = 0.05, about 2.5 expected by luck alone. Pre-register **one primary metric** and treat the rest as guardrails. When you must test many hypotheses, correct for it (Bonferroni α/m, or Holm) and confirm winners on fresh items. Re-running until a result looks significant is the same mistake in disguise.
+
+**Report like this:** "B − A = +3.0 pts, 95% CI [+0.9, +5.1], paired bootstrap, n = 300 items × k = 3, dataset v4."`,
+      example: `**"Is prompt B really better?" Support-ticket classifier on 200 items: A 78%, B 82%.**
+
+- **Separate CIs:** A 78% ± 5.7, B 82% ± 5.3. They overlap, which proves nothing either way.
+- **Paired view:** 180 items agree, B-only passes = 14, A-only passes = 6. The mean difference is 8 / 200 = **+4.0 pts**. Var(d) = 20/200 − 0.04² = 0.0984, so SE = √(0.0984 / 200) = 2.2 pts and the **95% CI is [−0.4, +8.4]**. Zero is inside, so the result is inconclusive.
+- **MDE at n = 200:** 2.8 × √0.0984 / √200 = 2.8 × 0.314 / 14.1 ≈ **6.2 pts**. The eval could not reliably detect a true 4-point gain.
+- **Fix:** extend to 600 items (same discordance: 42 vs 18). SE = √(0.0984 / 600) = 1.28 pts, so the **CI is [+1.5, +6.5]**. Ship B, and report the interval rather than just "+4".
+- **Trap avoided:** the team had also tried B2–B6. B4 "won" on one of 5 metrics at p = 0.04. Across 6 variants × 5 metrics, that is expected by chance. On re-test with fresh items the gain vanished.`,
+      diagram: `   per-item scores (k trials each)          A: [1,1,0] [0,0,0] [1,1,1] …
+                │  mean over trials            B: [1,1,1] [0,1,0] [1,1,1] …
+                ▼
+   d_i = mean(B_i) − mean(A_i)            d = [+.33, +.33, 0, …]
+                │
+    resample ITEMS with replacement × 5000
+                │
+     sort means ─▶ 2.5th pct … 97.5th pct  ─▶  95% CI of B − A
+                │
+      CI excludes 0 ?  ── yes ─▶ real difference
+                       └─ no ──▶ inconclusive: check MDE, add items`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Seeded bootstrap CI for a paired difference, plus the MDE',
+          code: `function mulberry32(a: number) {
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+// Resample ITEMS (not trials) so the CI reflects item-sampling uncertainty
+export function bootstrapCI(values: number[], iters = 5000, seed = 1) {
+  const rand = mulberry32(seed); // seeded → identical CI in every CI log
+  const n = values.length;
+  const stats: number[] = [];
+  for (let b = 0; b < iters; b++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += values[Math.floor(rand() * n)];
+    stats.push(s / n);
+  }
+  stats.sort((x, y) => x - y);
+  return { estimate: mean(values), lo: stats[Math.floor(0.025 * iters)], hi: stats[Math.floor(0.975 * iters)] };
+}
+
+// passA[i], passB[i]: 1/0 for the SAME item i under each prompt
+export function compare(passA: number[], passB: number[]) {
+  const d = passA.map((a, i) => passB[i] - a);
+  const ci = bootstrapCI(d);
+  const sd = Math.sqrt(mean(d.map((x) => (x - ci.estimate) ** 2)));
+  const mde = (2.8 * sd) / Math.sqrt(d.length); // 95% confidence, 80% power
+  const pts = (x: number) => (100 * x).toFixed(1);
+  return 'B − A = ' + pts(ci.estimate) + ' pts, 95% CI [' + pts(ci.lo) + ', ' + pts(ci.hi) +
+    '], MDE ≈ ' + pts(mde) + ' pts, n = ' + d.length;
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Error bars stop teams from shipping noise and from discarding real but small gains.',
+          'Paired analysis on the same items cuts the required sample size dramatically compared with independent samples.',
+          'The bootstrap works for any metric (pass rate, judge mean, win rate) without deriving a formula.',
+          'An MDE computed up front tells you whether an eval can answer the question before you spend money on it.',
+        ],
+        cons: [
+          {
+            con: 'Bootstrapping individual trials or correlated items treats them as independent and gives intervals that are too narrow.',
+            fix: 'Average the k trials per item first, and resample whole clusters (all questions about one document or conversation) as single units.',
+          },
+          {
+            con: 'Testing many variants and metrics produces false "wins" by chance.',
+            fix: 'Pre-register one primary metric, apply Bonferroni or Holm correction when testing many hypotheses, and confirm any winner on fresh held-out items.',
+          },
+          {
+            con: 'Large sample sizes and repeated trials multiply eval cost.',
+            fix: 'Use paired designs, put extra items only into the slices you gate on, cap k at about 3–5, and use a more sensitive grader (pairwise) where possible.',
+          },
+          {
+            con: 'A statistically significant difference can still be too small to matter to users.',
+            fix: 'Agree on a minimum practically important effect beforehand and require the whole CI to clear it before calling a change worthwhile.',
+          },
+        ],
+      },
+      keyPoints: [
+        'SE of a pass rate ≈ √(p(1−p)/n): 200 items at 80% gives about ±5.5 points.',
+        'Average k trials per item, then resample items (or clusters), never trials.',
+        'Compare A and B on the same items, using the CI of the per-item difference.',
+        'MDE ≈ 2.8 × SD(d) / √n; if it exceeds the effect you care about, the eval cannot answer the question.',
+        'One primary metric; correct for multiple comparisons; confirm on fresh items.',
+      ],
+      exercise: {
+        prompt: `Write \`pairedBootstrap(scoresA, scoresB, opts)\`. Each argument is \`number[][]\`, where \`scoresX[i]\` holds the **k trial scores** (0–1) of item i.
+
+**Acceptance criteria**
+- Throws if the item counts differ.
+- Averages trials per item, then computes per-item differences dᵢ = meanB − meanA.
+- Resamples **items** with a seeded PRNG for \`opts.iters\` iterations and returns \`{ diff, lo, hi, significant, mde }\`, where \`[lo, hi]\` is the 95% percentile CI, \`significant\` means the CI excludes 0, and \`mde = 2.8 × SD(d) / √n\`.
+- Same inputs and seed → identical output.`,
+        starter: {
+          language: 'typescript',
+          code: `export function pairedBootstrap(
+  scoresA: number[][],
+  scoresB: number[][],
+  opts: { iters: number; seed: number },
+) {
+  // TODO: per-item mean over k trials
+  // TODO: d_i = meanB - meanA
+  // TODO: seeded item-level bootstrap → 2.5 / 97.5 percentiles
+  // TODO: mde = 2.8 * sd(d) / sqrt(n)
+}`,
+        },
+        hints: [
+          'Reuse the mulberry32 PRNG from the section code for a deterministic resample.',
+          'Collapse trials first: once you have one number per item, the bootstrap only ever indexes items.',
+          'SD(d) is the standard deviation of the per-item differences, not of the raw trial scores.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `function mulberry32(a: number) {
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+export function pairedBootstrap(
+  scoresA: number[][],
+  scoresB: number[][],
+  opts: { iters: number; seed: number },
+) {
+  if (scoresA.length !== scoresB.length || scoresA.length === 0) throw new Error('item count mismatch');
+  // 1) collapse trials → one score per item (reduces within-item noise)
+  const d = scoresA.map((a, i) => mean(scoresB[i]) - mean(a));
+  const n = d.length;
+  const diff = mean(d);
+
+  // 2) item-level bootstrap of the mean difference
+  const rand = mulberry32(opts.seed);
+  const boots: number[] = [];
+  for (let b = 0; b < opts.iters; b++) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += d[Math.floor(rand() * n)];
+    boots.push(s / n);
+  }
+  boots.sort((x, y) => x - y);
+  const lo = boots[Math.floor(0.025 * opts.iters)];
+  const hi = boots[Math.min(opts.iters - 1, Math.floor(0.975 * opts.iters))];
+
+  // 3) minimum detectable effect for this n (95% confidence, 80% power)
+  const sd = Math.sqrt(mean(d.map((x) => (x - diff) ** 2)));
+  const mde = (2.8 * sd) / Math.sqrt(n);
+
+  return { diff, lo, hi, significant: lo > 0 || hi < 0, mde };
+}`,
+        },
+        explanation:
+          'Averaging trials first keeps the bootstrap honest: the unit of independence is the item, so resampling items captures the dominant item-sampling uncertainty, while the k trials reduce per-item generation noise. Pairing on the same items cancels item difficulty. That is why the CI of the difference is far narrower than two separate CIs. Returning the MDE alongside the CI tells you whether an inconclusive result means "no difference" or just "eval too small".',
+      },
+      quickCheck: {
+        question:
+          'Prompts A and B ran on the same 300 items. Their separate 95% confidence intervals overlap. What can you conclude?',
+        options: [
+          'There is no significant difference between A and B',
+          'Nothing yet: compute the CI of the per-item difference (paired), which is usually much narrower',
+          'B is worse, because its interval is wider',
+          'You must run more trials per item before any comparison is possible',
+        ],
+        correct: 1,
+        explanation:
+          'Overlapping individual CIs do not imply "no difference", especially for paired data, where item difficulty is shared. The paired difference removes that shared variance and is the correct test. A wider interval says nothing about which prompt is better, and more trials are optional, not a prerequisite.',
+      },
+      source: 'Miller 2024 — Adding Error Bars to Evals (Anthropic, arXiv:2411.00640); Efron & Tibshirani 1993 — An Introduction to the Bootstrap',
+    },
   ],
   codeChallenges: [
     {
@@ -1269,6 +1901,94 @@ Grade the candidate answer against the reference. Return only the JSON object.`,
         'Hard-coding the model id so rollback needs a deploy',
       ],
     },
+    {
+      id: 'llm-evaluation-iq-6',
+      difficulty: 'hard',
+      question: 'Design the online evaluation for launching a new prompt and model in a high-traffic support assistant: rollout stages, metrics, feedback signals and rollback criteria.',
+      context: '2M conversations per month; offline evals already show the candidate is better; leadership wants proof on real users.',
+      whatInterviewerLooksFor: [
+        'Staged exposure: shadow, canary, then a randomised A/B test',
+        'Clear split between one pre-registered success metric and guardrail metrics',
+        'Understands explicit vs implicit feedback and their biases',
+        'Randomisation unit, sample size and duration fixed in advance; automatic rollback',
+        'Closes the loop into the offline golden set',
+      ],
+      modelAnswer: `**1. Shadow (3–5 days, 10% mirrored).** Run the candidate on copies of live requests, never shown to users, with write tools stubbed. Measure crash/parse-error rate, p95 latency, cost, and the offline judges (faithfulness, policy compliance) run asynchronously on a 2% uniform sample. Any hard-assert regression blocks progression.
+
+**2. Canary (1–5% of users, 1–2 days).** Real exposure, with automatic rollback if a guardrail breaches: p95 latency over budget, escalation rate up more than 1 point, safety-filter hits up, or error rate up.
+
+**3. A/B test.** Randomise by **user id** with a hashed, sticky bucket (never per request). Log the variant id on every trace and feedback event. Before starting, write down:
+- **Success metric:** resolved-without-escalation rate per conversation.
+- **Guardrails:** p95 latency, cost per conversation, escalation rate, thumbs-down rate, safety flags.
+- **Sample size** from a power calculation for the smallest lift worth shipping (e.g. +1 point on a 70% baseline needs tens of thousands of users per arm), and a **duration** of at least one full weekly cycle. No peeking-and-stopping, or use a sequential test.
+
+**4. Feedback signals.** Explicit thumbs are sparse (1–5% of sessions) and skewed toward unhappy users, so compare *rates between arms*, not absolute values. Implicit signals (retry, rephrase within 60 s, edit ratio on drafted replies, abandonment, escalation) give volume. A live judge on a uniform sample gives an unbiased quality estimate.
+
+**5. Decision.** Ship if the success metric's CI excludes zero in the right direction and no guardrail breaches. Otherwise roll back with a config flag.
+
+**6. Close the loop.** Triage thumbs-down, retries and judge FAILs weekly. Real failures become golden-set cases, so the next offline eval would have caught them.`,
+      followUps: [
+        {
+          q: 'Halfway through, the treatment looks 3 points better and the PM wants to stop early and ship. What do you say?',
+          a: 'Stopping when the result looks good inflates the false-positive rate well above 5%, because you are taking the best of many looks. Either finish the pre-registered duration and sample size, or switch to a sequential test (e.g. alpha spending or always-valid p-values) that is designed for continuous monitoring. Also, early users and novelty effects can make week-one numbers unrepresentative.',
+        },
+        {
+          q: 'Thumbs-down dropped in the treatment arm, but so did the total number of thumbs. Is that good news?',
+          a: 'Not necessarily. If the treatment changed the UI or answer length, users may simply rate less often. Normalise per conversation rather than per rating, look at implicit signals (retries, escalations) that do not depend on users choosing to vote, and check the live-judge pass rate on the uniform sample, which is independent of feedback behaviour.',
+        },
+        {
+          q: 'Why not run the LLM judge synchronously and block bad answers?',
+          a: 'That turns an evaluator into a guardrail in the request path: it adds latency and cost to every request and becomes a new failure point. Measurement belongs async on a sample. If you need real-time blocking, build a dedicated, cheap, calibrated guardrail classifier with its own latency budget.',
+        },
+      ],
+      pitfalls: [
+        'Randomising per request, so users see both variants and feedback cannot be attributed',
+        'Treating the thumbs-down rate as ground truth for quality',
+        'No guardrails, so a success-metric win hides a latency or cost regression',
+        'Stopping the test as soon as the dashboard looks good',
+      ],
+    },
+    {
+      id: 'llm-evaluation-iq-7',
+      difficulty: 'expert',
+      question: 'A teammate claims prompt B is better than prompt A: 76% vs 72% on 250 golden items, one run each. What statistical analysis do you need before you agree, and how would you report the result?',
+      whatInterviewerLooksFor: [
+        'Quantifies uncertainty: SE / CI of a pass rate at this n',
+        'Insists on a paired comparison on the same items',
+        'Handles generation randomness with k trials and resampling at item level',
+        'Computes the minimum detectable effect and the power problem',
+        'Mentions multiple comparisons and confirming on fresh items',
+      ],
+      modelAnswer: `**1. Size the noise.** At p ≈ 0.74 and n = 250, the SE of each pass rate is √(0.74 × 0.26 / 250) ≈ 2.8 pts, so each score is about ±5.4 pts at 95%. A 4-point gap between two independent estimates is not convincing on its own.
+
+**2. Pair it.** Both prompts ran on the same 250 items, so analyse per-item differences. Count discordant items. Suppose B-only = 22 and A-only = 12: the difference is 10 / 250 = 4.0 pts, Var(d) = 34/250 − 0.04² ≈ 0.1344, SE ≈ √(0.1344/250) ≈ 2.3 pts, and the 95% CI is about **[−0.5, +8.5]**. That is inconclusive. McNemar on 22 vs 12 agrees (χ² ≈ 2.4 < 3.84).
+
+**3. Account for generation randomness.** One sample per item mixes prompt effect with sampling luck. Run k = 3–5 trials per item, average per item, then **paired-bootstrap over items** (never over trials, which gives falsely narrow intervals). If items cluster (several per source document), resample clusters.
+
+**4. Check power.** MDE ≈ 2.8 × SD(d) / √n = 2.8 × 0.367 / 15.8 ≈ 6.5 pts. This eval cannot reliably detect a true 4-point gain. Options: more items (about 2.6× as many, ~650, to bring the MDE near 4), more trials, or a more sensitive pairwise judge with order swap.
+
+**5. Multiple comparisons.** Ask how many variants and metrics were tried. If B is the best of 8 prompts on 5 metrics, a "win" at p = 0.04 is expected by chance. Pre-register the primary metric, apply Holm/Bonferroni, and confirm on fresh held-out items.
+
+**6. Practical significance and slices.** Even a significant +4 must not hide a regression in a critical slice. Check per-tag differences and read the items that flipped pass → fail.
+
+**Report:** "B − A = +4.0 pts, 95% CI [−0.5, +8.5] (paired bootstrap, n = 250, k = 1, dataset v4, judge v3). Inconclusive; MDE ≈ 6.5 pts. Re-running with k = 3 on 650 items."`,
+      followUps: [
+        {
+          q: 'Why do more trials per item stop helping after a while?',
+          a: 'Total variance has two parts: within-item generation noise, which shrinks as 1/k, and between-item variance from which items you happened to sample, which only shrinks with more items. Once k is about 3–5, the within-item part is small compared with the between-item part, so extra trials cost money but barely narrow the CI.',
+        },
+        {
+          q: 'The paired CI is [+0.2, +3.1]. Statistically significant. Do you ship?',
+          a: 'Only if a gain of that size matters and nothing else regresses. Compare the lower bound with the minimum practically important effect agreed beforehand, check guardrails such as cost and latency, and inspect critical slices. Then confirm online with an A/B test, because offline gains do not always transfer.',
+        },
+      ],
+      pitfalls: [
+        'Concluding from whether two separate CIs overlap',
+        'Bootstrapping individual trials instead of items',
+        'Ignoring how many variants were tried before this one "won"',
+        'Reporting a point estimate without an interval, n, k and dataset version',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1320,6 +2040,38 @@ Grade the candidate answer against the reference. Return only the JSON object.`,
         {
           q: 'What if you only care about the refunds slice, which is 10% of cases?',
           a: 'With 400 cases the slice has only 40, so its 95% interval is about ±12 points; either oversample that slice to ~300 cases in a dedicated suite, or accept that the gate only catches large regressions there.',
+        },
+      ],
+    },
+    {
+      id: 'llm-evaluation-est-3',
+      question: 'A pairwise judge compares candidate prompt B against champion A. If B\'s true preference rate is 55%, how many input items and judge calls do you need to show B beats a coin flip with 95% confidence, and what does it cost?',
+      assumptions: [
+        'Two-sided test of decisive (non-tie) verdicts vs 50% at α = 0.05 (z = 1.96) with 80% power (z = 0.84)',
+        'n ≈ (z_α/2 × √(p0(1−p0)) + z_β × √(p1(1−p1)))² / (p1 − p0)², with p0 = 0.5, p1 = 0.55',
+        '20% of items end as ties (including order-swap disagreements) and carry no information for the test',
+        'Each item is judged in both orders (2 calls); judge call ≈ 1,800 input + 200 output tokens at illustrative $3 / 1M input, $15 / 1M output',
+      ],
+      steps: [
+        { label: 'Numerator terms', calc: '1.96 × √0.25 = 0.980; 0.84 × √(0.55 × 0.45) = 0.84 × 0.497 = 0.418; sum = 1.398' },
+        { label: 'Decisive pairs needed', calc: '1.398² / 0.05² = 1.954 / 0.0025 ≈ 782' },
+        { label: 'Items including ties', calc: '782 / (1 − 0.20) ≈ 978 → ~1,000 items' },
+        { label: 'Judge calls (both orders)', calc: '1,000 × 2 = 2,000 calls' },
+        { label: 'Cost per call', calc: '1,800 × $3/1M + 200 × $15/1M = $0.0054 + $0.0030 = $0.0084' },
+        { label: 'Total judge cost', calc: '2,000 × $0.0084 ≈ $17 (plus generating 2 × 1,000 outputs)' },
+        { label: 'Compare: 10-point gap (60%)', calc: '(0.980 + 0.84 × 0.490)² / 0.10² = 1.392² / 0.01 ≈ 194 decisive → ~245 items' },
+      ],
+      answer: 'About 780 decisive comparisons, i.e. roughly 1,000 items (2,000 order-swapped judge calls, ≈ $17 of judge spend) to detect a 55% vs 50% preference. A 60% preference needs only ~245 items.',
+      insight:
+        'Sample size scales with 1/effect²: halving the effect you want to detect quadruples the items. Small preference gaps need about 1,000 items even with a sensitive pairwise grader, so decide the minimum effect worth shipping before you size the eval, and cut tie rates (sharper rubric) because ties waste judge calls.',
+      followUps: [
+        {
+          q: 'How would running 3 generations per prompt per item change this?',
+          a: 'It reduces generation noise per item, so each item\'s verdict is more stable and fewer items may be needed. But you would then judge 3 pairings per item (6 calls), roughly tripling cost per item, and items, not trials, remain the unit you resample. Usually more distinct items is the better buy.',
+        },
+        {
+          q: 'What if the judge flips on 30% of items when order is swapped?',
+          a: 'Ties rise to ~30%+, so you need 782 / 0.7 ≈ 1,120 items or more, and a high flip rate signals the rubric cannot separate the candidates. Tighten the criterion or add reference answers before buying more samples.',
         },
       ],
     },
@@ -1572,6 +2324,142 @@ console.log({ a, b });`,
         'Different case samples have different difficulty; with 100 cases each pass-rate estimate has a 95% interval of roughly ±7.5 points, so a 3-point gap is noise. Running both prompts on identical cases and testing the discordant pairs (McNemar) isolates the prompt effect. Cryptographic randomness, slice bounds and median vs mean are irrelevant.',
       followUps: [
         { q: 'What else is risky about sort(() => Math.random() - 0.5)?', a: 'It is a biased shuffle and it mutates the original array in place, so other code using `cases` now sees a reordered set; use a seeded Fisher–Yates shuffle on a copy for reproducible splits.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-13',
+      difficulty: 'medium',
+      question: 'You A/B test a new support-assistant prompt. Which pairing correctly labels a success metric and a guardrail metric?',
+      options: [
+        'Success: p95 latency; guardrail: resolved-without-escalation rate',
+        'Success: resolved-without-escalation rate; guardrail: p95 latency and cost per conversation',
+        'Success: number of judge calls per day; guardrail: thumbs-up rate',
+        'Success and guardrail should be the same metric so the decision is unambiguous',
+      ],
+      correct: [1],
+      explanation:
+        'The success metric is the user outcome you are trying to improve and pre-register (resolution without escalation). Guardrails are things that must not get worse while you chase it: latency, cost, errors, safety. Swapping them optimises the wrong thing, and judge-call volume is an operational number, not an outcome.',
+      followUps: [
+        { q: 'Why pre-register a single success metric?', a: 'With many candidate metrics, one will move by chance. Choosing the primary metric before the test keeps the false-positive rate at the stated alpha and stops post-hoc cherry-picking.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-14',
+      difficulty: 'hard',
+      question: 'Select ALL implicit user behaviours that are reasonable signals that an assistant response failed the user.',
+      options: [
+        'The user clicks "regenerate" immediately after the answer appears',
+        'The user asks a reworded version of the same question within a minute',
+        'The user copies the answer to the clipboard and ends the session',
+        'The user heavily edits the drafted reply before sending it (e.g. more than 50% of characters changed)',
+      ],
+      correct: [0, 1, 3],
+      explanation:
+        'Regenerating, rephrasing the same question and rewriting most of a draft all suggest the output did not meet the need. Copying the answer and leaving is usually a success signal (the user took it and went). All implicit signals are noisy, so use them comparatively between variants and to pick traces for review.',
+      followUps: [
+        { q: 'Why not train or gate directly on these signals?', a: 'They are confounded by UI changes and user habits (some users always regenerate). Use them to rank traces for human or judge review and to compare arms of a randomised test, not as ground-truth labels.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-15',
+      difficulty: 'hard',
+      question: 'This Express handler runs an A/B test of two prompts and later compares thumbs-up rates. What is the main flaw?',
+      code: {
+        language: 'typescript',
+        code: `app.post('/chat', async (req, res) => {
+  const variant = Math.random() < 0.5 ? 'promptA' : 'promptB';
+  const answer = await run(variant, req.body.messages);
+  res.json({ answer });
+});
+// later: SELECT AVG(thumbs_up) FROM feedback GROUP BY ??? -- compare A vs B`,
+      },
+      options: [
+        'Math.random is not uniform enough for experiments',
+        'Assignment is per request and never recorded: one user gets both prompts within a conversation, and feedback cannot be joined to the variant that produced the answer',
+        'A 50/50 split is unsafe; experiments must always use 5% treatment',
+        'Thumbs-up rate can never be used as an A/B metric',
+      ],
+      correct: [1],
+      explanation:
+        'Per-request randomisation mixes variants inside one conversation, so neither the user experience nor the feedback is attributable. And because the variant is not logged on the trace or feedback, the comparison cannot even be computed. Hash the user id into a sticky bucket and log the variant id everywhere. Math.random is fine for uniformity, and 50/50 is a normal split after a canary.',
+      followUps: [
+        { q: 'When might you randomise by conversation instead of by user?', a: 'When users are anonymous or have very few sessions, conversation-level randomisation is acceptable, as long as assignment is sticky within the conversation and the analysis accounts for users appearing in both arms.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-16',
+      difficulty: 'hard',
+      question: 'Select ALL true statements about Bradley–Terry ratings and online Elo updates for ranking prompt or model variants from pairwise judgements.',
+      options: [
+        'A Bradley–Terry maximum-likelihood fit on a fixed batch of comparisons does not depend on the order in which comparisons happened',
+        'Online Elo ratings depend on match order and the K-factor, so the same comparisons can give different final ratings',
+        'On the Elo scale, a 100-point gap corresponds to roughly a 64% expected win rate',
+        'A higher Bradley–Terry rating proves the variant meets your absolute quality bar',
+      ],
+      correct: [0, 1, 2],
+      explanation:
+        'BT maximises a likelihood over all comparisons jointly, so order is irrelevant. Elo processes matches sequentially, so order and K change the outcome. 1/(1 + 10^(−100/400)) ≈ 0.64. Ratings are relative: the top-rated variant can still fail your pass/fail requirements, so keep an absolute gate.',
+      followUps: [
+        { q: 'How do you put confidence intervals on Bradley–Terry ratings?', a: 'Bootstrap the comparisons (resample with replacement, refit BT many times) and take percentiles of each rating, as Chatbot Arena does; overlapping intervals mean the ranking between those variants is not settled.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-17',
+      difficulty: 'expert',
+      question: 'This code computes a 95% CI for a pass rate from 100 items × 5 trials each. What is wrong with it?',
+      code: {
+        language: 'typescript',
+        code: `// scores[i][t] = 1 if item i passed on trial t, else 0
+const flat = scores.flat();                       // 500 numbers
+const boots = Array.from({ length: 2000 }, () => mean(resample(flat)));
+const [lo, hi] = percentiles(boots, [2.5, 97.5]);
+console.log('pass rate 95% CI', lo, hi);`,
+      },
+      options: [
+        'Nothing; more data points always give a more accurate interval',
+        'It treats 500 correlated trials as independent items, so the interval is too narrow; average trials per item and resample the 100 item means',
+        '2,000 bootstrap iterations are too few for any confidence interval',
+        'Percentile intervals are invalid for pass rates; only a t-test can be used',
+      ],
+      correct: [1],
+      explanation:
+        'Trials of the same item are strongly correlated (an easy item passes all 5 times), so the effective sample size is closer to 100 than 500. Resampling individual trials understates item-sampling variance, giving an interval up to √5 ≈ 2.2× too narrow. Collapse to per-item means and resample items (or clusters). 2,000 resamples is adequate for a 95% percentile interval.',
+      followUps: [
+        { q: 'When would you resample at an even coarser level than items?', a: 'When items are clustered, e.g. ten questions about the same document or turns of one conversation; resample whole clusters, because items within a cluster share difficulty and are not independent.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-18',
+      difficulty: 'hard',
+      question: 'You tried 12 prompt variants against the baseline on 4 metrics each. One variant shows p = 0.03 on one metric and nothing elsewhere. What is the best next step?',
+      options: [
+        'Ship it; p = 0.03 is below 0.05',
+        'Treat it as a likely false positive from 48 comparisons; apply a multiple-comparison correction and confirm on fresh held-out items before shipping',
+        'Discard all 12 variants because statistics cannot be used with many variants',
+        'Re-run the same eval until the p-value drops below 0.01',
+      ],
+      correct: [1],
+      explanation:
+        'With 48 tests at α = 0.05 you expect about 2.4 false positives by chance alone. A Bonferroni threshold would be 0.05 / 48 ≈ 0.001, which p = 0.03 does not meet. Confirm the candidate on new items with its pre-registered primary metric. Re-running until significant is p-hacking, and discarding everything throws away a possibly real gain.',
+      followUps: [
+        { q: 'How do you avoid this situation in the next round?', a: 'Pre-register one primary metric, screen variants on a dev split, then run a single confirmatory paired test of the best one or two candidates on a held-out split, reporting the CI rather than a bare p-value.' },
+      ],
+    },
+    {
+      id: 'llm-evaluation-mcq-19',
+      difficulty: 'expert',
+      question: 'Prompts A and B are compared on the same 250 items; the per-item difference d has SD(d) = 0.30. You hope to detect a 2-point improvement. What does a minimum-detectable-effect calculation tell you?',
+      options: [
+        'MDE ≈ 2.8 × 0.30 / √250 ≈ 5.3 points, so a 2-point gain cannot be reliably detected; add items, use a more sensitive grader or accept the limit',
+        'MDE ≈ 0.30 / 250 ≈ 0.1 points, so even tiny gains will be significant',
+        'MDE does not apply to paired designs',
+        'MDE ≈ 2 points by definition, because that is the effect you hope to see',
+      ],
+      correct: [0],
+      explanation:
+        'For a paired design at 95% confidence and 80% power, MDE ≈ (1.96 + 0.84) × SD(d) / √n = 2.8 × 0.30 / 15.8 ≈ 0.053. A true 2-point gain would usually come out "not significant", which would be misread as "no difference". Reaching a 2-point MDE needs about (5.3/2)² × 250 ≈ 1,750 items, or a lower-variance grader.',
+      followUps: [
+        { q: 'Besides adding items, what lowers SD(d)?', a: 'Averaging k trials per item to cut generation noise, using a more consistent grader (binary per-criterion or order-swapped pairwise), and removing items that both prompts always pass or always fail from a targeted suite.' },
       ],
     },
   ],
