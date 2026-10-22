@@ -13,6 +13,7 @@ import { ProgressPanel } from '../components/ProgressPanel';
 import { DashboardMetrics } from '../components/DashboardMetrics';
 import { WeakReattempt } from '../components/WeakReattempt';
 import { AchievementsSummary } from '../components/achievements/AchievementsSummary';
+import { NeuralCoverage } from '../components/NeuralCoverage';
 
 const TAB_LABELS: Record<string, string> = {
   learn: 'Read',
@@ -30,7 +31,6 @@ const PAGE_LABELS: Record<string, string> = {
   '/challenges': 'Architecture challenges',
   '/settings': 'Settings',
 };
-const NUMERALS = ['I', 'II', 'III'];
 const HOW = [
   ['Read', 'a short section: one idea, a worked example, the trade-offs and how to fix each weakness.'],
   ['Do', 'the coding exercise and the quick check under every section.'],
@@ -122,11 +122,11 @@ export default function Home() {
   const resumeHere = last && lastLabel && last !== step.href ? { href: last, label: lastLabel } : null;
   const ctaLabel = fresh ? 'Start the first lesson' : step.kind === 'done' ? 'Drill weak areas' : 'Resume mission';
 
-  // ---------- orbit rings: coverage per level ----------
-  const levels = LEVELS.map((lv, i) => {
+  // ---------- coverage per level (summary label of the neural-network figure) ----------
+  const levels = LEVELS.map((lv) => {
     const ts = TOPICS.filter((t) => LEVEL_OF_TOPIC.get(t.id) === lv.id);
     const done = ts.filter((t) => status.get(t.id) === 'passed').length;
-    return { ...lv, numeral: NUMERALS[i], done, total: ts.length, pct: pct(done, ts.length) };
+    return { title: lv.title, done, total: ts.length };
   });
   const ringsLabel = `Course progress: ${coveredPct} percent covered. ${levels.map((l) => `${l.title} ${l.done} of ${l.total}`).join(', ')}.`;
 
@@ -135,33 +135,21 @@ export default function Home() {
       <section className="td-hero" aria-labelledby="today-title">
         <div className="td-hero-card">
           <div className="td-hero-copy">
-            <div className="td-hero-top">
-              <div className="td-mini-ring" role="img" aria-label={`${coveredPct} percent of the course covered`} style={{ '--p': coveredPct } as CSSProperties}>
-                <span className="td-mini-arc" aria-hidden />
-                <span className="orbit" aria-hidden>
-                  <span className="orbit-dot" />
-                </span>
-                <span className="td-mini-num num" aria-hidden>
-                  {coveredPct}%
-                </span>
-              </div>
-              <div className="td-hero-heading">
-                <p className="td-eyebrow rise d1">
-                  <span className="td-eyebrow-dot pulse" aria-hidden />
-                  <span>
-                    {eyebrow}
-                    {level && <span className="td-eyebrow-level"> · {level.title}</span>}
-                  </span>
-                </p>
-                <h1 id="today-title" className={`td-title rise d2${heroTitle.length > 32 ? ' td-title-long' : ''}`}>
-                  <span className="gtext">{heroTitle}</span>
-                </h1>
-              </div>
-            </div>
+            <p className="td-eyebrow rise d1">
+              <span className="td-eyebrow-dot pulse" aria-hidden />
+              <span>
+                {eyebrow}
+                {level && <span className="td-eyebrow-level"> · {level.title}</span>}
+              </span>
+            </p>
+            <h1 id="today-title" className={`td-title rise d2${heroTitle.length > 32 ? ' td-title-long' : ''}`}>
+              <span className="gtext">{heroTitle}</span>
+            </h1>
             <p className="td-lede rise d3">{lede}</p>
             <p className="td-mlede">
               {fresh && topic ? `${plural(topic.sections.length, 'short section')} · start with §1 ${topic.sections[0]?.heading.split(' — ')[0] ?? ''}` : sectionsLine ? `${sectionsLine} · up next: ${step.kind === 'read' ? step.title.replace(/^Read /, '').split(' — ')[0] : step.title}` : step.detail}
             </p>
+            <NeuralCoverage compact className="td-nn-phone" status={status} nextId={topic?.id} pct={coveredPct} label={ringsLabel} />
             <div className="td-actions rise d4">
               <Link className="btn btn-primary btn-lg td-cta" to={step.href}>
                 {ctaLabel} <ArrowRight size={18} aria-hidden />
@@ -185,28 +173,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="td-orbits rise d2" role="img" aria-label={ringsLabel}>
-          {levels.map((lv, i) => (
-            <div key={lv.id} className={`td-ring td-ring-${i + 1}`} style={{ '--p': lv.pct } as CSSProperties}>
-              <span className="td-ring-track" aria-hidden />
-              <span className="td-ring-arc" aria-hidden />
-              <span className={`orbit ${i === 0 ? 'slow' : i === 1 ? 'rev' : ''}`} aria-hidden>
-                <span className="orbit-dot" />
-              </span>
-            </div>
-          ))}
-          <div className="td-orbits-core" aria-hidden>
-            <div>
-              <div className="td-orbits-pct gtext">{coveredPct}%</div>
-              <div className="td-orbits-cap">Covered</div>
-            </div>
-          </div>
-          {levels.map((lv, i) => (
-            <span key={lv.id} className={`td-orbits-key td-orbits-key-${i + 1}`} aria-hidden>
-              {lv.numeral} · {lv.done}/{lv.total}
-            </span>
-          ))}
-        </div>
+        <NeuralCoverage className="td-nn-hero rise d2" status={status} nextId={topic?.id} pct={coveredPct} label={ringsLabel} />
       </section>
 
       <section className="td-tiles" aria-label="Practice figures">
