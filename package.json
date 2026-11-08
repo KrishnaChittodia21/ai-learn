@@ -22,13 +22,13 @@
     "@fontsource-variable/space-grotesk": "5.3.0",
     "canvas-confetti": "1.9.4",
     "cmdk": "1.1.1",
-    "lucide-react": "1.49.0",
+    "lucide-react": "1.69.0",
     "motion": "13.4.6",
     "prismjs": "^1.30.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.18.4",
+    "react-router-dom": "^7.18.5",
     "react-simple-code-editor": "^0.14.1",
     "remark-gfm": "^4.0.1",
     "sucrase": "^3.35.1"
@@ -39,8 +39,8 @@
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "oxlint": "^1.81.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "oxlint": "^1.91.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }
