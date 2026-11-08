@@ -1,6 +1,6 @@
 // Dashboard metrics: pure aggregations of Progress + content for the charts on the dashboard.
 // No React and no storage access, so they can be unit-tested outside the browser.
-import type { Difficulty, Topic } from '../types';
+import type { Difficulty, TopicMeta } from '../types';
 import type { Phase } from '../content/phases';
 import type { Progress } from './progress';
 import { topicStatus } from './stats';
@@ -14,7 +14,7 @@ export interface StatusCounts {
 }
 
 /** topics by status: passed / in progress / not started */
-export function statusCounts(p: Progress, topics: Topic[]): StatusCounts {
+export function statusCounts(p: Progress, topics: TopicMeta[]): StatusCounts {
   const c = { passed: 0, inProgress: 0, notStarted: 0, total: topics.length };
   for (const t of topics) {
     const s = topicStatus(p, t);
@@ -36,7 +36,7 @@ export interface PhaseProgress {
 }
 
 /** exams passed per phase, in course order; phases without topics are left out */
-export function phaseProgress(p: Progress, topics: Topic[], phases: Phase[]): PhaseProgress[] {
+export function phaseProgress(p: Progress, topics: TopicMeta[], phases: Phase[]): PhaseProgress[] {
   return phases
     .map((ph) => {
       const ts = topics.filter((t) => t.phase === ph.id);
@@ -58,7 +58,7 @@ export interface ExamScore {
 }
 
 /** every attempted exam, most recently attempted first (topics without history keep course order at the end) */
-export function examScores(p: Progress, topics: Topic[]): ExamScore[] {
+export function examScores(p: Progress, topics: TopicMeta[]): ExamScore[] {
   const rows = topics
     .filter((t) => p.tests[t.id])
     .map((t, i) => {
@@ -74,7 +74,7 @@ export function examScores(p: Progress, topics: Topic[]): ExamScore[] {
 }
 
 /** mean best score over attempted exams, or null when none attempted */
-export function averageBest(p: Progress, topics: Topic[]): number | null {
+export function averageBest(p: Progress, topics: TopicMeta[]): number | null {
   const scores = topics.map((t) => p.tests[t.id]?.best).filter((s): s is number => typeof s === 'number');
   return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
 }
@@ -87,7 +87,7 @@ export interface Attempt {
 }
 
 /** full-length exam attempts across all topics in time order, latest `limit` */
-export function attemptTimeline(p: Progress, topics: Topic[], limit = 20): Attempt[] {
+export function attemptTimeline(p: Progress, topics: TopicMeta[], limit = 20): Attempt[] {
   const all: Attempt[] = [];
   for (const t of topics) {
     for (const h of p.tests[t.id]?.history ?? []) all.push({ at: h.at, score: h.score, topicId: t.id, title: t.title });
@@ -97,7 +97,7 @@ export function attemptTimeline(p: Progress, topics: Topic[], limit = 20): Attem
 }
 
 /** overall MCQ accuracy using the latest answer to each question */
-export function mcqAccuracy(p: Progress, topics: Topic[]): Accuracy {
+export function mcqAccuracy(p: Progress, topics: TopicMeta[]): Accuracy {
   const { byDifficulty } = accuracyBreakdown(p, topics);
   return Object.values(byDifficulty).reduce((acc, a) => ({ seen: acc.seen + a.seen, correct: acc.correct + a.correct }), { seen: 0, correct: 0 });
 }
@@ -110,7 +110,7 @@ export interface LevelAccuracy {
 }
 
 /** accuracy per difficulty, only for levels with answered questions */
-export function difficultyAccuracy(p: Progress, topics: Topic[]): LevelAccuracy[] {
+export function difficultyAccuracy(p: Progress, topics: TopicMeta[]): LevelAccuracy[] {
   const { byDifficulty } = accuracyBreakdown(p, topics);
   return (Object.keys(byDifficulty) as Difficulty[])
     .map((level) => ({ level, ...byDifficulty[level], pct: byDifficulty[level].seen ? Math.round((byDifficulty[level].correct / byDifficulty[level].seen) * 100) : 0 }))
@@ -126,7 +126,7 @@ export interface RatingCounts {
 }
 
 /** interview self-ratings across all topics */
-export function ratingCounts(p: Progress, topics: Topic[]): RatingCounts {
+export function ratingCounts(p: Progress, topics: TopicMeta[]): RatingCounts {
   const c = { nailed: 0, partial: 0, missed: 0, rated: 0, total: 0 };
   for (const t of topics) {
     for (const q of t.interviewQuestions) {
@@ -189,7 +189,7 @@ export interface VolumeRow {
 }
 
 /** how much of each kind of practice is done (system-design-learn specific) */
-export function practiceVolume(p: Progress, topics: Topic[], companyTotal: number): VolumeRow[] {
+export function practiceVolume(p: Progress, topics: TopicMeta[], companyTotal: number): VolumeRow[] {
   let read = 0;
   let sections = 0;
   let cc = 0;

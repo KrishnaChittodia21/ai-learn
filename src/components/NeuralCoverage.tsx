@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LEVEL_OF_TOPIC, LEVELS, PHASES, TOPICS } from '../content';
+import { layerCounts, levelLayers, parseStates, type NodeState } from '../lib/coverage';
 import type { TopicStatus } from '../lib/stats';
 import { prefersReducedMotion } from '../viz/core';
 
@@ -13,8 +14,6 @@ import { prefersReducedMotion } from '../viz/core';
    off-screen (IntersectionObserver) and never starts under prefers-reduced-motion.
    ===================================================================== */
 
-type NodeState = 'covered' | 'progress' | 'new';
-const STATE_OF: Record<TopicStatus, NodeState> = { passed: 'covered', 'in-progress': 'progress', new: 'new' };
 const STATUS_TEXT: Record<NodeState, string> = { covered: 'Covered', progress: 'In progress', new: 'Not started' };
 const NUMERALS = ['I', 'II', 'III'];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -56,8 +55,7 @@ function buildNet(C: Cfg) {
   const midY = (C.top + C.bot) / 2;
   const phaseOf = new Map(PHASES.map((ph) => [ph.id, ph]));
   let idx = 0;
-  const layers: Neuron[][] = LEVELS.map((lv, li) => {
-    const ts = TOPICS.filter((t) => LEVEL_OF_TOPIC.get(t.id) === lv.id);
+  const layers: Neuron[][] = levelLayers(TOPICS, LEVELS, LEVEL_OF_TOPIC).map((ts, li) => {
     const n = ts.length;
     // a large layer becomes two staggered columns so its neurons keep room to breathe
     const twoCols = n > 18;
@@ -116,12 +114,6 @@ type Net = ReturnType<typeof buildNet>;
 const NETS: Partial<Record<'full' | 'compact', Net>> = {};
 const getNet = (v: 'full' | 'compact') => (NETS[v] ??= buildNet(CFG[v]));
 
-/** "passed,new,…" (topic order) → topic id → neuron state; a stable key keeps the pulse loop from restarting on hover */
-function parseStates(key: string): Map<string, NodeState> {
-  const parts = key.split(',');
-  return new Map(TOPICS.map((t, i) => [t.id, STATE_OF[parts[i] as TopicStatus] ?? 'new']));
-}
-
 const bez = (p: number[], t: number) => {
   const u = 1 - t;
   const a = u * u * u,
@@ -163,17 +155,15 @@ export function NeuralCoverage({ status, nextId, pct, label, compact = false, cl
   const reduced = useReducedMotion();
 
   const statusKey = TOPICS.map((t) => status.get(t.id) ?? 'new').join(',');
-  const st = useMemo(() => parseStates(statusKey), [statusKey]);
+  const st = useMemo(() => parseStates(statusKey, TOPICS), [statusKey]);
   const covered = all.filter((n) => st.get(n.topic.id) === 'covered').length;
   const frac = covered / Math.max(1, all.length);
   const stateOf = (e: Neuron | 'in' | 'out'): NodeState => (e === 'in' || e === 'out' ? 'covered' : (st.get(e.topic.id) ?? 'new'));
 
-  const levelCounts = layers.map((ns, li) => ({
-    numeral: NUMERALS[li],
-    title: LEVELS[li].title,
-    done: ns.filter((n) => st.get(n.topic.id) === 'covered').length,
-    total: ns.length,
-  }));
+  const levelCounts = layerCounts(
+    layers.map((ns) => ns.map((n) => n.topic)),
+    st,
+  ).map((c, li) => ({ numeral: NUMERALS[li], title: LEVELS[li].title, ...c }));
   const next = nextId ? all.find((n) => n.topic.id === nextId) : undefined;
 
   /* ---------- roving focus + tooltip ---------- */
@@ -371,7 +361,7 @@ export function NeuralCoverage({ status, nextId, pct, label, compact = false, cl
   }
 
   return (
-    <figure ref={hostRef} className={`td-nn${compact ? ' td-nn-compact' : ''}${motion ? '' : ' is-static'} ${className}`} role="group" aria-label={label}>
+    <figure ref={hostRef} data-guide="coverage" className={`td-nn${compact ? ' td-nn-compact' : ''}${motion ? '' : ' is-static'} ${className}`} role="group" aria-label={label}>
       <svg ref={svgRef} viewBox={`0 0 ${C.W} ${C.H}`} className="td-nn-svg" onKeyDown={onKeyDown} onPointerLeave={(e) => e.pointerType !== 'touch' && hideTip()}>
         <defs>
           {(

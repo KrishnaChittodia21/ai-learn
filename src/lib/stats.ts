@@ -1,10 +1,10 @@
-import type { Topic } from '../types';
+import type { TopicMeta } from '../types';
 import type { Progress } from './progress';
-import { isPassed } from './progress';
+import { isPassed } from './progress.ts';
 
 export type TopicStatus = 'new' | 'in-progress' | 'passed';
 
-export function topicStatus(p: Progress, t: Topic): TopicStatus {
+export function topicStatus(p: Progress, t: TopicMeta): TopicStatus {
   if (isPassed(p, t.id)) return 'passed';
   const touched =
     (p.sections[t.id]?.length ?? 0) > 0 ||
@@ -16,7 +16,7 @@ export function topicStatus(p: Progress, t: Topic): TopicStatus {
   return touched ? 'in-progress' : 'new';
 }
 
-export function topicCompletion(p: Progress, t: Topic): number {
+export function topicCompletion(p: Progress, t: TopicMeta): number {
   const parts = [
     (p.sections[t.id]?.length ?? 0) / Math.max(1, t.sections.length),
     t.codeChallenges.filter((c) => p.cc[c.id]).length / Math.max(1, t.codeChallenges.length),
@@ -28,7 +28,7 @@ export function topicCompletion(p: Progress, t: Topic): number {
 }
 
 /** every Learn section of the topic is marked read */
-export function studyComplete(p: Progress, t: Topic): boolean {
+export function studyComplete(p: Progress, t: TopicMeta): boolean {
   const read = new Set(p.sections[t.id] ?? []);
   return t.sections.every((_, i) => read.has(i));
 }
@@ -37,13 +37,13 @@ export function studyComplete(p: Progress, t: Topic): boolean {
  * Study-first lock. A topic whose exam is already passed is never re-locked,
  * so turning the setting on can't take away earlier progress.
  */
-export function practiceLocked(p: Progress, t: Topic, kind: 'exam' | 'interview'): boolean {
+export function practiceLocked(p: Progress, t: TopicMeta, kind: 'exam' | 'interview'): boolean {
   const mode = p.settings.studyLock;
   if (mode === 'off' || isPassed(p, t.id) || studyComplete(p, t)) return false;
   return kind === 'exam' || mode === 'exam-interview';
 }
 
-export function companyUnlocked(p: Progress, topics: Topic[]) {
+export function companyUnlocked(p: Progress, topics: TopicMeta[]) {
   const remaining = topics.filter((t) => !isPassed(p, t.id));
   return { unlocked: topics.length > 0 && remaining.length === 0, remaining };
 }

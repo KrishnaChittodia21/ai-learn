@@ -41,6 +41,86 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Faithfulness and Groundedness — claim decomposition and per-claim verification',
+      short: {
+        id: 'air-canada-chatbot-ruling',
+        title: 'The Air Canada chatbot ruling',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Feb 2024 · Moffatt v. Air Canada',
+            value: 812,
+            prefix: 'CA$',
+            unit: 'the airline had to pay over one chatbot answer',
+            sub: 'Small money, **big precedent**: the company owns what its bot says.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Nov 2022 · a bereavement fare',
+            head: 'A *confident* answer, not the policy',
+            steps: [
+              'A passenger’s grandmother dies',
+              'Chatbot: book now, claim the reduced fare within 90 days',
+              'He books full-fare flights',
+              'Claim refused: the policy has no refunds after travel',
+            ],
+            broken: 1,
+          },
+          {
+            type: 'claims',
+            kicker: 'Check each claim against the policy page',
+            head: 'One sentence was *not grounded*',
+            claims: [
+              { text: 'Air Canada offers reduced bereavement fares', ok: true, note: 'in the policy' },
+              { text: 'You can apply within 90 days, after travel', ok: false, note: 'contradicted by the policy page' },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'The defence',
+            head: '"The chatbot is a *separate legal entity*"',
+            steps: [
+              'Air Canada: the bot is responsible for its own actions',
+              'Tribunal: it is part of your website',
+              'You are responsible for everything on it',
+            ],
+            broken: 0,
+            sub: 'The tribunal found **negligent misrepresentation**.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Make the bot safe to trust',
+            head: 'Answer *only* from the source',
+            items: [
+              { label: 'Answer from the policy pages', keep: true },
+              { label: 'Free-form answers from memory' },
+              { label: 'Refund promises without a citation' },
+              { label: 'Check each claim before it ships', keep: true },
+            ],
+            keepLabel: 'KEEP',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Which measure targets exactly this failure?',
+            answer: 0,
+            options: [
+              {
+                text: 'Check each claim in the answer against the policy text',
+                why: 'The 90-day claim contradicts the policy; a per-claim faithfulness check flags it before the customer sees it.',
+              },
+              {
+                text: 'A footer telling customers to double-check',
+                why: 'Air Canada was held to what its bot said; a footer does not make a wrong answer right.',
+              },
+              { text: 'A friendlier tone', why: 'Tone was not the problem; an ungrounded claim was.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Grounded is the *minimum* for a customer-facing bot.',
+          sub: 'Split answers into claims, verify each against the source, and remember that **the company is liable** for what its bot promises.',
+        },
+      },
       body: `**Intuition:** a faithful answer is a good witness: it only says what the documents in front of it say. Faithfulness (RAGAS) and groundedness (Azure AI, Vertex AI, TruLens wording) are the same idea — *every claim is backed by the supplied context.*
 
 **Groundedness ≠ correctness:**
@@ -192,6 +272,74 @@ export function faithfulnessScore(claims: string[], entail: (c: string) => numbe
     },
     {
       heading: 'Citation Evaluation — citation recall, citation precision and attribution checks',
+      short: {
+        id: 'lawyer-who-cited-fake-cases',
+        title: 'The lawyer who cited fake cases',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'New York · 2023 · Mata v. Avianca',
+            value: 6,
+            unit: 'cases cited in a court brief that did not exist',
+            sub: '**ChatGPT** had written them, quotes included.',
+          },
+          {
+            type: 'flow',
+            kicker: 'How it happened',
+            head: 'A *plausible* citation, never checked',
+            steps: [
+              'A lawyer asks ChatGPT for supporting cases',
+              'It returns case names, courts and quotes',
+              'He asks if they are real; it says yes',
+              'The brief is filed',
+              'Nobody can find the cases',
+            ],
+            broken: 2,
+          },
+          {
+            type: 'claims',
+            kicker: 'Citation check',
+            head: 'Every citation is a claim you can *check*',
+            claims: [
+              { text: 'Varghese v. China Southern Airlines', ok: false, note: 'no such case' },
+              { text: 'Quotes from its opinion', ok: false, note: 'the opinion does not exist' },
+              { text: 'Five more cited decisions', ok: false, note: 'also invented' },
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'June 2023 · sanctions',
+            value: 5000,
+            prefix: '$',
+            unit: 'fine for the two lawyers and their firm',
+            sub: 'The judge called them **bogus decisions with bogus quotes**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'The check that was skipped',
+            head: 'Verify in *code*, not by asking the model',
+            steps: ['Extract every cited source', 'Check it exists in the database', 'Check each quote appears in it', 'Ship only what checks out'],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Which check would have stopped this brief?',
+            answer: 1,
+            options: [
+              { text: 'Asking ChatGPT whether the cases are real', why: 'That is what happened: the model confirmed its own invention.' },
+              {
+                text: 'Looking up every cited case in a legal database',
+                why: 'A citation is a promise you can verify; a case that does not exist fails at once.',
+              },
+              { text: 'A lower temperature', why: 'Lower randomness helps a little, but a fluent fake citation can still be the most likely text.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'A citation is a promise. *Check it.*',
+          sub: 'Validate that every cited source exists and every quote appears in it **before** anyone relies on the answer.',
+        },
+      },
       body: `**Intuition:** a citation is a promise: "you can check this sentence here". Citation evaluation checks the promise — is each sentence backed by what it cites (recall), and is each citation actually pulling its weight (precision)?
 
 **ALCE definitions (Gao et al. 2023):**
@@ -353,6 +501,66 @@ export async function citationScores(statements: Statement[], sources: string[],
     },
     {
       heading: 'Hallucination Detection — NLI checks, trained detectors and self-consistency (SelfCheckGPT)',
+      short: {
+        id: 'catch-a-hallucination',
+        title: 'Catching a hallucination',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'Two ways to catch it',
+            head: 'Check the *documents*, or ask *again*',
+            steps: ['Grounding: each sentence vs the source (NLI, HHEM)', 'Consistency: sample N more answers', 'Score each sentence by agreement', 'Low agreement: likely made up'],
+          },
+          {
+            type: 'counter',
+            kicker: 'SelfCheckGPT · no retrieval',
+            value: 5,
+            unit: 'extra samples at temperature 1.0',
+            sub: 'If the model **knows** a fact, samples repeat it. If it is guessing, they **diverge**.',
+          },
+          {
+            type: 'claims',
+            kicker: 'A 4-sentence bio of Lise Meitner',
+            head: 'Score every *sentence*',
+            claims: [
+              { text: 'Born in Vienna in 1878', ok: true, note: '0.04' },
+              { text: 'Co-discovered nuclear fission with Otto Hahn', ok: true, note: '0.11' },
+              { text: 'Won the 1944 Nobel Prize in Physics', ok: false, note: '0.83 · samples disagree' },
+              { text: 'Meitnerium, element 109, is named after her', ok: true, note: '0.07' },
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'Averaged over the passage',
+            value: 0.26,
+            decimals: 2,
+            unit: 'contradiction score, under the 0.5 threshold',
+            sub: 'The average **hides** the bad sentence. Flag per sentence: 0.83 is over the line.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Where consistency fails',
+            head: 'Agreement is *not* truth',
+            items: [{ label: 'A misconception the model always repeats' }, { label: 'Errors every sample shares' }, { label: 'Guessed details that change', keep: true }],
+            keepLabel: 'CAUGHT',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'All 5 samples repeat the same wrong date. What does SelfCheckGPT do?',
+            answer: 0,
+            options: [
+              { text: 'Scores it consistent, so it is not flagged', why: 'It only measures agreement; a consistent error slips through. Check it against a source.' },
+              { text: 'Flags it, because the date is wrong', why: 'SelfCheckGPT never sees the truth, only how the samples compare.' },
+              { text: 'Retrieves a document to check', why: 'It is zero-resource: no retrieval and no logits.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Sample to catch *guesses*.',
+          sub: 'Check against sources to catch **confident errors**, and flag per sentence, not per passage.',
+        },
+      },
       body: `**Intuition:** there are two ways to catch someone making things up: check their story against the documents (grounding), or ask them the same question several times and see if the details change (consistency). Hallucination detectors do both.
 
 **Families of detectors:**
@@ -507,6 +715,74 @@ export function flagSentences(main: string, samples: string[], threshold = 0.5):
     },
     {
       heading: 'Why LLMs Hallucinate — and how to prevent it',
+      short: {
+        id: 'why-models-hallucinate',
+        title: 'Why models hallucinate',
+        beats: [
+          {
+            type: 'tokens',
+            kicker: 'Plausible is not true',
+            head: 'The model always produces a *likely* next token',
+            prompt: 'The Brewmax X200 jug is',
+            picks: [{ token: ' dishwasher-safe', p: 0.55 }, { token: ' hand-wash only', p: 0.3 }, { token: ' made of glass', p: 0.15 }],
+            sub: 'Illustrative: with **no spec sheet** in context, the common pattern wins.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Why guessing pays',
+            head: 'Accuracy-only grading *rewards guessing*',
+            rungs: [{ label: 'Always guess', amount: 20 }, { label: 'Say "I don’t know"', amount: 0 }],
+            unit: 'points',
+            sub: '100 questions the model cannot know, a guess right **20%** of the time (Kalai et al., 2025).',
+          },
+          {
+            type: 'counter',
+            kicker: 'Penalise errors: +1 / −1 / 0',
+            value: -60,
+            unit: 'points for always guessing',
+            sub: 'Abstaining scores **0**, so now it wins. Grading shapes behaviour.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Prevention playbook',
+            head: 'Biggest lever *first*',
+            steps: [
+              'Ground it with retrieval or tools',
+              'Permit abstention: NOT_IN_DOCUMENTS',
+              'Quote first, then answer',
+              'Verify quotes and citations in code',
+              'Human review when stakes are high',
+            ],
+          },
+          {
+            type: 'claims',
+            kicker: 'Spec sheet in context',
+            head: 'Grounded, then *checked*',
+            claims: [
+              { text: 'The glass jug should be washed by hand', ok: true, note: 'quoted from the spec sheet' },
+              { text: 'The jug is dishwasher-safe', ok: false, note: 'contradicted: removed' },
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Which instruction cuts hallucinations most?',
+            answer: 1,
+            options: [
+              { text: '"Do not hallucinate."', why: 'The model has no switch for that; it optimises plausibility, not truth.' },
+              {
+                text: '"Answer only from the documents, else say NOT_IN_DOCUMENTS."',
+                why: 'Grounding plus a cheap way to abstain moves facts out of the weights and makes "I don’t know" safe.',
+              },
+              { text: '"Be confident and specific."', why: 'That pushes toward fluent guesses, the very problem.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'LLMs optimise *plausibility*, not truth.',
+          sub: 'Ground, permit abstention, quote first, **verify in code**. No layer reaches zero, so measure.',
+        },
+      },
       body: `**Intuition:** an LLM is a brilliant improviser, not a database. It always produces a *plausible* next token ([GenAI Fundamentals](#/topic/genai-fundamentals)); when the true answer is neither in its weights nor in its context, plausible and true quietly part ways.
 
 **Why it happens**

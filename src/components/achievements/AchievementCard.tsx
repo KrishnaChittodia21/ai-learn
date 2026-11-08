@@ -1,4 +1,6 @@
-import type { CSSProperties } from 'react';
+import { lazy, Suspense, type CSSProperties, type ReactNode } from 'react';
+import { useReducedMotion } from 'motion/react';
+import { useUiPrefs } from '../../lib/uiPrefs';
 import { Check } from 'lucide-react';
 import Badge from './Badge';
 import { cardState, meterText, tierName, unitFor } from './achState';
@@ -6,6 +8,22 @@ import { TIER_LABEL, tierRank, type Achievement, type AchievementEvaluation, typ
 import { badgeLabel, formatEarnedDate, shortEarnedDate } from '../../lib/achievements';
 
 /** Progress toward a badge's next step: a thin glowing bar exposed as a labelled progressbar. */
+// opt-in 3D (Settings → Depth effects): loaded only when switched on
+const TiltBadge = lazy(() => import('./TiltBadge'));
+const finePointer = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+/** An earned badge, tilting under the pointer when depth effects are on (fine pointer, full motion only). */
+function DepthBadge({ children }: { children: ReactNode }) {
+  const on = useUiPrefs().depthEffects;
+  const reduce = useReducedMotion();
+  if (!on || reduce || !finePointer()) return children;
+  return (
+    <Suspense fallback={children}>
+      <TiltBadge>{children}</TiltBadge>
+    </Suspense>
+  );
+}
+
 export function AchMeter({ value, max, label, tier }: { value: number; max: number; label: string; tier?: string }) {
   const v = Math.min(value, max);
   const pct = max ? (v / max) * 100 : 0;
@@ -72,7 +90,13 @@ export function AchievementCard({
     <li className="ach-li" data-state={state}>
       <article className={`ach-card is-${state} rise`} style={{ '--i': Math.min(index, 6) } as CSSProperties} aria-label={label}>
         <div className="ach-card-top">
-          <Badge art={a.art} tier={stored?.tier ?? 'standard'} locked={!earned} size="md" />
+          {earned ? (
+            <DepthBadge>
+              <Badge art={a.art} tier={stored?.tier ?? 'standard'} size="md" />
+            </DepthBadge>
+          ) : (
+            <Badge art={a.art} tier={stored?.tier ?? 'standard'} locked size="md" />
+          )}
           <div className="ach-card-id">
             <h3 className="ach-card-name">{a.name}</h3>
             <div className="ach-card-meta">

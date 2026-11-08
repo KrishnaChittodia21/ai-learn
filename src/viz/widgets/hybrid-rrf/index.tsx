@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, SCENARIOS, simulate, type Hit, type Params, type QueryId } from './sim';
 
 const ROW = 30;
@@ -63,6 +64,7 @@ export default function HybridRrfViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<QueryId>

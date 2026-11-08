@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { COMPANY_QUESTIONS, LEVELS, LEVEL_OF_TOPIC, TOPICS } from '../content';
 import { useProgress } from '../lib/progress';
 import { nextStep } from '../lib/nextStep';
+import { roleTopicIds } from '../content/roles';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { closeTour } from '../lib/guide';
 import { saveUiPrefs } from '../lib/uiPrefs';
@@ -27,7 +28,7 @@ export default function WelcomeTour() {
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const ref = useRef<HTMLDivElement>(null);
-  const next = useMemo(() => nextStep(p, TOPICS, { companyTotal: COMPANY_QUESTIONS.length }), [p]);
+  const next = useMemo(() => nextStep(p, TOPICS, { companyTotal: COMPANY_QUESTIONS.length, path: roleTopicIds(p.rolePath) }), [p]);
   const close = useCallback(() => {
     saveUiPrefs({ tourSeen: true });
     closeTour();

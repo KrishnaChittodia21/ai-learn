@@ -7,7 +7,7 @@ const topic: Topic = {
   title: 'Agent Memory & Tool Selection',
   subtitle:
     'Give agents a working memory that fits the context window, a long-term memory that learns safely, and a way to pick the right tool out of hundreds.',
-  estimatedMinutes: 52,
+  estimatedMinutes: 85,
   sources: [
     'Sumers et al. 2023 — Cognitive Architectures for Language Agents (CoALA), arXiv:2309.02427',
     'Park et al. 2023 — Generative Agents: Interactive Simulacra of Human Behavior, arXiv:2304.03442',
@@ -18,6 +18,10 @@ const topic: Topic = {
     'Anthropic docs — Context editing and the memory tool',
     'OpenAI docs — Function calling best practices (keep the active tool set small, ideally under ~20)',
     'LangGraph docs — Memory: checkpointers (short-term, per thread) and stores (long-term, namespaced)',
+    'Letta docs — Memory blocks and sleep-time agents (Letta is the MemGPT project renamed in 2024)',
+    'Lin et al. 2025 — Sleep-time Compute: Beyond Inference Scaling at Test-time (Letta, UC Berkeley)',
+    'Wang et al. 2023 — Voyager: An Open-Ended Embodied Agent with Large Language Models, arXiv:2305.16291',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 14 lessons 07–10, adapted and rewritten',
   ],
   tags: ['agents', 'memory', 'episodic memory', 'semantic memory', 'summarisation', 'vector store', 'tool selection', 'tool retrieval', 'MCP'],
   cheatSheet: [
@@ -677,6 +681,440 @@ export async function evalToolSelection(cases: Case[], select: Selector) {
       },
       source: 'Anthropic docs — Tool search tool; Anthropic engineering — Writing effective tools for agents',
     },
+    // ---------------------------------------------------------------- 5
+    {
+      heading: 'Virtual context — MemGPT, Letta and memory blocks the agent edits itself',
+      body: `**Intuition:** your laptop runs programs far bigger than its RAM because the operating system pages data between RAM and disk. **MemGPT** (Packer et al. 2023) applies the same trick to an LLM: the context window is RAM, an external store is disk, and the *agent itself* decides what to page in and out by calling memory tools.
+
+**The tiers** (names from MemGPT and its successor, **Letta** — the project took that name in 2024):
+
+| Tier | Lives | Holds | How it changes |
+|---|---|---|---|
+| **Core memory** | inside the prompt, always visible | small labelled blocks: \`human\` (facts about the user), \`persona\` (who the agent is), plus your own (\`task\`, \`project\`) | the agent calls \`core_memory_append\` / \`core_memory_replace\` |
+| **Recall memory** | database | the full message history, including turns that fell out of the window | logged automatically; \`conversation_search\` reads it |
+| **Archival memory** | vector / document store | unbounded facts and documents | \`archival_memory_insert\` / \`archival_memory_search\` |
+
+**The loop.** A normal tool loop, plus two habits: (1) when the window nears its limit, the runtime warns the agent so it can save what matters to core or archival before old messages are evicted, and the evicted turns are folded into a running summary; (2) a memory tool result is just another observation, so "remember" and "look it up" are ordinary tool calls.
+
+**Memory blocks** make core memory structured: each block has a **label**, a **value**, a **character limit** and a **description** that tells the model when to edit it. The limit is the point: it forces the agent (or a summariser) to condense instead of appending forever.
+
+**How this differs from section 3.** Section 3's store is managed *by your code* after each turn. In MemGPT/Letta the *model* manages memory through tools, which is flexible but means memory quality now depends on the model's judgement — evaluate it.
+
+**Watch out for:**
+- **Memory poisoning** — a web page or email that gets written into core memory is re-read on every future turn. Only let trusted sources write to core; tag archival records with their source.
+- **Block bloat** — appends hit the limit; return a clear error and let the agent summarise.
+- **Silent rewrites** — keep a version history per block so you can answer "when did it forget X?".
+
+**When to use:** long-lived assistants and agents whose working set changes over a session. For a short Q&A bot, a summary buffer (section 2) is simpler.`,
+      example: `**Personal research assistant, 16K-token budget.**
+
+- Core blocks: \`human\` (limit 1,000 chars: "Priya, PhD student, prefers APA citations, works on soil microbiomes"), \`persona\` (600 chars), \`task\` (1,500 chars: "Lit review on nitrogen fixation, 14 of 40 papers summarised").
+- Turn 212: the context passes ~70% of the budget. The runtime adds a warning; the agent calls \`archival_memory_insert\` for three paper summaries and \`core_memory_replace\` to update the \`task\` progress line. The oldest 60 messages are evicted into a summary.
+- Next week Priya asks "what did we decide about the 2019 Smith paper?" — not in the window. The agent calls \`conversation_search("Smith 2019")\`, finds turn 88 ("exclude: field trial only"), and answers with the turn as the source.
+
+Prompt size stays near 9K tokens per call instead of growing to 120K+, and nothing important was lost — because the agent saved it before eviction.`,
+      diagram: `            context window ("RAM")                      external ("disk")
+ +--------------------------------------------+      +----------------------+
+ | system + tool defs                          |      | recall: all messages |
+ | core blocks: [human] [persona] [task]  <---- edit --+                      |
+ | summary of evicted turns                    |      | archival: facts/docs |
+ | recent messages ...            -- evict --> |      |                      |
+ +--------------------------------------------+      +----------------------+
+       ^ archival_memory_search / conversation_search  |
+       +------------------ page in ---------------------+`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Memory blocks with limits, exposed to the model as tools',
+          code: `interface Block { label: string; value: string; limit: number; description: string; history: string[] }
+
+export const blocks = new Map<string, Block>([
+  ['human', { label: 'human', value: '', limit: 1000, description: 'Stable facts about the user. Edit when they tell you something lasting.', history: [] }],
+  ['task', { label: 'task', value: '', limit: 1500, description: 'Current goal and progress. Update after each milestone.', history: [] }],
+]);
+
+// tool results go back to the model, so errors must be readable instructions
+export function coreMemoryReplace(label: string, oldText: string, newText: string): string {
+  const b = blocks.get(label);
+  if (!b) return 'error: no block "' + label + '"';
+  if (!b.value.includes(oldText)) return 'error: text not found in ' + label + '; read the block and retry';
+  const next = b.value.replace(oldText, newText);
+  if (next.length > b.limit) return 'error: ' + label + ' would be ' + next.length + '/' + b.limit + ' chars; summarise it first';
+  b.history.push(b.value); // version history for debugging
+  b.value = next;
+  return 'ok: ' + label + ' is ' + next.length + '/' + b.limit + ' chars';
+}
+
+// rendered into the system prompt every turn
+export const renderCore = () =>
+  [...blocks.values()].map((b) => '<' + b.label + ' limit="' + b.limit + '">\\n' + b.value + '\\n</' + b.label + '>').join('\\n');`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Prompt size stays bounded however long the relationship runs.',
+          'The agent can recover details that fell out of the window (recall search) instead of losing them.',
+          'Labelled blocks with limits make memory inspectable: you can read exactly what the agent believes about the user.',
+        ],
+        cons: [
+          { con: 'Memory quality depends on the model remembering to save and search.', fix: 'Add eval cases that need a fact from 100+ turns ago, warn the model before eviction, and back it with an automatic post-turn extractor for critical facts.' },
+          { con: 'Untrusted text written into core memory is replayed into every future prompt.', fix: 'Allow core writes only from user turns or trusted tools, store a source with every archival record, and render memory as data inside tags, never as instructions.' },
+          { con: 'Each memory tool call is an extra model round trip, adding latency.', fix: 'Pre-load likely-needed memories before the turn, and move consolidation work to a background (sleep-time) agent.' },
+        ],
+      },
+      keyPoints: [
+        'MemGPT treats the context window like RAM and external stores like disk.',
+        'Tiers: core (in-prompt blocks), recall (message history), archival (searchable store).',
+        'The model edits its own memory through tools; evaluate that judgement.',
+        'Blocks have labels, limits and descriptions; limits force condensation.',
+        'Guard core memory against poisoning and keep block history.',
+      ],
+      exercise: {
+        prompt: `Implement **\`coreMemoryAppend(label, text)\`** for the block store above.
+
+**Acceptance:**
+- Unknown label → an error string naming the label.
+- If the append would exceed the limit, do not write; return an error that tells the model how many characters are over.
+- Otherwise push the old value to \`history\`, append \`text\` on a new line (no leading newline when the block is empty) and return \`ok\` with the new length.`,
+        starter: {
+          language: 'typescript',
+          code: `interface Block { label: string; value: string; limit: number; history: string[] }
+const blocks = new Map<string, Block>();
+
+export function coreMemoryAppend(label: string, text: string): string {
+  // TODO
+  return 'ok';
+}`,
+        },
+        hints: [
+          'Build the candidate value first, then check its length against the limit.',
+          'Return strings, not exceptions: the result goes back to the model as a tool result.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `interface Block { label: string; value: string; limit: number; history: string[] }
+const blocks = new Map<string, Block>();
+
+export function coreMemoryAppend(label: string, text: string): string {
+  const b = blocks.get(label);
+  if (!b) return 'error: no block "' + label + '"';
+  const next = b.value ? b.value + '\\n' + text : text;
+  const over = next.length - b.limit;
+  if (over > 0) return 'error: ' + label + ' is ' + over + ' chars over its ' + b.limit + ' limit; summarise or replace instead';
+  b.history.push(b.value);
+  b.value = next;
+  return 'ok: ' + label + ' is ' + next.length + '/' + b.limit + ' chars';
+}
+
+blocks.set('human', { label: 'human', value: '', limit: 40, history: [] });
+console.log(coreMemoryAppend('human', 'Name: Priya'));         // ok: human is 11/40 chars
+console.log(coreMemoryAppend('human', 'Prefers APA citations, works on soil')); // error: ... over`,
+        },
+        explanation:
+          'The limit turns "remember everything" into a decision: the model must condense. Because the error is an instruction ("summarise or replace"), the agent can fix it on the next step, and the history array lets you audit every change.',
+      },
+      quickCheck: {
+        question: 'In a MemGPT/Letta-style agent, where should "the user is vegetarian and allergic to peanuts" live?',
+        options: [
+          'Only in archival memory, found by search when food comes up',
+          'In a core memory block (e.g. human), because it is small, stable and should shape every relevant reply',
+          'In recall memory only, since it was said in a message',
+          'Nowhere; the model will remember it from the conversation',
+        ],
+        correct: 1,
+        explanation:
+          'Core blocks are for compact facts that should always be visible. A safety-relevant allergy must not depend on the agent choosing to search. Archival and recall suit bulky or rarely needed details.',
+      },
+      source: 'Packer et al. 2023 — MemGPT: Towards LLMs as Operating Systems; Letta docs — Memory blocks',
+    },
+    // ---------------------------------------------------------------- 6
+    {
+      heading: 'Sleep-time compute and memory layers — consolidate memory while the user is away (Letta, Mem0)',
+      body: `**Intuition:** you do not reorganise your notes in the middle of a phone call; you do it afterwards. Memory work done during a turn (extracting facts, merging duplicates, rewriting blocks) adds latency the user feels. **Sleep-time compute** moves it off the critical path.
+
+**Sleep-time agents (Letta).** A second agent shares the primary agent's memory blocks. It runs when the primary is idle — after a conversation, every N turns, or on a schedule — reads recent transcripts and documents, and rewrites memory: merges duplicates, marks contradicted facts as outdated, condenses blocks near their limit and writes **learned context** ("Priya's thesis deadline moved to March; she now prefers short answers"). The research behind it (Lin et al. 2025, Letta and UC Berkeley) also shows a second benefit: work done ahead of time on the context can cut the compute needed at question time. Because nobody is waiting, the sleep-time agent can use a slower, stronger model.
+
+**Mem0 as a memory layer.** Mem0 (Chhikara et al. 2025) packages the write policy from section 3 as a library and service:
+- \`add(messages, user_id)\` runs extraction and the ADD / UPDATE / DELETE / NOOP decision against similar memories;
+- \`search(query, user_id)\` returns ranked memories;
+- **scopes**: \`user_id\` (across sessions), \`agent_id\` (per agent), \`run_id\` (one session);
+- a **graph variant** that stores entities and relationships for questions like "who manages Priya's lab?".
+
+Call \`add\` from a background job, not inline, and you have sleep-time-style consolidation with little code.
+
+**Build or buy?** Buy (Mem0, Letta, a framework's store) when you need memory quickly and your data may leave your stack. Build when you need custom scoring, strict data residency or deletion guarantees you can prove — the patterns in this topic are small.
+
+**Guardrails for a background writer:**
+- **Version every write** with author (\`primary\` / \`sleep\`) so you can diff and roll back.
+- **Protect some blocks**: the sleep agent may edit \`human\` and \`task\`, never \`persona\` or safety rules.
+- **Treat inputs as untrusted**: a transcript can contain injected text; the sleep agent consolidates facts, it does not follow instructions in them.
+- **Measure**: a weekly eval of "facts the assistant should know" catches consolidation that silently drops things.`,
+      example: `**Coaching app, before and after.**
+
+| | Inline memory | Sleep-time memory |
+|---|---|---|
+| Per-turn work | reply + extract facts + dedupe (3 model calls) | reply only (1 call) |
+| p50 reply latency | 2.9 s | 1.1 s |
+| Consolidation model | small (latency-bound) | larger model, runs 2 min after the session goes idle |
+| Contradictions found in a 500-user audit | 41 users with both "runs 5K" and "training for a marathon" as current | 6 users |
+
+The sleep pass also wrote a short \`learned_context\` line per user ("returning from knee injury: keep plans low-impact"), which the coach now sees at the start of every session. Numbers are illustrative, but the latency win is mechanical: two of three model calls left the hot path.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Schedule a sleep-time pass when a session goes idle (debounced per user)',
+          code: `const IDLE_MS = 2 * 60_000;
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+type Consolidate = (userId: string) => Promise<void>; // e.g. calls memory.add(...) in a worker
+
+export function onTurnFinished(userId: string, consolidate: Consolidate) {
+  clearTimeout(timers.get(userId));             // user still active: push the pass back
+  timers.set(userId, setTimeout(() => {
+    timers.delete(userId);
+    consolidate(userId).catch((e) => console.error('sleep-time pass failed', userId, e));
+  }, IDLE_MS));
+}
+
+// In production use a durable queue with a delayed, de-duplicated job per user
+// instead of in-process timers, so a restart does not lose pending passes.`,
+        },
+        {
+          language: 'python',
+          title: 'Mem0 open-source client: write and search scoped memories (check current docs)',
+          code: `from mem0 import Memory
+
+memory = Memory()  # default config; configure LLM, embedder and vector store for production
+
+# called from a background job after the session, not inside the reply path
+memory.add(
+    [{"role": "user", "content": "I moved to Pune last month."}],
+    user_id="priya",
+)
+
+hits = memory.search("Where does the user live?", user_id="priya")
+print(hits)`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Replies get faster because extraction and merging leave the critical path.',
+          'The consolidation step can use a stronger model and look across a whole session.',
+          'Memory layers like Mem0 give scoping, deduplication and search without building them.',
+        ],
+        cons: [
+          { con: 'Memory is stale until the sleep pass runs, so a fact said a minute ago may be missing.', fix: 'Keep the current session in short-term memory (section 2) and run a cheap inline write only for critical facts such as allergies or account changes.' },
+          { con: 'A background writer can silently corrupt or drop memories.', fix: 'Version every write with its author, protect persona and safety blocks, and run a regular eval of facts the assistant must know.' },
+          { con: 'A hosted memory service moves personal data to another vendor.', fix: 'Check data residency and deletion APIs, redact PII before add(), or self-host the open-source version.' },
+        ],
+      },
+      keyPoints: [
+        'Sleep-time compute: a background agent consolidates memory while the user is idle.',
+        'It can use a stronger model because no one is waiting.',
+        'Mem0 = extraction + ADD/UPDATE/DELETE/NOOP + scoped search, as a library or service.',
+        'Scope every memory: user, agent, run.',
+        'Version background writes and protect persona/safety blocks.',
+      ],
+      exercise: {
+        prompt: `Write **\`writeBlock(store, label, value, author)\`** for a store shared by a primary agent and a sleep-time agent.
+
+**Acceptance:**
+- \`author\` is \`'primary'\` or \`'sleep'\`; the sleep agent may not write blocks listed in \`PROTECTED\` (return \`{ ok: false, reason }\`).
+- Every successful write appends \`{ value, author, at }\` to the block's \`versions\` and returns \`{ ok: true, version }\` (1-based).
+- \`rollback(store, label)\` restores the previous version and returns it, or \`null\` when there is none.`,
+        starter: {
+          language: 'typescript',
+          code: `type Author = 'primary' | 'sleep';
+interface Version { value: string; author: Author; at: number }
+type Store = Map<string, Version[]>;
+const PROTECTED = new Set(['persona', 'safety']);
+
+export function writeBlock(store: Store, label: string, value: string, author: Author) {
+  // TODO
+}
+
+export function rollback(store: Store, label: string): string | null {
+  // TODO
+  return null;
+}`,
+        },
+        hints: [
+          'The current value is the last element of the versions array.',
+          'Rollback = pop the latest version if at least two exist.',
+          'Check the protected rule before touching the store.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Author = 'primary' | 'sleep';
+interface Version { value: string; author: Author; at: number }
+type Store = Map<string, Version[]>;
+const PROTECTED = new Set(['persona', 'safety']);
+
+export function writeBlock(store: Store, label: string, value: string, author: Author, now = Date.now()) {
+  if (author === 'sleep' && PROTECTED.has(label)) return { ok: false as const, reason: label + ' is protected from background writes' };
+  const versions = store.get(label) ?? [];
+  versions.push({ value, author, at: now });
+  store.set(label, versions);
+  return { ok: true as const, version: versions.length };
+}
+
+export function rollback(store: Store, label: string): string | null {
+  const versions = store.get(label);
+  if (!versions || versions.length < 2) return null;
+  versions.pop();
+  return versions[versions.length - 1].value;
+}
+
+const s: Store = new Map();
+writeBlock(s, 'human', 'Lives in Delhi', 'primary');
+writeBlock(s, 'human', 'Lives in Pune (moved 2026-10)', 'sleep');
+console.log(writeBlock(s, 'persona', 'Be sarcastic', 'sleep')); // { ok: false, ... }
+console.log(rollback(s, 'human'));                              // 'Lives in Delhi'`,
+        },
+        explanation:
+          'Background writers need the same controls as any automated change to production data: an allowlist of what they may touch, an audit trail with the author, and a cheap undo. With versions you can also diff what the sleep pass changed and alert on large rewrites.',
+      },
+      quickCheck: {
+        question: 'Why can a sleep-time agent use a slower, more expensive model than the primary chat agent?',
+        options: [
+          'Because background calls are free',
+          'Because it runs off the critical path, so its latency is not felt by the user',
+          'Because larger models never make memory mistakes',
+          'Because it only runs once per account',
+        ],
+        correct: 1,
+        explanation:
+          'The user waits for the primary agent, not for consolidation. That frees the sleep-time pass to trade latency for quality. It still costs money and can still make mistakes, so budget and evaluate it.',
+      },
+      source: 'Letta docs — Sleep-time agents; Lin et al. 2025 — Sleep-time Compute; Chhikara et al. 2025 — Mem0',
+    },
+    // ---------------------------------------------------------------- 7
+    {
+      heading: 'Skill libraries — Voyager-style procedural memory that grows with use',
+      body: `**Intuition:** a junior engineer who solves a tricky task writes a script and saves it in the team repo; next time they (or anyone) run the script instead of re-deriving it. That is **procedural memory**: remembering *how*, not *what*.
+
+**Voyager** (Wang et al. 2023) showed the idea in Minecraft with GPT-4. Three parts:
+1. **Automatic curriculum** — propose the next task just beyond what the agent can already do ("craft a stone pickaxe" after "mine wood").
+2. **Skill library** — every skill is **executable code** (JavaScript functions over the game API), stored with a description and indexed by the description's embedding. A new task retrieves the top-k similar skills, and new skills call old ones, so abilities compound.
+3. **Iterative prompting** — run the code, feed back execution errors, environment feedback and a **self-verification** check ("is the pickaxe in the inventory?"), and retry. A skill is saved **only after it is verified to work**.
+
+Voyager collected 3.3× more unique items than earlier agent methods and could reuse its library in a new world. Nothing was trained: the "learning" is a growing, retrievable code library, so it does not forget old skills.
+
+**In production agents** the same pattern shows up as:
+- a data agent saving **verified SQL templates** ("weekly active users by region") after a human confirms the numbers;
+- a coding agent saving **scripts and runbooks** that passed tests;
+- curated **Agent Skills** (instructions + scripts loaded on demand) — the human-written cousin.
+
+**Rules that keep a skill library healthy:**
+- **Write gate:** save only after an external check passes (tests, a verifier, human approval) — a broken skill is worse than none because it is reused.
+- **Deduplicate:** compare against similar descriptions before adding; update the existing skill with a new version instead.
+- **Version and pin:** a skill that calls another records which version it was tested with.
+- **Retrieve with filters:** embedding similarity plus tags or permissions; past a few hundred skills, pure similarity gets noisy.
+- **Review shared libraries:** a skill one user's session wrote should not run for every tenant until reviewed — that is a code-injection path.
+
+**When to use:** repeated, multi-step tasks in a stable environment where success can be checked. Skip it for one-off questions or when you cannot verify outcomes.`,
+      example: `**Analytics agent over a warehouse, 6 weeks.**
+
+- Week 1: every question is answered from scratch; 38% of generated SQL needs a human fix.
+- The agent now saves a skill only when the analyst clicks "numbers confirmed": name, description, parameterised SQL, tables touched, tested-at.
+- Week 6: 212 skills; 61% of new questions retrieve a skill with similarity > 0.8 and only fill parameters ("revenue_by_region(start, end)"). Human fixes drop to 11%, and median answer time from 40 s to 9 s because no exploratory queries run.
+- One incident: two near-identical "active users" skills used different definitions. The fix was a dedupe check on write and a \`definition\` field reviewed by the data team.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'A skill library that only stores verified skills and retrieves by description',
+          code: `interface Skill { name: string; description: string; code: string; vec: number[]; version: number; tags: string[] }
+type Embed = (text: string) => Promise<number[]>;
+const cos = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0); // unit vectors
+
+export class SkillLibrary {
+  private skills: Skill[] = [];
+  constructor(private embed: Embed) {}
+
+  async add(s: Omit<Skill, 'vec' | 'version'>, verified: boolean) {
+    if (!verified) return 'rejected: not verified';
+    const vec = await this.embed(s.description);
+    const twin = this.skills.find((k) => k.name === s.name || cos(k.vec, vec) > 0.95);
+    if (twin) { Object.assign(twin, s, { vec, version: twin.version + 1 }); return 'updated ' + twin.name + ' v' + twin.version; }
+    this.skills.push({ ...s, vec, version: 1 });
+    return 'added ' + s.name;
+  }
+
+  async retrieve(task: string, k = 5, tag?: string) {
+    const q = await this.embed(task);
+    return this.skills
+      .filter((s) => !tag || s.tags.includes(tag))
+      .map((s) => ({ s, score: cos(q, s.vec) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k);
+  }
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Abilities compound: new skills call verified old ones instead of re-deriving them.',
+          'No training needed; the library is inspectable code you can review, test and delete.',
+          'Reusing a skill is faster and cheaper than planning from scratch.',
+        ],
+        cons: [
+          { con: 'A wrong skill gets reused everywhere.', fix: 'Save only after an external check (tests, verifier, human confirmation), and record who verified it and when.' },
+          { con: 'The library fills with near-duplicates and retrieval gets noisy.', fix: 'Deduplicate on write by name and description similarity, version updates in place, and filter retrieval by tags.' },
+          { con: 'Skills written in one session can carry injected or unsafe code to other users.', fix: 'Scope skills per tenant, run them in a sandbox with least-privilege tools, and require review before promoting a skill to a shared library.' },
+        ],
+      },
+      keyPoints: [
+        'Procedural memory stores how to do things, as code or templates.',
+        'Voyager: curriculum + skill library + iterative prompting with self-verification.',
+        'Save a skill only after it is verified to work.',
+        'Deduplicate, version and tag skills; review shared ones.',
+        'Best for repeated, checkable tasks in a stable environment.',
+      ],
+      exercise: {
+        prompt: `Write **\`verifyThenSave(task, attempt, verify, save, maxTries)\`** — the Voyager inner loop.
+
+**Acceptance:**
+- \`attempt(task, feedback)\` returns code; \`verify(code)\` returns \`{ ok, feedback }\`.
+- Retry up to \`maxTries\`, passing the latest feedback into the next attempt.
+- On the first success call \`save(code)\` exactly once and return \`{ saved: true, tries }\`.
+- If every try fails, never call \`save\`; return \`{ saved: false, tries, lastFeedback }\`.`,
+        hints: [
+          'Keep the feedback string from the previous verify and pass it into the next attempt.',
+          'Return as soon as one try passes; never save a failing attempt "just in case".',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Attempt = (task: string, feedback: string) => Promise<string>;
+type Verify = (code: string) => Promise<{ ok: boolean; feedback: string }>;
+
+export async function verifyThenSave(task: string, attempt: Attempt, verify: Verify, save: (code: string) => Promise<void>, maxTries = 4) {
+  let feedback = '';
+  for (let tries = 1; tries <= maxTries; tries++) {
+    const code = await attempt(task, feedback);
+    const r = await verify(code);
+    if (r.ok) { await save(code); return { saved: true as const, tries }; }
+    feedback = r.feedback; // errors + environment state + verifier critique
+  }
+  return { saved: false as const, tries: maxTries, lastFeedback: feedback };
+}`,
+        },
+        explanation:
+          'The write gate is the heart of a skill library: retries use concrete feedback, and only verified code is kept. A failed run still produces useful data (lastFeedback) for a human or for the curriculum to try an easier task first.',
+      },
+      quickCheck: {
+        question: 'In Voyager, when does a new skill enter the skill library?',
+        options: [
+          'Whenever the model writes a function',
+          'After the code runs and a self-verification check confirms the task succeeded',
+          'After fine-tuning the model on the trajectory',
+          'At the end of each day, in a batch',
+        ],
+        correct: 1,
+        explanation:
+          'Voyager stores a skill only once it is verified, so the library holds working code that later skills can build on. Nothing is fine-tuned; the library is the learning.',
+      },
+      source: 'Wang et al. 2023 — Voyager: An Open-Ended Embodied Agent with Large Language Models (arXiv:2305.16291)',
+    },
   ],
   codeChallenges: [
     {
@@ -1037,6 +1475,40 @@ Typical flow: episodes accumulate; a periodic **reflection** job distils recurri
         'Fixing by raising k, which injects more noise',
       ],
     },
+    {
+      id: 'agent-memory-tools-iq-6',
+      difficulty: 'hard',
+      question: 'Design the memory for a coding assistant that works with the same developer on one repository for months. What goes in the prompt, what is searchable, what runs in the background, and how does it learn repeatable procedures?',
+      context: 'Sessions last 1–3 hours; the model has a 200K-token window but cost and latency matter. The developer complains the assistant "forgets our conventions" and re-solves the same build problems every week.',
+      whatInterviewerLooksFor: [
+        'Uses tiers: small always-visible blocks, searchable history and archival store',
+        'Moves consolidation off the critical path (sleep-time) with guardrails',
+        'Adds procedural memory (verified scripts/skills) with a write gate',
+        'Covers poisoning, versioning and evaluation',
+      ],
+      modelAnswer: `**Tiers (MemGPT/Letta style).**
+- **Core blocks in the prompt** (a few thousand characters total): \`developer\` (preferences: "pnpm, not npm; small PRs"), \`repo\` (conventions: test command, lint rules, module layout), \`task\` (current goal and progress). Each block has a limit and a description.
+- **Recall:** every message and tool call is logged and searchable by session and keyword, so "what did we decide about the cache key last Tuesday?" is a search, not a guess.
+- **Archival:** design notes, past incident summaries and file summaries, embedded with source references (commit, file, session id).
+
+**Background (sleep-time) pass** after a session goes idle: a stronger model reads the transcript, updates \`repo\` and \`developer\` blocks, marks contradicted facts as outdated, condenses blocks near their limit, and writes a short "learned context" line. It may not edit the persona or safety rules, and every write is versioned with its author.
+
+**Procedural memory (Voyager style).** When the assistant fixes a recurring problem ("regenerate the GraphQL types after a schema change"), it proposes a script plus a description. It is saved to a skill library **only after it runs green** in CI or the developer approves it; duplicates update the existing skill's version. Next time the assistant retrieves and runs the skill instead of rediscovering it.
+
+**Safety:** text from issues, web pages or dependency READMEs never writes to core memory directly; archival records carry their source and are rendered as data. Skills run in the same sandbox and permission mode as any other command.
+
+**Evaluation:** a fixed set of questions the assistant must answer from memory ("what is our test command?", "which skill regenerates types?") run weekly; plus measures of repeated-problem rate and tokens per session.`,
+      followUps: [
+        { q: 'Why not just use the 200K window and keep the whole history?', a: 'Cost and latency grow with every call, attention to old details degrades in long prompts, and the history ends when the session ends. Tiers keep the prompt small and make old facts retrievable across sessions.' },
+        { q: 'The sleep pass wrongly rewrote the repo block and the assistant started using npm. How do you recover and prevent it?', a: 'Roll back to the previous block version using the history, add the convention to an eval question, and require that background edits to the repo block cite the transcript turn that justifies the change, alerting on large diffs.' },
+      ],
+      pitfalls: [
+        'Putting everything in one vector store with no always-visible core facts',
+        'Running extraction and merging inline on every turn',
+        'Saving skills that were never verified',
+        'Letting untrusted repository text write directly into memory',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1366,6 +1838,64 @@ await client.messages.create({
           q: 'How do you make erasure tractable across stores?',
           a: 'Key every artefact by user_id (and source ids), keep a lineage table from source turns to derived items, and run one erasure job that walks the lineage across vector store, KV, caches and summaries.',
         },
+      ],
+    },
+    {
+      id: 'agent-memory-tools-mcq-13',
+      difficulty: 'medium',
+      question: 'In the MemGPT design, which memory tier is always visible to the model without a tool call?',
+      options: [
+        'Archival memory',
+        'Recall memory (full message history)',
+        'Core memory blocks inside the prompt',
+        'The vector index of past sessions',
+      ],
+      correct: [2],
+      explanation:
+        'Core memory is rendered into the context window on every call. Recall (message history) and archival memory live outside the window and are paged in with search tools such as conversation_search and archival_memory_search.',
+      followUps: [
+        { q: 'Why give each core block a character limit?', a: 'The limit keeps the always-on part of the prompt small and forces the agent or a summariser to condense instead of appending forever, which also controls cost.' },
+      ],
+    },
+    {
+      id: 'agent-memory-tools-mcq-14',
+      difficulty: 'hard',
+      question: 'Which are good reasons to move memory consolidation into a sleep-time (background) agent? Select ALL that apply.',
+      options: [
+        'It removes extraction and merging calls from the reply latency',
+        'It can use a stronger, slower model because no one is waiting',
+        'It guarantees memories are never wrong',
+        'It can look across a whole session to resolve contradictions',
+      ],
+      correct: [0, 1, 3],
+      explanation:
+        'Background consolidation helps latency, allows a stronger model and sees the whole session. It does not make memory correct: a background writer can still drop or corrupt facts, so version its writes and evaluate them.',
+      followUps: [
+        { q: 'A user states a new allergy mid-session. Should you wait for the sleep pass?', a: 'No. Keep it in short-term memory for this session and write critical facts inline immediately; the sleep pass can tidy the wording later.' },
+      ],
+    },
+    {
+      id: 'agent-memory-tools-mcq-15',
+      difficulty: 'medium',
+      question: 'What does this skill-library write path get wrong?',
+      code: {
+        language: 'typescript',
+        code: `async function onAttemptFinished(task: string, code: string) {
+  // save every attempt so the agent can reuse it later
+  await library.add({ name: slug(task), description: task, code });
+}`,
+      },
+      options: [
+        'It should store the embedding of the code, not the description',
+        'It saves code without checking that it worked, so broken skills get reused',
+        'Skill libraries should only store natural-language plans, never code',
+        'Nothing; more skills always improve retrieval',
+      ],
+      correct: [1],
+      explanation:
+        'Voyager-style libraries save a skill only after execution and self-verification confirm success. Saving every attempt fills the library with broken code that later tasks retrieve and build on.',
+      followUps: [
+        { q: 'What else would you add to the write path?', a: 'A duplicate check by name and description similarity that bumps a version instead of adding a twin, tags for filtering, and a record of who or what verified the skill.' },
       ],
     },
   ],

@@ -5,8 +5,8 @@ const topic: Topic = {
   phase: 'internals',
   order: 1,
   title: 'Transformer Internals and Attention',
-  subtitle: 'Follow one token through a modern decoder layer: embeddings, RoPE, residual stream, norms, attention variants and FlashAttention',
-  estimatedMinutes: 36,
+  subtitle: 'Follow one token through a modern decoder layer: embeddings, RoPE, residual stream, norms, attention variants and FlashAttention; then scaling laws, mixture-of-experts and long-context attention',
+  estimatedMinutes: 66,
   sources: [
     'Vaswani et al. 2017 — Attention Is All You Need (arXiv:1706.03762)',
     'Su et al. 2021 — RoFormer: Enhanced Transformer with Rotary Position Embedding (arXiv:2104.09864)',
@@ -18,8 +18,22 @@ const topic: Topic = {
     'Meta — Llama 3 model card / config (hidden 4096, 32 layers, 32 heads, 8 KV heads, RoPE theta 500,000)',
     'Elhage et al. 2021 — A Mathematical Framework for Transformer Circuits (residual stream view)',
     'DeepSeek-AI 2024 — DeepSeek-V2 (Multi-head Latent Attention, arXiv:2405.04434)',
+    'Kaplan et al. 2020 — Scaling Laws for Neural Language Models (arXiv:2001.08361)',
+    'Hoffmann et al. 2022 — Training Compute-Optimal Large Language Models, "Chinchilla" (arXiv:2203.15556)',
+    'Sardana & Frankle 2024 — Beyond Chinchilla-Optimal: Accounting for Inference in Language Model Scaling Laws (arXiv:2401.00448)',
+    'Snell et al. 2024 — Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters (arXiv:2408.03314)',
+    'Schaeffer et al. 2023 — Are Emergent Abilities of Large Language Models a Mirage? (arXiv:2304.15004)',
+    'Shazeer et al. 2017 — Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer (arXiv:1701.06538)',
+    'Fedus et al. 2021 — Switch Transformers (arXiv:2101.03961)',
+    'Jiang et al. 2024 — Mixtral of Experts (arXiv:2401.04088)',
+    'DeepSeek-AI 2024 — DeepSeek-V3 Technical Report (arXiv:2412.19437)',
+    'Jiang et al. 2023 — Mistral 7B (sliding-window attention, arXiv:2310.06825)',
+    'Google DeepMind — Gemma 2 and Gemma 3 technical reports (interleaved local/global attention)',
+    'Katharopoulos et al. 2020 — Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention (arXiv:2006.16236)',
+    'Gu & Dao 2023 — Mamba: Linear-Time Sequence Modeling with Selective State Spaces (arXiv:2312.00752)',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 7 lessons 11 (MoE), 13 (scaling laws), 15 (attention variants), adapted and rewritten',
   ],
-  tags: ['transformer', 'attention', 'rope', 'residual-stream', 'rmsnorm', 'swiglu', 'gqa', 'mqa', 'flashattention', 'pytorch'],
+  tags: ['transformer', 'attention', 'rope', 'residual-stream', 'rmsnorm', 'swiglu', 'gqa', 'mqa', 'flashattention', 'pytorch', 'scaling-laws', 'chinchilla', 'mixture-of-experts', 'sliding-window', 'state-space-models'],
   cheatSheet: [
     'Decoder layer (Llama-style): x = x + Attn(RMSNorm(x)); x = x + SwiGLU_MLP(RMSNorm(x)); repeat L times, final RMSNorm, LM head → logits over vocab.',
     'The residual stream is the d_model-wide "bus" every layer reads from and adds to; pre-norm keeps it trainable at depth.',
@@ -31,6 +45,9 @@ const topic: Topic = {
     'FlashAttention is exact: tiles Q/K/V into on-chip SRAM and uses an online softmax (running max + running sum), so memory is O(N) and HBM traffic drops sharply.',
     'Scaling by √d_k keeps logits at unit variance so softmax does not saturate; forgetting it makes attention nearly one-hot and gradients vanish.',
     'Context extension for RoPE models: raise the base (NTK-aware) or use YaRN/position interpolation, then fine-tune briefly on long sequences.',
+    'Scaling: training ≈ 6·N·D FLOPs, inference ≈ 2·N per token; Chinchilla-optimal ≈ 20 tokens/parameter; heavily used models are over-trained on purpose (Llama 3 8B: ~15T tokens).',
+    'MoE: router picks top-k of E expert MLPs per token per layer; compute follows active params, memory follows total (Mixtral 8x7B: ~12.9B active / 46.7B total).',
+    'KV cache bytes = 2 × layers × n_kv_heads × head_dim × bytes × tokens; sliding-window layers cap it at W, hybrids keep full KV only in global layers, SSMs keep a fixed state.',
   ],
   sections: [
     {
@@ -357,6 +374,454 @@ for b in (1, 2, 3):
       },
       source: 'Vaswani et al. 2017; Ainslie et al. 2023 — GQA; Dao et al. 2022 — FlashAttention',
     },
+    {
+      heading: 'Scaling Laws — compute-optimal training, over-training and test-time compute',
+      body: `**Intuition:** a training budget buys two things, a bigger brain (parameters N) and more reading (tokens D). Scaling laws are the empirical price list that says which mix gives the lowest loss for the money, and they changed their answer once.
+
+**The budget equation:** training compute C ≈ **6·N·D** FLOPs (≈ 2 for the forward pass and 4 for the backward pass, per parameter per token). Inference costs ≈ **2·N** FLOPs per token.
+
+**Kaplan et al. 2020 (OpenAI):** test loss falls as a smooth power law in N, D and C across many orders of magnitude. Their fits said extra compute should go mostly into a bigger model. GPT-3 (175B parameters, ~300B tokens) is roughly that recipe.
+
+**Hoffmann et al. 2022 (DeepMind, "Chinchilla"):** re-ran the study with learning-rate schedules matched to each run's length and found N and D should grow **in equal proportion** with compute: about **20 tokens per parameter**. Chinchilla (70B, 1.4T tokens) beat the 280B Gopher trained on the same compute. Their loss fit has the form L(N, D) = E + A/N^α + B/D^β: an irreducible floor E plus one term that shrinks with size and one that shrinks with data.
+
+**Over-training on purpose:** compute-optimal minimises *training* cost for a given loss. A deployed model is then run for trillions of tokens, and every one of them costs 2·N. So it pays to train a smaller model far past 20 tokens/parameter: Llama 3 8B saw ~15T tokens (~1,900 per parameter). Sardana & Frankle 2024 formalised this: once you count expected inference demand, the optimal model is smaller and trained longer.
+
+**Test-time compute:** the newest axis spends FLOPs at inference instead: longer reasoning chains (reasoning models such as OpenAI o1, 2024), sampling many answers and picking with a verifier, or search. Snell et al. 2024 showed that on some tasks a smaller model given well-allocated test-time compute can match a much larger one. The price moves from a one-off training bill to a per-query bill and to latency.
+
+**Caveats:**
+- Laws predict **loss**, not specific skills; abilities that look like they "emerge" at a size often reflect a pass/fail metric (Schaeffer et al. 2023).
+- Data quality, tokenizer and architecture (MoE, next section) shift the constants.
+- High-quality text is finite, so data, not compute, is becoming the binding constraint.
+
+**Why an AI engineer cares:** it explains why small open models are so strong, why "8B trained on 15T" is a design for cheap serving, and why reasoning effort is a cost dial you set per request.`,
+      example: `Chinchilla's budget: C = 6 × 70e9 × 1.4e12 ≈ **5.9e23 FLOPs**. With D = 20·N, C = 120·N², so N = √(5.9e23 / 120) ≈ **70B** and D ≈ **1.4T**: the rule reproduces the paper's model.
+Llama 3 8B: C = 6 × 8e9 × 15e12 = **7.2e23 FLOPs**, about 1.2× the same budget, spent on a model ~9× smaller.
+- Plugging both into the published Chinchilla fit (E 1.69, A 406.4, B 410.7, α 0.34, β 0.28) gives predicted losses of 1.937 vs 1.949: nearly the same.
+- Serving cost per token: 2 × 70e9 = 140 GFLOPs vs 2 × 8e9 = 16 GFLOPs, **~8.75× cheaper**, and it fits on a single consumer GPU.
+- The extra 1.3e23 training FLOPs are paid back after about **1.1T served tokens** (1.3e23 / (140e9 − 16e9)), which a popular model passes quickly.`,
+      diagram: `loss
+ │╲  bigger N, same D: data term B/D^β stops falling
+ │ ╲___________
+ │  ╲          ‾‾‾‾‾‾‾‾‾‾  ← under-trained (Kaplan-style, ~1.7 tok/param)
+ │   ╲
+ │    ╲___  compute-optimal frontier (D ≈ 20·N)
+ │        ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+ │ - - - - - - - - - - - - - - - - - -  E: irreducible loss
+ └──────────────────────────────────▶ training compute C ≈ 6·N·D
+
+ where compute goes:  pretraining (6ND, once) → serving (2N per token, forever)
+                      → test-time reasoning (more tokens per query)`,
+      code: [
+        {
+          language: 'python',
+          title: 'chinchilla.py — compute-optimal split vs an over-trained small model',
+          code: `import math
+
+# Hoffmann et al. 2022, approach 3 fit: L(N, D) = E + A / N^alpha + B / D^beta
+E, A, B, ALPHA, BETA = 1.69, 406.4, 410.7, 0.34, 0.28
+
+def loss(n, d):
+    return E + A / n**ALPHA + B / d**BETA
+
+def chinchilla_split(c, tokens_per_param=20):
+    n = math.sqrt(c / (6 * tokens_per_param))   # C = 6 N D and D = 20 N  ->  C = 120 N^2
+    return n, tokens_per_param * n
+
+c = 6 * 70e9 * 1.4e12                           # Chinchilla's training budget, ~5.9e23 FLOPs
+n, d = chinchilla_split(c)
+print(f"compute-optimal: N={n/1e9:.0f}B  D={d/1e12:.2f}T  loss={loss(n, d):.3f}")
+
+# similar compute, spent on a much smaller model trained far longer (Llama-3-8B style)
+n8, d8 = 8e9, 15e12
+print(f"over-trained:    N=8B   D=15T   C={6*n8*d8:.2e}  loss={loss(n8, d8):.3f}  tokens/param={d8/n8:.0f}")
+print(f"decode FLOPs per token: 70B={2*n/1e9:.0f} GFLOPs, 8B={2*n8/1e9:.0f} GFLOPs")
+# compute-optimal: N=70B  D=1.40T  loss=1.937
+# over-trained:    N=8B   D=15T   C=7.20e+23  loss=1.949  tokens/param=1875
+# decode FLOPs per token: 70B=140 GFLOPs, 8B=16 GFLOPs`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Loss is predictable from small runs, so labs size big runs before spending the money.',
+          'The 6·N·D and 2·N rules give quick, defensible estimates of training and serving cost.',
+          'Over-training produces small models that are cheap and fast to serve with modest quality loss.',
+          'Test-time compute adds a per-request quality dial without retraining.',
+        ],
+        cons: [
+          {
+            con: 'Loss curves do not tell you when a specific capability (multi-step maths, tool use) will appear.',
+            fix: 'Track task evals with continuous scores (log-likelihood of the right answer, partial credit) alongside loss, not only pass/fail benchmarks.',
+          },
+          {
+            con: 'The 20 tokens/parameter rule ignores inference demand, so it picks models that are too big to serve cheaply.',
+            fix: 'Include expected served tokens in the budget (train + 2·N per served token) and pick the smallest model that meets the quality bar.',
+          },
+          {
+            con: 'Test-time compute raises cost and latency on every query.',
+            fix: 'Route: give reasoning budget only to hard requests (difficulty classifier or a cascade) and cap reasoning tokens per tier.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Training ≈ 6·N·D FLOPs; inference ≈ 2·N FLOPs per token.',
+        'Kaplan 2020: smooth power laws; favoured bigger models.',
+        'Chinchilla 2022: scale N and D together, ~20 tokens per parameter.',
+        'Popular models are over-trained on purpose to cut serving cost.',
+        'Test-time compute trades per-query cost for quality.',
+      ],
+      exercise: {
+        prompt: `Write \`chinchilla_split(c)\` returning compute-optimal \`(N, D)\` at 20 tokens/parameter, and \`breakeven_tokens(big, small)\` returning how many **served tokens** it takes before an over-trained small model uses less lifetime compute (training 6·N·D plus 2·N per served token) than a bigger compute-optimal one.
+
+Acceptance: \`chinchilla_split(5.88e23)\` ≈ (70e9, 1.4e12) within 1%; \`breakeven_tokens((70e9, 1.4e12), (8e9, 15e12))\` is between 1.0e12 and 1.1e12.`,
+        starter: {
+          language: 'python',
+          code: `import math
+
+def chinchilla_split(c, tokens_per_param=20):
+    ...
+
+def breakeven_tokens(big, small):
+    (nb, db), (ns, ds) = big, small
+    ...`,
+        },
+        hints: [
+          'Substitute D = 20·N into C = 6·N·D: C = 120·N², so N = √(C / 120).',
+          'Extra training paid by the small model: 6·ns·ds − 6·nb·db.',
+          'Saved per served token: 2·nb − 2·ns. Divide the first by the second (and never return a negative number).',
+        ],
+        solution: {
+          language: 'python',
+          code: `import math
+
+def chinchilla_split(c, tokens_per_param=20):
+    n = math.sqrt(c / (6 * tokens_per_param))
+    return n, tokens_per_param * n
+
+def breakeven_tokens(big, small):
+    """Served tokens after which the over-trained small model costs less lifetime compute."""
+    (nb, db), (ns, ds) = big, small
+    extra_train = 6 * ns * ds - 6 * nb * db
+    saved_per_token = 2 * nb - 2 * ns
+    return max(0.0, extra_train / saved_per_token)
+
+n, d = chinchilla_split(5.88e23)
+assert abs(n - 70e9) / 70e9 < 0.01 and abs(d - 1.4e12) / 1.4e12 < 0.01
+t = breakeven_tokens((70e9, 1.4e12), (8e9, 15e12))
+assert 1.0e12 < t < 1.1e12
+print(f"{t:.3e}")  # 1.065e+12`,
+        },
+        explanation:
+          'The small model pays ~1.3e23 extra FLOPs up front but saves 124 GFLOPs on every served token, so it wins after ~1.07T tokens. A model with millions of users serves that in weeks, which is why open-weight families ship heavily over-trained small sizes. The calculation ignores quality differences: it only holds when both models clear your eval bar.',
+      },
+      quickCheck: {
+        question: 'Llama 3 8B was trained on about 15T tokens, roughly 90× the Chinchilla ratio. What is the main reason?',
+        options: [
+          'Chinchilla scaling was shown to be wrong for models under 10B parameters',
+          'It trades extra one-off training compute for a smaller model that is much cheaper to serve on every token',
+          'More tokens increase the context window the model supports',
+          'Tokens are cheaper than parameters in the 6·N·D formula',
+        ],
+        correct: 1,
+        explanation:
+          'Chinchilla optimises training compute only. Inference costs ~2·N FLOPs per token forever, so a smaller model trained far longer reaches similar loss with much cheaper serving. Chinchilla was not refuted for small models, training length does not set the context window, and N and D carry equal weight in 6·N·D.',
+      },
+      source: 'Kaplan et al. 2020 — Scaling Laws for Neural Language Models; Hoffmann et al. 2022 — Training Compute-Optimal LLMs (Chinchilla); Sardana & Frankle 2024; Snell et al. 2024',
+    },
+    {
+      heading: 'Mixture of Experts — routers, top-k experts, total vs active parameters',
+      body: `**Intuition:** a hospital does not send every patient to every specialist. A triage nurse (the **router**) reads each case and sends it to the two most relevant doctors (the **top-k experts**). The hospital employs many doctors (total parameters) but each patient only takes up a couple of them (active parameters).
+
+**Mechanics:** in an MoE transformer, the dense MLP in each layer is replaced by **E expert MLPs** plus a small **router** (one linear layer, d_model → E). For each token:
+1. router logits → softmax → pick the **top-k** experts (k is 1 or 2 in classic designs, 8 in fine-grained ones),
+2. run the token through only those experts,
+3. output = gate-weighted sum of their outputs (gates renormalised over the chosen k), added to the residual stream.
+Attention, norms and embeddings stay dense and shared. Routing happens per token *and per layer*, so one sentence can use different experts at every layer.
+
+**Total vs active parameters:**
+
+| Model | Experts per layer | Active per token | Total | Active |
+|---|---|---|---|---|
+| Mixtral 8x7B | 8 | top-2 | 46.7B | ~12.9B |
+| DeepSeek-V3 | 1 shared + 256 routed | shared + top-8 | 671B | 37B |
+
+"8x7B" is not 56B: only the MLPs are duplicated, attention and embeddings are shared.
+
+**Load balancing:** routers collapse: a few experts get most tokens, the rest stay untrained. Fixes:
+- an **auxiliary balance loss** (Switch Transformer, Fedus et al. 2021) that penalises uneven routing,
+- an **expert capacity** limit per batch, with overflow tokens dropped or passed through,
+- DeepSeek-V3's **auxiliary-loss-free** method: a per-expert bias added to the scores only when *selecting* experts, nudged up or down after each step according to load.
+
+**Memory vs compute:** compute per token follows **active** parameters; memory follows **total** parameters, because every expert must be resident. Mixtral generates at roughly the speed of a ~13B dense model but needs memory for ~47B (≈ 93 GB in bf16). At large batch sizes different tokens hit different experts, so all experts are read each step anyway; the win is FLOPs per token, not memory. Large MoEs are served with **expert parallelism** (experts sharded across GPUs), which adds all-to-all communication.
+
+**When MoE fits:** high-traffic serving where quality per FLOP matters and you have the memory (or a provider runs it). It fits poorly on edge devices with tight memory, and fine-tuning and quantising it is fiddlier (router stability, rarely used experts).`,
+      example: `Mixtral 8x7B from its config: d = 4096, 32 layers, SwiGLU d_ff = 14,336, 8 experts, top-2, 32 query / 8 KV heads (head_dim 128), vocab 32,000.
+- One expert: 3 × 4096 × 14,336 = **176.2M**; 8 experts × 32 layers = **45.1B**.
+- Attention per layer: Q + O = 2 × 4096² = 33.6M, K + V = 2 × 4096 × 1024 = 8.4M → 41.9M × 32 = **1.34B**.
+- Embedding + LM head: 2 × 32,000 × 4096 = **0.26B**; router 4096 × 8 × 32 ≈ 1M.
+- **Total ≈ 46.7B. Active** = 2 experts × 176.2M × 32 (11.3B) + 1.34B + 0.26B ≈ **12.9B**.
+So per token Mixtral does the matmul work of a ~13B dense model, while its weights need ~93 GB in bf16, or ~23 GB at 4-bit.`,
+      diagram: `            token h (d_model)
+                 │
+            router: softmax(h · W_r)  →  [0.05 0.41 0.02 0.08 0.30 0.04 0.06 0.04]
+                 │ top-2: expert 2 (0.41), expert 5 (0.30)
+        ┌────────┴────────┐          gates renormalised: 0.58, 0.42
+        ▼                 ▼
+   Expert 2 (MLP)    Expert 5 (MLP)      Experts 1,3,4,6,7,8: idle for this token
+        │                 │              (still loaded in memory)
+        └── 0.58·e2 + 0.42·e5 ──▶ add to residual stream
+
+ Attention, norms, embeddings: dense and shared by every token`,
+      code: [
+        {
+          language: 'python',
+          title: 'moe_layer.py — top-2 routing, gate-weighted experts and a Switch-style balance loss',
+          code: `import numpy as np
+
+rng = np.random.default_rng(0)
+T, d, E, k = 512, 64, 8, 2                      # tokens, hidden size, experts, experts per token
+x = rng.normal(size=(T, d))
+W_router = rng.normal(size=(d, E)) * 0.1
+W_router[:, 3] += 0.3                           # a skewed router: expert 3 looks good to everyone
+experts = [rng.normal(size=(d, d)) / np.sqrt(d) for _ in range(E)]   # one matrix per expert, for brevity
+
+def softmax(z):
+    z = z - z.max(-1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(-1, keepdims=True)
+
+probs = softmax(x @ W_router)                   # (T, E) router probabilities
+topk = np.argsort(-probs, axis=1)[:, :k]        # chosen experts per token
+gates = np.take_along_axis(probs, topk, 1)
+gates /= gates.sum(1, keepdims=True)            # renormalise over the k chosen (Mixtral-style)
+
+out = np.zeros_like(x)
+for e in range(E):
+    rows, slot = np.nonzero(topk == e)          # tokens routed to expert e
+    out[rows] += gates[rows, slot, None] * (x[rows] @ experts[e])
+
+f = np.bincount(topk.ravel(), minlength=E) / (T * k)   # share of routed slots per expert
+P = probs.mean(0)                                      # mean router probability per expert
+aux = E * np.sum(f * P)                                # Switch-style balance loss: 1.0 when uniform
+print("load per expert:", np.round(f, 3))              # expert 3 takes ~0.20 vs 0.125 fair share
+print(f"aux loss = {aux:.3f} (1.0 = perfectly balanced)")  # 1.093`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Much more knowledge capacity per FLOP: total parameters grow without growing per-token compute.',
+          'Decode speed close to a dense model the size of the active parameters.',
+          'Experts can be sharded across GPUs (expert parallelism) to scale serving.',
+        ],
+        cons: [
+          {
+            con: 'Memory follows total parameters, so an MoE needs far more VRAM than its speed suggests.',
+            fix: 'Quantise expert weights (4–8 bit), shard experts across GPUs, or offload rarely used experts; for small deployments pick a dense model of the same active size.',
+          },
+          {
+            con: 'Router collapse leaves experts idle and wastes capacity.',
+            fix: 'Train with an auxiliary balance loss or bias-based balancing, set a capacity factor, and monitor per-expert load during training and serving.',
+          },
+          {
+            con: 'Expert parallelism adds all-to-all traffic and makes outputs depend on batch composition.',
+            fix: 'Use serving engines with optimised MoE kernels (vLLM, SGLang), keep expert groups within fast NVLink domains, and do not assume bitwise-reproducible outputs across batches.',
+          },
+        ],
+      },
+      keyPoints: [
+        'MoE swaps the dense MLP for E experts and a router; attention stays dense.',
+        'Top-k routing per token per layer; gates weight the chosen experts.',
+        'Compute follows active parameters; memory follows total parameters.',
+        'Mixtral 8x7B: 46.7B total, ~12.9B active (top-2 of 8).',
+        'Balance the load: aux loss, capacity limits or bias-based routing.',
+      ],
+      exercise: {
+        prompt: `Write \`moe_params(d, layers, d_ff, n_experts, top_k, n_heads, n_kv_heads, vocab)\` returning \`(total, active)\` parameter counts for a Llama-style MoE with SwiGLU experts, GQA attention, a router per layer and untied embeddings (ignore norms).
+
+Acceptance (Mixtral 8x7B config: d 4096, 32 layers, d_ff 14,336, 8 experts, top-2, 32 heads, 8 KV heads, vocab 32,000): total rounds to **46.7B**, active to **12.9B**.`,
+        hints: [
+          'head_dim = d / n_heads; attention = Q and O (d × n_heads·head_dim each) + K and V (d × n_kv_heads·head_dim each).',
+          'One SwiGLU expert = 3 × d × d_ff (gate, up, down). The router is d × n_experts.',
+          'Active counts top_k experts per layer; everything else is the same in both totals.',
+        ],
+        solution: {
+          language: 'python',
+          code: `def moe_params(d, layers, d_ff, n_experts, top_k, n_heads, n_kv_heads, vocab):
+    head_dim = d // n_heads
+    attn = 2 * d * n_heads * head_dim + 2 * d * n_kv_heads * head_dim   # Q, O + K, V
+    expert = 3 * d * d_ff                                               # SwiGLU: gate, up, down
+    router = d * n_experts
+    embed = 2 * vocab * d                                               # input embedding + LM head
+    total = layers * (attn + n_experts * expert + router) + embed
+    active = layers * (attn + top_k * expert + router) + embed
+    return total, active
+
+total, active = moe_params(4096, 32, 14336, 8, 2, 32, 8, 32000)
+print(f"total {total/1e9:.1f}B, active {active/1e9:.1f}B")   # total 46.7B, active 12.9B
+assert round(total / 1e9, 1) == 46.7 and round(active / 1e9, 1) == 12.9`,
+        },
+        explanation:
+          'Experts are ~97% of Mixtral\'s weights, so total parameters are dominated by n_experts × expert while active parameters use top_k × expert. The shared attention and embeddings (~1.6B) are why "8x7B" lands at 46.7B rather than 56B, and why the active count is ~12.9B rather than 14B.',
+      },
+      quickCheck: {
+        question: 'You move from a dense 13B model to Mixtral 8x7B (top-2 of 8 experts). What happens to per-token compute and to weight memory?',
+        options: [
+          'Both stay about the same, since only ~13B parameters are active',
+          'Compute stays near the 13B model; weight memory grows about 3.6× because all experts must be loaded',
+          'Compute grows 8×; memory stays the same',
+          'Both grow about 8×',
+        ],
+        correct: 1,
+        explanation:
+          'Active parameters (~12.9B) set the FLOPs per token, so compute is similar to the dense 13B. But all 46.7B parameters must sit in memory: ~3.6× the dense model. Experts are not computed for every token, and they are never loaded on demand from disk per token in normal serving.',
+      },
+      source: 'Shazeer et al. 2017 — Sparsely-Gated MoE; Fedus et al. 2021 — Switch Transformer; Jiang et al. 2024 — Mixtral of Experts; DeepSeek-AI 2024 — DeepSeek-V3',
+    },
+    {
+      heading: 'Beyond Full Attention — KV-cache sizing, sliding windows, hybrids and state-space models',
+      body: `**Intuition:** full attention lets every token reread the whole conversation, and the KV cache is the stack of notes that makes rereading possible. The variants below keep fewer notes (sliding windows) or replace them with a fixed-size summary (state-space models).
+
+**KV-cache size** (per sequence): **2 × layers × n_kv_heads × head_dim × bytes × tokens** (the 2 is K and V).
+- Llama-3-8B (32 layers, 8 KV heads, head_dim 128, bf16): **128 KiB per token**: 1 GiB at 8k tokens, 4 GiB at 32k. The MHA version would need 512 KiB per token, which is why GQA (previous section) matters.
+- Multiply by the batch: concurrency × context, not model size, is usually what runs a GPU out of memory.
+
+**Sliding-window attention (SWA):** each token attends only to the last W tokens. Compute drops from O(N²) to O(N·W), and each layer's cache becomes a **rolling buffer of W tokens**. Information still travels further through depth (layer 2 sees what layer 1 saw), but it fades, so pure SWA is weak at exact recall from far back. Mistral 7B used a 4,096-token window.
+
+**Hybrid local/global:** interleave SWA layers with a few full-attention layers. Gemma 2 alternates local and global layers; Gemma 3 uses five local layers per global one. Only the global layers keep the whole context, so the KV cache shrinks several-fold while long-range recall survives.
+
+**FlashAttention is not a variant:** it computes the same exact attention, just IO-aware (tiled in SRAM, no N×N matrix in HBM). It saves memory traffic, not FLOPs, and windowed or causal masks run inside the same kernels.
+
+**Linear attention and state-space models:** drop the softmax over all past tokens and keep a **fixed-size state** updated per token, so time is O(N) and decode memory is constant per sequence.
+- *Linear attention* (Katharopoulos et al. 2020) rewrites attention with a kernel feature map so it becomes a running sum.
+- *Mamba* (Gu & Dao 2023) uses a selective state-space layer whose updates depend on the input.
+- Weakness: a fixed state cannot store everything, so exact copying and needle-in-a-haystack recall lag full attention. Hybrids (Jamba mixes Mamba and attention layers) keep a few attention layers for that.
+
+| Approach | Compute | KV / state per sequence | Long-range exact recall |
+|---|---|---|---|
+| Full (MHA/GQA) | O(N²) | grows with N | strong |
+| Sliding window | O(N·W) | capped at W per layer | weak alone |
+| Hybrid local/global | between | grows only in global layers | strong |
+| Linear / SSM | O(N) | constant | weaker |`,
+      example: `Serve a Llama-3-8B-shaped model at **32k context, 16 concurrent sequences** in bf16. KV per token per layer = 2 × 8 × 128 × 2 B = **4 KiB**.
+- Full attention in all 32 layers: 4 KiB × 32 × 32,768 = **4 GiB per sequence**, **64 GiB** for the batch: more than the weights (~16 GB).
+- Hypothetical hybrid with the same shape: 24 sliding-window layers (W = 1,024) + 8 global layers.
+  - Global: 4 KiB × 8 × 32,768 = 1 GiB. Local: 4 KiB × 24 × 1,024 = 96 MiB.
+  - **≈ 1.09 GiB per sequence, 17.5 GiB for the batch: 3.7× smaller**, freeing room for about 3.7× the concurrency.
+- A pure SSM of similar size would keep a fixed state of a few MB per sequence regardless of context, but would be the weakest of the three at quoting a line from 30k tokens back.`,
+      diagram: `causal full (N=8)        sliding window W=3        hybrid stack
+  0 1 2 3 4 5 6 7          0 1 2 3 4 5 6 7          L1 local  ─┐
+0 x                      0 x                        L2 local   │ KV capped at W
+1 x x                    1 x x                      L3 local   │
+2 x x x                  2 x x x                    L4 GLOBAL ─┘ KV grows with N
+3 x x x x                3   x x x                  L5 local
+4 x x x x x              4     x x x                ...
+5 x x x x x x            5       x x x
+6 x x x x x x x          6         x x x          SSM: state(t) = f(state(t-1), x_t)
+7 x x x x x x x x        7           x x x             fixed size, O(N) time`,
+      code: [
+        {
+          language: 'python',
+          title: 'kv_and_window.py — KV-cache sizing and a sliding-window mask with PyTorch SDPA',
+          code: `import torch, torch.nn.functional as F
+
+def kv_cache_bytes(layers, n_kv_heads, head_dim, tokens, batch=1, bytes_per=2, window=None):
+    """K and V for every layer; a sliding-window layer keeps at most \`window\` tokens."""
+    kept = tokens if window is None else min(tokens, window)
+    return 2 * layers * n_kv_heads * head_dim * bytes_per * kept * batch
+
+GiB = 2**30
+print("Llama-3-8B per token:", kv_cache_bytes(32, 8, 128, 1) // 1024, "KiB")            # 128 KiB
+print("MHA version per token:", kv_cache_bytes(32, 32, 128, 1) // 1024, "KiB")          # 512 KiB
+print("32k ctx x 16 seqs:", kv_cache_bytes(32, 8, 128, 32768, batch=16) / GiB, "GiB")   # 64.0 GiB
+
+def sliding_window_mask(n, window):
+    i = torch.arange(n)[:, None]
+    j = torch.arange(n)[None, :]
+    return (j <= i) & (j > i - window)            # True = may attend (causal and inside the window)
+
+q = k = v = torch.randn(1, 4, 8, 16)               # (batch, heads, tokens, head_dim)
+out = F.scaled_dot_product_attention(q, k, v, attn_mask=sliding_window_mask(8, window=3))
+print(sliding_window_mask(8, 3).int())             # the banded matrix in the diagram
+# a window as long as the sequence reproduces plain causal attention
+assert torch.allclose(F.scaled_dot_product_attention(q, k, v, attn_mask=sliding_window_mask(8, 8)),
+                      F.scaled_dot_product_attention(q, k, v, is_causal=True), atol=1e-6)`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Sliding windows cap per-layer KV memory and make attention cost linear in sequence length.',
+          'Hybrid local/global stacks keep most of full attention\'s recall at a fraction of the KV cache.',
+          'Linear attention and SSMs give constant-memory decode, attractive for very long streams.',
+          'All of these compose with GQA, KV quantisation and FlashAttention-style kernels.',
+        ],
+        cons: [
+          {
+            con: 'Pure sliding-window models lose exact recall of tokens outside the window.',
+            fix: 'Use hybrids with periodic global layers, or retrieve the relevant passage back into the window instead of relying on long context.',
+          },
+          {
+            con: 'SSM and linear-attention models compress history into a fixed state and miss exact copying and needle-in-a-haystack lookups.',
+            fix: 'Pick hybrid models that keep some attention layers, and evaluate on your own long-context retrieval tasks before switching.',
+          },
+          {
+            con: 'Serving engines and prefix caches assume one KV layout; mixed window/global layers complicate memory managers.',
+            fix: 'Use engine versions with explicit support for the model\'s layer types and check that the configured sliding_window is honoured (compare outputs with the reference implementation).',
+          },
+        ],
+      },
+      keyPoints: [
+        'KV bytes = 2 × layers × n_kv_heads × head_dim × bytes × tokens × batch.',
+        'Llama-3-8B: 128 KiB per token in bf16; 4 GiB at 32k.',
+        'Sliding window: O(N·W) compute, KV capped at W per layer.',
+        'Hybrids keep a few global layers for long-range recall.',
+        'FlashAttention is exact attention with less memory traffic, not an approximation.',
+        'Linear attention / SSMs: O(N), fixed state, weaker exact recall.',
+      ],
+      exercise: {
+        prompt: `Write \`kv_cache_gib(windows, n_kv_heads, head_dim, tokens, batch=1, bytes_per=2)\` where \`windows\` has one entry per layer: \`None\` for a global layer, or an int window size for a sliding-window layer.
+
+Acceptance (8 KV heads, head_dim 128, 32,768 tokens, bf16): 32 global layers → **4.0** GiB; the pattern \`[1024, 1024, 1024, None] × 8\` (24 local + 8 global) → **1.09375** GiB.`,
+        starter: {
+          language: 'python',
+          code: `def kv_cache_gib(windows, n_kv_heads, head_dim, tokens, batch=1, bytes_per=2):
+    ...
+
+full = kv_cache_gib([None] * 32, 8, 128, 32768)
+hybrid = kv_cache_gib(([1024] * 3 + [None]) * 8, 8, 128, 32768)`,
+        },
+        hints: [
+          'Bytes per token per layer = 2 (K and V) × n_kv_heads × head_dim × bytes_per.',
+          'A layer keeps tokens if it is global, else min(tokens, window).',
+          'Sum the kept tokens over layers, multiply by the per-token bytes and the batch, divide by 2**30.',
+        ],
+        solution: {
+          language: 'python',
+          code: `def kv_cache_gib(windows, n_kv_heads, head_dim, tokens, batch=1, bytes_per=2):
+    per_tok_layer = 2 * n_kv_heads * head_dim * bytes_per
+    kept = sum(tokens if w is None else min(tokens, w) for w in windows)
+    return per_tok_layer * kept * batch / 2**30
+
+full = kv_cache_gib([None] * 32, 8, 128, 32768)
+hybrid = kv_cache_gib(([1024] * 3 + [None]) * 8, 8, 128, 32768)
+print(full, hybrid, round(full / hybrid, 2))   # 4.0 1.09375 3.66
+assert full == 4.0 and abs(hybrid - 1.09375) < 1e-9`,
+        },
+        explanation:
+          'Global layers store every token (8 × 32,768 × 4 KiB = 1 GiB); local layers store at most 1,024 tokens each (24 × 1,024 × 4 KiB = 96 MiB). The cache is now dominated by the few global layers, which is why hybrid models choose a high local-to-global ratio. The same function sizes a serving deployment: multiply by the concurrency you need and compare with GPU memory left after the weights.',
+      },
+      quickCheck: {
+        question: 'A model uses sliding-window attention with W = 4,096 in every layer. A user asks about a sentence 20,000 tokens earlier in the prompt. What is the most likely behaviour?',
+        options: [
+          'Exact recall, because FlashAttention makes the window irrelevant',
+          'Weak or failed exact recall: information from that far back only reaches the token indirectly through stacked layers and fades',
+          'An error, because the prompt is longer than the window',
+          'Exact recall, because the KV cache stores every token anyway',
+        ],
+        correct: 1,
+        explanation:
+          'Each layer only looks W tokens back, so distant tokens influence the current one only through chains of windows across layers, and detail is lost along the way. FlashAttention does not change which tokens are attended, the model accepts long prompts without error, and the rolling KV cache keeps only the last W tokens per layer.',
+      },
+      source: 'Jiang et al. 2023 — Mistral 7B (sliding window); Gemma 2 / Gemma 3 technical reports; Katharopoulos et al. 2020 — Transformers are RNNs; Gu & Dao 2023 — Mamba; Dao et al. 2022 — FlashAttention',
+    },
   ],
   codeChallenges: [
     {
@@ -621,6 +1086,72 @@ def decode_step(layer, x_new, cache):
         'Ignoring data issues.',
       ],
     },
+    {
+      id: 'transformer-internals-iq-6',
+      difficulty: 'hard',
+      question: 'Your team can afford one pretraining run of about 6e23 FLOPs for a model that will serve heavy production traffic. Do you train a Chinchilla-optimal model or something else, and how do test-time reasoning budgets change the picture?',
+      context: 'Expected use: millions of requests per day for at least a year; quality bar defined by an internal eval suite.',
+      whatInterviewerLooksFor: [
+        'C ≈ 6·N·D and the ~20 tokens/parameter compute-optimal rule',
+        'Inference cost ≈ 2·N per token and lifetime compute reasoning',
+        'Over-training a smaller model for serving',
+        'Test-time compute as a per-request cost dial',
+        'Data limits and the need to validate on evals, not loss alone',
+      ],
+      modelAnswer: `**Compute-optimal baseline.** With C ≈ 6·N·D and D ≈ 20·N, C = 120·N², so N ≈ √(6e23 / 120) ≈ 70B and D ≈ 1.4T tokens. That minimises loss *for the training budget*.
+
+**But serving dominates.** Each served token costs ≈ 2·N FLOPs. A 70B model costs 140 GFLOPs per token; an 8B model 16 GFLOPs. If I spend the same 6e23 FLOPs on ~7–8B parameters and ~13–15T tokens, the published Chinchilla fit predicts only slightly higher loss, while serving is ~9× cheaper and fits on one GPU. With millions of daily requests, the extra training cost is repaid after roughly a trillion served tokens. So I would **over-train a smaller model**, picking the smallest size that clears the eval bar (Sardana & Frankle's inference-aware argument).
+
+**Constraints to check:**
+- Do we have ~15T *good* tokens? If not, repeated epochs give diminishing returns; data quality and deduplication matter more than the exact ratio.
+- Loss is not capability: validate candidate sizes on our eval suite with small pilot runs and extrapolate.
+
+**Test-time compute.** For hard requests, letting the model reason longer or sample several answers with a verifier can lift quality without a bigger model. That moves cost from training to each request and adds latency, so I would route: no or low reasoning budget for easy traffic, more for hard queries, with per-tier token caps. That makes a smaller over-trained base even more attractive: spend extra compute only where it pays.`,
+      followUps: [
+        { q: 'Why did Kaplan et al. and Chinchilla reach different conclusions?', a: 'Kaplan\'s runs used a learning-rate schedule not matched to each run length, which under-states the benefit of more tokens for smaller models. Hoffmann et al. tuned the schedule per run and found parameters and tokens should scale about equally.' },
+        { q: 'How would MoE change your sizing?', a: 'Per-token compute follows active parameters, so an MoE can have far more total parameters for the same training and serving FLOPs; you then pay in memory and serving complexity rather than compute.' },
+      ],
+      pitfalls: [
+        'Quoting 20 tokens/parameter as the right answer for every deployment.',
+        'Forgetting that inference cost is per token, forever.',
+        'Treating test-time compute as free quality.',
+        'Assuming unlimited high-quality data.',
+      ],
+    },
+    {
+      id: 'transformer-internals-iq-7',
+      difficulty: 'expert',
+      question: 'A product team wants to replace a dense 13B model with Mixtral 8x7B for "70B-class quality at 13B speed" and to support 64k-token contexts. Walk through the memory and serving consequences.',
+      context: 'Mixtral 8x7B: 46.7B total / ~12.9B active, 32 layers, 8 KV heads × 128, bf16. Current deployment: one 80 GB GPU per replica.',
+      whatInterviewerLooksFor: [
+        'Total vs active parameters and what each controls',
+        'Weight memory and KV-cache arithmetic',
+        'Batching effects on MoE efficiency and expert parallelism',
+        'Load balancing / routing behaviour in serving',
+        'Mitigations: quantisation, sharding, context caps, hybrids',
+      ],
+      modelAnswer: `**Compute:** per token Mixtral runs 2 of 8 experts per layer, so ~12.9B active parameters: FLOPs per token similar to the dense 13B. Quality gains come from the larger total capacity.
+
+**Weights:** all 46.7B parameters must be resident: ~93 GB in bf16, which does not fit one 80 GB GPU. Options: shard across 2 GPUs (tensor or expert parallelism), or quantise to 8-bit (~47 GB) or 4-bit (~23 GB) after checking evals.
+
+**KV cache at 64k:** per token per layer 2 × 8 × 128 × 2 B = 4 KiB; × 32 layers = 128 KiB per token; × 65,536 tokens = **8 GiB per sequence**. Ten concurrent 64k sequences need 80 GiB of cache alone. So long context, not the MoE weights, decides concurrency. Mitigations: FP8 KV cache, prefix caching for shared documents, a lower max context per tier, or retrieval instead of stuffing 64k.
+
+**Decode economics:** decode is memory-bandwidth-bound. At small batch each token reads only its 2 experts per layer, so it is fast. At large batch tokens spread over all experts, so every expert's weights are read each step; throughput is good but the memory footprint never shrinks.
+
+**Serving behaviour:** expert parallelism adds all-to-all communication; uneven routing (hot experts) creates stragglers; outputs can vary slightly with batch composition. Use an engine with optimised MoE kernels, keep expert shards within one NVLink domain, and monitor per-expert load.
+
+**Verdict:** plan two GPUs per replica (or 4-bit on one, with evals), cap context per tier, and benchmark tokens/s and cost per successful task against the dense 13B before switching.`,
+      followUps: [
+        { q: 'Would a sliding-window or hybrid model help the 64k requirement?', a: 'Yes for memory: a model with mostly sliding-window layers keeps full KV only in its global layers, cutting the cache several-fold. Check long-range recall on your own tasks, since windowed layers alone forget distant detail.' },
+        { q: 'Why can MoE outputs differ between runs with identical prompts?', a: 'Batch composition changes kernel scheduling and, with capacity limits, which tokens overflow; floating-point reduction order also changes. Small numeric differences can flip a top-k routing decision and the sampled token.' },
+      ],
+      pitfalls: [
+        'Sizing memory from active parameters.',
+        'Ignoring the KV cache at long context.',
+        'Assuming MoE speed-ups hold at every batch size.',
+        'Calling it "56B" from the name.',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -868,6 +1399,86 @@ print(a.shape)`,
       explanation: 'Earlier exponentials were computed relative to m_old; re-expressing them relative to m_new means multiplying by exp(m_old − m_new). Both the denominator and the weighted value sum need the same correction, or the final normalisation is wrong. Resetting discards information, and dividing by the max has no mathematical basis.',
       followUps: [
         { q: 'Why subtract the max at all?', a: 'To keep exponentials in a safe range: exp of large logits overflows in fp16/bf16; subtracting the running max keeps every exponent ≤ 0.' },
+      ],
+    },
+    {
+      id: 'transformer-internals-mcq-13',
+      difficulty: 'medium',
+      question: 'Using C ≈ 6·N·D and the Chinchilla rule of ~20 training tokens per parameter, what is the compute-optimal model size for a budget of 1.2e22 FLOPs?',
+      options: ['About 1B parameters', 'About 10B parameters', 'About 100B parameters', 'About 300M parameters'],
+      correct: [1],
+      explanation: 'With D = 20·N, C = 6·N·20·N = 120·N², so N = √(1.2e22 / 120) = √1e20 = 1e10, about 10B parameters trained on about 200B tokens. The other sizes would be badly under- or over-trained for that budget.',
+      followUps: [
+        { q: 'How much compute per generated token would that model need at inference?', a: 'About 2·N = 2e10 FLOPs (20 GFLOPs) per token for the matmuls, plus attention over the context.' },
+      ],
+    },
+    {
+      id: 'transformer-internals-mcq-14',
+      difficulty: 'hard',
+      question: 'Which statements about LLM scaling laws are correct? Select ALL that apply.',
+      options: [
+        'Hoffmann et al. (2022) found parameters and training tokens should grow in roughly equal proportion with compute',
+        'Training a model well past 20 tokens per parameter can be the right choice when it will serve a lot of traffic',
+        'Scaling laws predict exactly at which size a specific skill such as multi-digit arithmetic appears',
+        'Spending more compute at inference, such as longer reasoning or sampling with a verifier, can improve quality without a larger model',
+      ],
+      correct: [0, 1, 3],
+      explanation: 'Chinchilla scales N and D together (~20 tokens/parameter); over-training cuts serving cost; test-time compute is a separate quality lever. Scaling laws predict smooth loss, not when particular capabilities appear; apparent sudden emergence often reflects pass/fail metrics.',
+      followUps: [
+        { q: 'What did Chinchilla show against Gopher?', a: 'A 70B model trained on 1.4T tokens outperformed the 280B Gopher trained with the same compute, showing large earlier models were under-trained.' },
+      ],
+    },
+    {
+      id: 'transformer-internals-mcq-15',
+      difficulty: 'hard',
+      question: 'In a top-2 MoE layer, the router probabilities for one token over 4 experts are [0.10, 0.50, 0.15, 0.25]. With gates renormalised over the chosen experts, what does the layer output?',
+      options: [
+        '0.667 × Expert2(h) + 0.333 × Expert4(h)',
+        '0.50 × Expert2(h) + 0.25 × Expert4(h)',
+        'The average of all four experts weighted by the probabilities',
+        'Expert2(h) only, because it has the highest probability',
+      ],
+      correct: [0],
+      explanation: 'Top-2 picks experts 2 and 4 (0.50 and 0.25). Renormalising gives 0.50/0.75 ≈ 0.667 and 0.25/0.75 ≈ 0.333. Using the raw probabilities shrinks the output, running all experts defeats sparsity, and top-1 would use only expert 2 (the Switch Transformer choice).',
+      followUps: [
+        { q: 'Why add a load-balancing term to training?', a: 'Without it the router tends to send most tokens to a few experts, which then train faster and attract even more tokens; the others stay useless and capacity is wasted.' },
+      ],
+    },
+    {
+      id: 'transformer-internals-mcq-16',
+      difficulty: 'hard',
+      question: 'Why do sparse expert models need far more accelerator memory than their per-token FLOPs suggest? Select ALL that apply.',
+      options: [
+        'Every expert\'s weights must stay resident because any token may be routed to any expert',
+        'At large batch sizes tokens spread across all experts, so all expert weights are read every step',
+        'The router stores a full copy of every expert\'s activations for each token',
+        'The KV cache is unaffected by MoE and still grows with context and concurrency',
+      ],
+      correct: [0, 1, 3],
+      explanation: 'Memory follows total parameters, since all experts must be available, and batching spreads tokens over all of them. MoE only replaces the MLP, so the attention KV cache is the same as a dense model with the same attention shape. The router is a tiny linear layer and does not store expert activations.',
+      followUps: [
+        { q: 'How do large MoEs fit across GPUs?', a: 'Expert parallelism places different experts on different GPUs and exchanges tokens with all-to-all communication, often combined with tensor parallelism for attention.' },
+      ],
+    },
+    {
+      id: 'transformer-internals-mcq-17',
+      difficulty: 'expert',
+      question: 'This function sizes the KV cache for a GQA model. What is wrong with it?',
+      code: {
+        language: 'python',
+        code: `def kv_cache_bytes(layers, n_heads, n_kv_heads, head_dim, tokens, batch, bytes_per=2):
+    return layers * n_heads * head_dim * bytes_per * tokens * batch`,
+      },
+      options: [
+        'It uses query heads instead of KV heads and forgets the factor 2 for storing both K and V',
+        'It should multiply by d_model instead of head_dim',
+        'It should divide by the batch size',
+        'Nothing; GQA does not change KV-cache size',
+      ],
+      correct: [0],
+      explanation: 'The cache stores K and V (factor 2) for each KV head, not each query head: bytes = 2 × layers × n_kv_heads × head_dim × bytes × tokens × batch. For Llama-3-8B (32 query, 8 KV heads) the bug gives 2× too little relative to MHA but 2× too much relative to the real GQA cache, so capacity plans come out wrong either way.',
+      followUps: [
+        { q: 'How would a sliding-window layer change the formula?', a: 'For that layer, replace tokens with min(tokens, window), since only the last W tokens are kept in its rolling cache.' },
       ],
     },
   ],

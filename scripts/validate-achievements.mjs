@@ -98,6 +98,19 @@ if (firstLab) {
   const peeked = { ...structuredClone(empty), promptLabs: { [firstLab.id]: { system: '', user: '', best: 100, revealedAt: at(3, 9), solvedAt: at(3, 10) } } };
   if (A.evaluateAll(peeked, ctx)['prompt-smith']?.value !== 0) fail('prompt-smith: a lab solved after revealing the model answer was counted');
 }
+// every Short watched, and Saved filled to well past the top Curator tier
+full.shorts = {};
+topics.forEach((t) => t.sections.forEach((s) => s.short && (full.shorts[s.short.id] = { watchedAt: at(6, 10), answeredAt: at(6, 10), firstTry: true })));
+full.saved = Array.from({ length: 300 }, (_, i) => ({ kind: 'topic', ref: `t${i}`, topicId: `t${i}`, addedAt: at(7, 10) }));
+// a study plan logged on pace for a fortnight, and every step lesson finished in Steps view
+full.studyPlan = { dailyMinutes: 45, daysPerWeek: 5, goal: 'all', startedAt: '2026-01-01', baselineAt: '2026-01-01', baselineCovered: 0, log: {} };
+for (let i = 0; i < 15; i++) full.studyPlan.log[localDay(new Date(2026, 0, 1 + i))] = [i * 45, i * 45];
+full.steps = {};
+topics.forEach((t) => t.sections.forEach((s, i) => s.steps && (full.steps[`${t.id}:${i}`] = { missed: 0, at: at(8, 10) })));
+// every from-scratch drill passed on its own; one revealed after passing still counts, one revealed first does not
+full.drills = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`d${i}`, { passedAt: at(9, 10), ...(i === 0 ? { revealedAt: at(9, 11) } : {}) }]));
+if (A.evaluateAll({ ...structuredClone(empty), drills: { d: { revealedAt: at(9, 9), passedAt: at(9, 10) } } }, ctx)['from-scratch']?.value !== 0) fail('from-scratch: a drill passed after revealing the solution was counted');
+if (A.daysOnPace({ '2026-01-01': [0, 0], '2026-01-08': [0, 15] }) !== 0) fail('daysOnPace: a behind entry counted as on pace');
 const evFull = A.evaluateAll(full, ctx);
 for (const a of A.ACHIEVEMENTS) {
   const ev = evFull[a.id];

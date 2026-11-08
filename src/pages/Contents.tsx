@@ -10,7 +10,7 @@ import { companyUnlocked, topicCompletion, topicStatus, type TopicStatus } from 
 import { codeLabLabel } from '../lib/nextStep';
 import { currentlyWrong, weakTopics } from '../lib/weak';
 import { VIZ, vizForSection } from '../viz/registry';
-import type { Topic } from '../types';
+import type { TopicMeta } from '../types';
 
 /** section → has an interactive visualisation (computed once) */
 const VIZ_SECTIONS = new Map(TOPICS.map((t) => [t.id, t.sections.map((s) => vizForSection(t.id, s.heading).length > 0)]));
@@ -51,7 +51,7 @@ function Hl({ text, q }: { text: string; q: string }) {
 }
 
 interface TopicView {
-  topic: Topic;
+  topic: TopicMeta;
   /** section indexes to show */
   sections: number[];
   /** the filter matched individual sections, so list them without being asked */

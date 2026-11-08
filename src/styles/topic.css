@@ -44,16 +44,6 @@
   overflow: hidden;
   isolation: isolate;
 }
-.tp-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: linear-gradient(115deg, transparent 30%, light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.1)) 45%, transparent 60%);
-  background-size: 250% 100%;
-  animation: tp-sheen 7s ease-in-out infinite;
-  pointer-events: none;
-}
 .tp-hero-glow {
   position: absolute;
   inset: 0;
@@ -62,14 +52,6 @@
     radial-gradient(600px 300px at 85% 0%, light-dark(rgb(255 79 163 / 0.14), rgb(255 79 163 / 0.25)), transparent 70%),
     radial-gradient(500px 280px at 10% 100%, light-dark(rgb(34 228 255 / 0.12), rgb(34 228 255 / 0.18)), transparent 70%);
   pointer-events: none;
-}
-@keyframes tp-sheen {
-  from {
-    background-position: 120% 0;
-  }
-  to {
-    background-position: -120% 0;
-  }
 }
 .tp-hero-row {
   position: relative;
@@ -1583,6 +1565,51 @@
   font-size: var(--fs-sm);
   line-height: 1.55;
 }
+/* extra reference blocks (CheatExtra.tsx, C4) */
+.tp-cheat .skel-viz,
+.cheat-extra {
+  margin-top: var(--s-5);
+}
+.cheat-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 14px;
+}
+.cheat-block {
+  min-width: 0;
+  padding: 14px 16px 6px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.cheat-block h3 {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-pulsar);
+}
+.cheat-block .md {
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+.cheat-block .md > :first-child {
+  margin-top: 0;
+}
+.cheat-block .table-wrap {
+  margin: 0.4em 0 0.9em;
+}
+.cheat-block .md th,
+.cheat-block .md td {
+  padding: 7px 10px;
+}
+.cheat-credit {
+  margin: var(--s-4) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
 
 /* exam intro & study lock */
 .exam-intro ul {
@@ -2112,7 +2139,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tp-hero::before,
   .tp-rail-list .current .tp-node::after {
     animation: none !important;
     display: none;
@@ -2237,6 +2263,45 @@
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* M9 typing reveal (TypeReveal.tsx): the ghost holds the final height while the text types over it */
+.plab-bad {
+  position: relative;
+}
+.type-reveal {
+  display: grid;
+}
+.type-reveal > * {
+  grid-area: 1 / 1;
+}
+.type-ghost {
+  visibility: hidden;
+}
+.plab-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: -0.2em;
+  background: #7ef0ff;
+  animation: plab-blink 1s steps(1) infinite;
+}
+@keyframes plab-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.plab-skip {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--c-error);
+  font: 600 var(--fs-xs) var(--mono);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .plab-hints {
   margin-top: var(--s-3);

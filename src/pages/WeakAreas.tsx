@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CircleCheck, Crosshair, RotateCcw, Sparkles } from 'lucide-react';
 import { TOPICS, TOPIC_BY_ID } from '../content';
@@ -6,6 +6,8 @@ import type { Difficulty } from '../types';
 import { useProgress, type Progress } from '../lib/progress';
 import { accuracyBreakdown, currentlyWrong, pct, weakTopics, type Accuracy, type TopicWeakness } from '../lib/weak';
 import { DifficultyBadge } from '../components/ui';
+import { RouteSkeleton } from '../components/RouteSkeleton';
+import { useTopics } from '../lib/useTopic';
 import { Exam } from './Exam';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -111,7 +113,7 @@ function WeakCard({ w, i, maxWrong, featured }: { w: TopicWeakness; i: number; m
         </div>
       </div>
 
-      {(w.sections.length > 0 || w.shakyInterview > 0) && (
+      {(w.sections.length > 0 || w.shakyInterview > 0 || w.shakySteps.length > 0) && (
         <ul className="rev-list diag-sections">
           {w.sections.slice(0, 5).map((ws) => (
             <li key={ws.index}>
@@ -119,6 +121,17 @@ function WeakCard({ w, i, maxWrong, featured }: { w: TopicWeakness; i: number; m
               <span className="rev-heading">{ws.heading}</span>
               <Link to={`/topic/${w.topic.id}?tab=learn&s=${ws.index}`} className="rev-link">
                 Revise §{ws.index + 1} <ArrowRight size={13} aria-hidden />
+              </Link>
+            </li>
+          ))}
+          {w.shakySteps.map((st) => (
+            <li key={`steps-${st.index}`}>
+              <span className="rev-count warn">{st.missed} in steps</span>
+              <span className="rev-heading">
+                §{st.index + 1} {st.heading}: <em>Your turn</em> step{st.missed === 1 ? '' : 's'} needed a hint
+              </span>
+              <Link to={`/topic/${w.topic.id}?tab=learn&s=${st.index}`} className="rev-link">
+                Redo the steps <ArrowRight size={13} aria-hidden />
               </Link>
             </li>
           ))}
@@ -169,7 +182,8 @@ export function WeakAreasPage() {
   const maxWrong = Math.max(1, ...weak.map((w) => w.wrong.length));
   const exam = nextExam(p);
 
-  if (!answered) {
+  // misses in step lessons (M7) count too, before any exam is answered
+  if (!answered && !weak.length) {
     return (
       <div className="page diag">
         <header className="diag-head rise">
@@ -322,9 +336,14 @@ export function PracticePage() {
   const topicId = params.get('topic');
   const topic = topicId ? TOPIC_BY_ID.get(topicId) : undefined;
   // snapshot once so the list doesn't change while answers are being recorded
-  const [questions] = useState(() => (topic ? [topic] : TOPICS).flatMap((t) => currentlyWrong(p, t)));
+  const [wrong] = useState(() =>
+    (topic ? [topic] : TOPICS).map((t) => ({ id: t.id, ids: new Set(currentlyWrong(p, t).map((q) => q.id)) })).filter((w) => w.ids.size > 0),
+  );
+  // the question text lives in the topic bodies
+  const full = useTopics(wrong.map((w) => w.id));
+  const questions = useMemo(() => full?.flatMap((t, i) => t.test.filter((q) => wrong[i].ids.has(q.id))), [full, wrong]);
 
-  if (!questions.length) {
+  if (!wrong.length) {
     const answered = Object.keys(p.mcq).length;
     const exam = topic ? { href: `/topic/${topic.id}?tab=exam`, title: topic.title } : nextExam(p);
     const clear = answered > 0;
@@ -377,6 +396,7 @@ export function PracticePage() {
       </div>
     );
   }
+  if (!questions) return <RouteSkeleton />;
   return (
     <Exam
       key={topicId ?? 'all'}

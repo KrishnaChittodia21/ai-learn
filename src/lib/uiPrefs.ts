@@ -26,6 +26,22 @@ export interface UiPrefs {
   celebrated?: Record<string, true>;
   /** command-palette items picked most recently, newest first */
   recentCommands?: RecentCommand[];
+  /** last Export (ISO), for the gentle backup reminder */
+  lastExportAt?: string;
+  /** when the backup reminder was last dismissed (ISO) */
+  backupNudgeDismissedAt?: string;
+  /** page guides (src/lib/pageGuides.ts) offered, walked or skipped: each is offered once */
+  guidesSeen?: Record<string, true>;
+  /** Read · Steps switch on sections with step lessons (M7); default Read */
+  lessonMode?: 'read' | 'steps';
+  /** Today's tile figures when the learner last left Today (M9): changed tiles count up from these */
+  lastSeenFigures?: Record<string, number>;
+  /** Prompt Lab bad outputs already typed out once (M9), by lab id */
+  revealedBadOutput?: Record<string, true>;
+  /** opt-in 3D: tilt on earned badges (M9; default off) */
+  depthEffects?: boolean;
+  /** underline glossary terms in lessons with a hover definition (C4; default on) */
+  glossaryHovers?: boolean;
 }
 
 const KEY = 'genai-ui-v1';
@@ -44,7 +60,7 @@ function read(): UiPrefs {
 let cache: UiPrefs = read();
 const listeners = new Set<() => void>();
 // written on every navigation/scroll and never rendered reactively
-const QUIET = new Set<string>(['lastLocation', 'lastScroll', 'lastStudyLocation']);
+const QUIET = new Set<string>(['lastLocation', 'lastScroll', 'lastStudyLocation', 'lastSeenFigures', 'revealedBadOutput']);
 
 export function getUiPrefs(): UiPrefs {
   return cache;
@@ -74,6 +90,10 @@ export function dismissTip(id: string) {
   saveUiPrefs({ dismissedTips: { ...cache.dismissedTips, [id]: true } });
 }
 
+export function markGuideSeen(id: string) {
+  if (!cache.guidesSeen?.[id]) saveUiPrefs({ guidesSeen: { ...cache.guidesSeen, [id]: true } });
+}
+
 /** Mark a one-off celebration as shown; returns false if it was shown before. */
 export function claimCelebration(key: string): boolean {
   if (cache.celebrated?.[key]) return false;
@@ -94,4 +114,9 @@ export function stableLocation(loc: string): string {
   if (exam) return `/topic/${exam[1]}?tab=exam`;
   if (loc.startsWith('/practice')) return '/weak-areas';
   return loc;
+}
+
+/** the remembered Read · Steps choice (M7): one for every section with steps, Read by default */
+export function useLessonMode(): ['read' | 'steps', (m: 'read' | 'steps') => void] {
+  return [useUiPrefs().lessonMode ?? 'read', (m) => saveUiPrefs({ lessonMode: m })];
 }

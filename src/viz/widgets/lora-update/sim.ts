@@ -8,7 +8,8 @@
 //   LoRA  = 2 B/param frozen bf16 base + 16 B per adapter param
 //   QLoRA = (0.5 + 0.127/8) B/param NF4 base incl. double-quantised constants + 16 B per adapter param
 //   + 4 GB activations, × 1.1 overhead.
-import { rng, type BaseFrame } from '../../core';
+import type { BaseFrame } from '../../core';
+import { rng } from '../_shared/rng.ts';
 
 export type Targets = 'attn' | 'all';
 export type Precision = '16' | '4';

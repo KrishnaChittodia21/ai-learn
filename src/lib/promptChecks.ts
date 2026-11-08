@@ -1,6 +1,6 @@
 // Prompt Lab grading: offline, deterministic, structural checks on a {system, user} prompt.
 // PURE (type-only imports, no DOM, no React) so node scripts can import it directly with type stripping:
-// scripts/test-prompt-checks.mjs (unit tests) and scripts/validate-content.mjs (starter < pass, model = 100).
+// tests/prompt-checks.test.ts (unit tests) and scripts/validate-content.mjs (starter < pass, model = 100).
 //
 // Semantics (every function tolerates undefined / non-string input and never throws):
 //  - Text matching is case-insensitive, collapses runs of whitespace to one space and is LITERAL

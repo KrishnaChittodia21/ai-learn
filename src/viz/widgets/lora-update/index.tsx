@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import {
   ALPHA_MAX,
   ALPHA_MIN,
@@ -129,6 +130,7 @@ export default function LoraUpdateViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Slider label="rank r" value={r} min={R_MIN} max={R_MAX} onChange={(v) => setParams((p) => ({ ...p, r: v }))} />

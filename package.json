@@ -4,13 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node --no-warnings scripts/gen-topic-index.mjs",
     "dev": "vite",
+    "prebuild": "node --no-warnings scripts/gen-topic-index.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "validate": "node --no-warnings scripts/validate-content.mjs && node --no-warnings scripts/validate-achievements.mjs && node --no-warnings scripts/test-prompt-checks.mjs",
-    "test:prompts": "node --no-warnings scripts/test-prompt-checks.mjs",
-    "project": "node --no-warnings scripts/run-project.mjs"
+    "validate": "node --no-warnings scripts/gen-topic-index.mjs --check && node --no-warnings scripts/validate-content.mjs && node --no-warnings scripts/validate-achievements.mjs && node --no-warnings --test tests/prompt-checks.test.ts",
+    "test": "node --no-warnings --test 'tests/*.test.ts'",
+    "test:prompts": "node --no-warnings --test tests/prompt-checks.test.ts",
+    "project": "node --no-warnings scripts/run-project.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "5.3.0",
@@ -26,7 +30,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.4",
     "react-simple-code-editor": "^0.14.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "sucrase": "^3.35.1"
   },
   "devDependencies": {
     "@types/canvas-confetti": "1.9.0",

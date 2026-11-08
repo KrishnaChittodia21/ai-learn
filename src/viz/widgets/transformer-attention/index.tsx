@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, K, LABELS, Q, SCALED, V, VOCAB, WK, WQ, WV, X, attention, simulate, type Model, type Params, type Stage } from './sim';
 
 const TX = (i: number) => 22 + i * 116;
@@ -132,6 +133,7 @@ export default function TransformerAttentionViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<string>

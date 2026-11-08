@@ -6,7 +6,7 @@ const topic: Topic = {
   order: 6,
   title: 'The Modern Agent Stack',
   subtitle: 'Agent SDKs, computer-use and browser agents, agent-to-agent (A2A) protocol, and reflection loops that actually pay for themselves',
-  estimatedMinutes: 48,
+  estimatedMinutes: 70,
   sources: [
     'Shinn et al. 2023 — Reflexion: Language Agents with Verbal Reinforcement Learning (NeurIPS 2023)',
     'Madaan et al. 2023 — Self-Refine: Iterative Refinement with Self-Feedback',
@@ -19,6 +19,10 @@ const topic: Topic = {
     'Anthropic (2024) — Building effective agents (evaluator–optimizer workflow)',
     'Xie et al. 2024 — OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments',
     'Zhou et al. 2023 — WebArena: A Realistic Web Environment for Building Autonomous Agents',
+    'AutoGen docs — AgentChat and Core (v0.4+); Microsoft — Microsoft Agent Framework announcement (2025)',
+    'CrewAI docs — Agents, Tasks, Processes and Flows',
+    'Mastra docs — Agents, Tools and Workflows; Agno docs — Agents and Teams',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 14 lessons 14, 15 and 18, adapted and rewritten',
   ],
   tags: ['agents', 'agent-sdk', 'computer-use', 'browser-agents', 'a2a', 'mcp', 'reflexion', 'self-critique', 'evaluator-optimizer'],
   cheatSheet: [
@@ -541,6 +545,293 @@ export async function reflexion(task: string, deps: Deps, maxAttempts = 3) {
       },
       source: 'Shinn et al. 2023 (Reflexion); Madaan et al. 2023 (Self-Refine); Huang et al. 2023; Anthropic — Building effective agents',
     },
+    {
+      heading: 'Multi-agent frameworks — AutoGen (and its successor) and CrewAI',
+      body: `**Intuition:** LangGraph asks you to draw the flowchart. **AutoGen** and **CrewAI** start from a different picture: a *team* of agents that talk to each other (AutoGen) or a *crew* of roles working through tasks (CrewAI). You describe who is in the room and how turns pass; the framework runs the conversation.
+
+**AutoGen (Microsoft).** Version 0.4 (early 2025) rebuilt it as an **asynchronous, event-driven actor system**: agents only exchange messages, never share memory, so one agent failing does not crash the others and agents can run in separate processes. Layers:
+- **Core** — the actor runtime (agents, messages, topics, subscriptions).
+- **AgentChat** — the high-level API: \`AssistantAgent\`, and team presets such as \`RoundRobinGroupChat\` (fixed turn order), \`SelectorGroupChat\` (a model picks the next speaker), \`Swarm\` (handoffs), plus the **Magentic-One** generalist team.
+- **Termination conditions** you combine: max messages, a keyword such as "APPROVED", a token budget, a timeout.
+
+In late 2025 Microsoft announced the **Microsoft Agent Framework** as the successor that merges AutoGen's multi-agent ideas with Semantic Kernel's enterprise features; AutoGen itself is kept stable but new work goes there. Treat AutoGen as a good way to learn the patterns and check the successor before starting a new production project.
+
+**CrewAI.** Four nouns:
+- **Agent** — \`role\`, \`goal\`, \`backstory\`, tools, model.
+- **Task** — \`description\`, \`expected_output\` (the contract), the agent, \`context\` (upstream tasks whose output it reads), optionally a Pydantic output model.
+- **Crew** — agents + tasks + a **process**: \`sequential\` (tasks in order) or \`hierarchical\` (a manager model assigns tasks and reviews results — one extra model call per step).
+- **Flows** — event-driven Python code (\`@start\`, \`@listen\`, \`@router\`) with typed state that can call crews inside steps. CrewAI's own guidance for production is: a Flow for the deterministic backbone, crews only where autonomy pays.
+
+**Trade-offs**
+
+| | AutoGen / Agent Framework | CrewAI | LangGraph |
+|---|---|---|---|
+| Mental model | agents exchanging messages | roles doing tasks | explicit state graph |
+| Good at | open-ended group problem solving, research prototypes | content and research pipelines, readable role setups | durable, auditable workflows |
+| Watch out | chats that never terminate; token growth | long backstories bloat prompts; manager overhead | more code up front |
+
+**When to use:** pick these when a *conversation between roles* is the natural shape. If you mostly need retries, approvals and resumable steps, a graph or a durable workflow fits better.`,
+      example: `**Market-brief generator, rebuilt twice.**
+
+*AutoGen \`SelectorGroupChat\`* with researcher, analyst and editor; terminate on "APPROVED" or 20 messages. Quality was good, but 1 run in 12 bounced between analyst and editor until the cap, costing ~3× a normal run.
+
+*CrewAI sequential crew* — research → analysis → edit, each task with an \`expected_output\` and the analysis typed as a Pydantic model. Runs became predictable (always 3 agent turns plus tool calls), and failures showed up as validation errors on one task instead of an endless chat.
+
+*Final shape:* a CrewAI **Flow** that fetches data in plain code, calls the crew for the writing step, and routes to a human when a numeric claim cannot be traced to a source. The group-chat version is kept for exploratory briefs.`,
+      code: [
+        {
+          language: 'python',
+          title: 'AutoGen AgentChat: selector team with combined termination (0.4+ API shape; check current docs)',
+          code: `import asyncio
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import MaxMessageTermination, TextMentionTermination
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+model = OpenAIChatCompletionClient(model="gpt-4o-mini")
+researcher = AssistantAgent("researcher", model_client=model, system_message="Find facts with sources.")
+analyst = AssistantAgent("analyst", model_client=model, system_message="Turn facts into 3 insights.")
+editor = AssistantAgent("editor", model_client=model, system_message="Edit the brief. Say APPROVED when done.")
+
+team = SelectorGroupChat(
+    [researcher, analyst, editor],
+    model_client=model,  # picks the next speaker
+    termination_condition=TextMentionTermination("APPROVED") | MaxMessageTermination(20),
+)
+
+asyncio.run(team.run(task="Brief on EV battery prices this quarter"))`,
+        },
+        {
+          language: 'python',
+          title: 'CrewAI: sequential crew with an expected output per task (check current docs)',
+          code: `from crewai import Agent, Task, Crew, Process
+
+researcher = Agent(role="Researcher", goal="Collect sourced facts", backstory="Careful analyst who cites everything.")
+writer = Agent(role="Writer", goal="Write a 200-word brief", backstory="Clear, plain-English writer.")
+
+research = Task(description="Facts on {topic}, each with a URL.", expected_output="5 bullet facts with URLs", agent=researcher)
+brief = Task(description="Write the brief from the facts.", expected_output="200-word brief citing the URLs",
+             agent=writer, context=[research])
+
+crew = Crew(agents=[researcher, writer], tasks=[research, brief], process=Process.sequential)
+print(crew.kickoff(inputs={"topic": "EV battery prices"}))`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Role and team abstractions make multi-agent prototypes quick to write and easy to read.',
+          'AutoGen\'s actor model isolates failures and can distribute agents across processes.',
+          'CrewAI\'s expected_output and typed task outputs give each step a clear contract.',
+        ],
+        cons: [
+          { con: 'Free-form group chats can loop or never reach a conclusion.', fix: 'Always combine a success condition with hard caps (messages, tokens, time), and prefer a fixed order or a flow when the steps are known.' },
+          { con: 'Hierarchical managers and long backstories multiply tokens per step.', fix: 'Use the sequential process unless routing truly depends on results, and keep backstories short and shared.' },
+          { con: 'Fast-moving APIs and a product in maintenance mode create migration risk.', fix: 'Pin versions, keep tools and prompts as plain functions and files, and check the Microsoft Agent Framework before starting new AutoGen work.' },
+        ],
+      },
+      keyPoints: [
+        'AutoGen 0.4+: async actor model; AgentChat teams (round-robin, selector, swarm, Magentic-One).',
+        'Always pair a success condition with hard termination caps.',
+        'Microsoft Agent Framework is the announced successor to AutoGen.',
+        'CrewAI: Agent (role/goal/backstory), Task (expected_output), Crew (sequential or hierarchical), Flows.',
+        'Choose by shape: conversation between roles vs explicit, durable workflow.',
+      ],
+      exercise: {
+        prompt: `Write a framework-free **selector group chat**: \`runTeam(agents, pickNext, task, opts)\`.
+
+**Acceptance:**
+- \`agents\` is a record of name → \`(history) => Promise<string>\`; \`pickNext(history)\` returns the next agent name.
+- Stop when a reply contains \`opts.stopWord\` (reason \`'done'\`), after \`opts.maxMessages\` replies (\`'max-messages'\`), or when \`pickNext\` names an unknown agent (\`'bad-speaker'\`).
+- Return \`{ history, reason }\`; history entries are \`{ speaker, text }\` and start with the user task.`,
+        hints: [
+          'Push the task as { speaker: "user", text: task } first.',
+          'Check the stop word after each reply, and the message cap at the top of the loop.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Msg = { speaker: string; text: string };
+type AgentFn = (h: Msg[]) => Promise<string>;
+
+export async function runTeam(
+  agents: Record<string, AgentFn>,
+  pickNext: (h: Msg[]) => Promise<string>,
+  task: string,
+  opts = { stopWord: 'APPROVED', maxMessages: 12 },
+) {
+  const history: Msg[] = [{ speaker: 'user', text: task }];
+  for (let n = 0; n < opts.maxMessages; n++) {
+    const name = await pickNext(history);
+    const agent = agents[name];
+    if (!agent) return { history, reason: 'bad-speaker' as const };
+    const text = await agent(history);
+    history.push({ speaker: name, text });
+    if (text.includes(opts.stopWord)) return { history, reason: 'done' as const };
+  }
+  return { history, reason: 'max-messages' as const };
+}`,
+        },
+        explanation:
+          'This is the core of SelectorGroupChat-style teams: a speaker-selection step, a shared transcript and termination checks. Writing it once makes it obvious why a hard cap is needed — nothing else guarantees the chat ends — and why the stop reason should be recorded for evals.',
+      },
+      quickCheck: {
+        question: 'A CrewAI crew with five fixed steps switched from the sequential to the hierarchical process. Quality is the same but cost rose sharply. Why?',
+        options: [
+          'Hierarchical mode disables tool calls',
+          'A manager model is called to assign and review each step, adding calls and context on top of the specialists',
+          'Sequential mode caches all prompts automatically',
+          'Hierarchical mode runs every task twice for voting',
+        ],
+        correct: 1,
+        explanation:
+          'The hierarchical process adds a manager agent that plans, delegates and checks work. That only pays off when the next step depends on results; for a fixed order, sequential is cheaper and more predictable.',
+      },
+      source: 'AutoGen docs (v0.4+ AgentChat and Core); Microsoft Agent Framework announcement (2025); CrewAI docs — Agents, Tasks, Processes, Flows',
+    },
+    {
+      heading: 'TypeScript and Python agent runtimes — Mastra, Agno and choosing a framework',
+      body: `**Intuition:** most teams do not need a new way to think about agents; they need agents that fit the stack they already ship. **Mastra** and **Agno** compete on that: good defaults for agents, tools, memory and workflows in TypeScript and Python respectively.
+
+**Mastra (TypeScript).** Built by the team behind Gatsby, on top of the **Vercel AI SDK** model layer, so any AI SDK provider works.
+- **Agents** — \`new Agent({ name, instructions, model, tools, memory })\`.
+- **Tools** — \`createTool\` with **Zod** input/output schemas.
+- **Workflows** — typed steps chained with \`.then()\`, branching and parallel steps, and suspend/resume for human approval.
+- Memory, RAG helpers, evals, tracing, and a local dev UI to chat with agents and replay workflow runs. Deploys into Node servers and serverless or Next.js apps.
+
+**Agno (Python, formerly Phidata).** A lightweight agent library: \`Agent(model=..., tools=[...], instructions=...)\`, **teams** of agents, memory and knowledge (RAG) built in, multimodal inputs, and a runtime to serve agents behind an API. Its pitch is low per-agent overhead and plain Python with no graph DSL.
+
+**Picking a framework — ask in this order:**
+1. **Do you need one at all?** One model, a few tools, no handoffs → a hand-written loop (section 1).
+2. **Language and deploy target.** TypeScript on Vercel/Node → Vercel AI SDK or Mastra. Python services → Agno, provider SDKs, LangGraph or CrewAI.
+3. **Control-flow shape.** Explicit, durable branching with checkpoints and human approval → LangGraph or a durable workflow engine. Role conversations → AutoGen/Agent Framework or CrewAI. A mostly linear tool loop → provider SDK, Mastra or Agno.
+4. **Provider coupling.** OpenAI Agents SDK and Claude Agent SDK give the best fit for their models and hosted tools; multi-provider shops want a neutral layer.
+5. **Operations.** Tracing (OpenTelemetry export), evals, version churn, licence and who maintains it.
+
+**A habit that makes any choice reversible:** tools are plain typed functions, prompts live in your repo, and evals run on your own dataset, outside the framework. Then switching runtimes is a week, not a rewrite.
+
+**Do not pick on micro-benchmarks.** Framework overhead (microseconds to milliseconds) is invisible next to model calls of hundreds of milliseconds to seconds; pick on control flow, language fit and operability.`,
+      example: `**Two teams, same product (a support agent with refunds and approvals).**
+
+| Need | Web team (TS, Next.js on Vercel) | Platform team (Python, FastAPI) |
+|---|---|---|
+| Agent + tools | Mastra agent, Zod tools | Agno agent, typed Python tools |
+| Refund approval | Mastra workflow step that suspends until a manager approves, then resumes | LangGraph node with interrupt + Postgres checkpointer |
+| Tracing | OpenTelemetry export to the shared backend | OpenTelemetry export to the shared backend |
+| Evals | same JSON eval set, run by a framework-independent script | same eval set |
+
+Both shipped in three weeks. When the web team later moved the agent to a backend service, the tools and evals moved unchanged; only about 150 lines of Mastra wiring were rewritten.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Mastra: an agent with a Zod-typed tool (API shape; check current docs)',
+          code: `import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const lookupOrder = createTool({
+  id: 'lookup-order',
+  description: 'Get an order by id. Use before any refund question.',
+  inputSchema: z.object({ orderId: z.string() }),
+  outputSchema: z.object({ status: z.string(), total: z.number() }),
+  execute: async ({ context }) => db.orders.get(context.orderId), // db = your data layer
+});
+
+export const support = new Agent({
+  name: 'support',
+  instructions: 'Answer order questions. Never promise refunds; hand off to the refund workflow.',
+  model: openai('gpt-4o-mini'),
+  tools: { lookupOrder },
+});
+
+// const res = await support.generate('Where is order 812?');`,
+        },
+        {
+          language: 'python',
+          title: 'Agno: the same agent in Python (API shape; check current docs)',
+          code: `from agno.agent import Agent
+from agno.models.openai import OpenAIChat
+
+def lookup_order(order_id: str) -> dict:
+    """Get an order by id. Use before any refund question."""
+    return db.orders.get(order_id)  # db = your data layer
+
+support = Agent(
+    model=OpenAIChat(id="gpt-4o-mini"),
+    tools=[lookup_order],
+    instructions="Answer order questions. Never promise refunds; hand off to the refund workflow.",
+)
+
+support.print_response("Where is order 812?")`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Fits the team\'s language and deploy target, so agents ship like any other service.',
+          'Batteries included: typed tools, memory, workflows, tracing and a local dev UI.',
+          'Thin enough that business logic stays in plain functions.',
+        ],
+        cons: [
+          { con: 'Young frameworks change APIs often.', fix: 'Pin versions, wrap the framework behind a small runAgent interface, and keep a framework-independent eval suite to catch regressions on upgrade.' },
+          { con: 'Lock-in to one ecosystem (for example Vercel-centred tooling).', fix: 'Keep tools, prompts and evals outside the framework and export traces with OpenTelemetry so you can move runtimes.' },
+          { con: 'Built-in workflows may not give the durability guarantees a long-running process needs.', fix: 'Check how suspend/resume is persisted; for multi-hour or multi-day processes use a durable workflow engine or LangGraph with a database checkpointer.' },
+        ],
+      },
+      keyPoints: [
+        'Mastra: TypeScript agents, Zod tools, workflows with suspend/resume, on the Vercel AI SDK.',
+        'Agno (ex-Phidata): lightweight Python agents, teams, memory and knowledge.',
+        'Choose by: need at all → language → control-flow shape → provider coupling → operations.',
+        'Framework overhead is negligible next to model latency; do not choose on it.',
+        'Keep tools, prompts and evals outside the framework.',
+      ],
+      exercise: {
+        prompt: `Write **\`rankFrameworks(weights, ratings)\`** — a weighted decision matrix for a framework choice.
+
+**Acceptance:**
+- \`weights\`: criterion → weight (any non-negative numbers); \`ratings\`: framework → criterion → score 1–5.
+- A missing rating counts as 0 for that criterion.
+- Return frameworks sorted by weighted score (normalised by the sum of weights, rounded to 2 decimals), highest first; ties sorted by name.
+- Throw if all weights are 0.`,
+        hints: [
+          'Compute the weight sum once and divide each framework\'s total by it.',
+          'Use localeCompare as the tie-breaker in sort.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Scores = Record<string, number>;
+
+export function rankFrameworks(weights: Scores, ratings: Record<string, Scores>) {
+  const total = Object.values(weights).reduce((s, w) => s + w, 0);
+  if (total <= 0) throw new Error('at least one weight must be positive');
+  return Object.entries(ratings)
+    .map(([name, r]) => ({
+      name,
+      score: Math.round((Object.entries(weights).reduce((s, [c, w]) => s + w * (r[c] ?? 0), 0) / total) * 100) / 100,
+    }))
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+}
+
+console.log(rankFrameworks(
+  { typescript: 3, durability: 2, multiProvider: 1 },
+  { mastra: { typescript: 5, durability: 3, multiProvider: 5 }, langgraph: { typescript: 3, durability: 5, multiProvider: 4 }, agno: { typescript: 1, durability: 3, multiProvider: 4 } },
+)); // mastra 4.33, langgraph 3.83, agno 2.17`,
+        },
+        explanation:
+          'Writing the weights down forces the team to agree on what matters (language fit, durability, provider freedom) before arguing about tools. The ranking is only as good as the ratings, so back each score with a short spike on the real use case.',
+      },
+      quickCheck: {
+        question: 'A Python team needs a support agent whose refund step may wait two days for a manager, then resume after deploys and restarts. Which choice fits best?',
+        options: [
+          'Agno alone, because it has the lowest per-agent overhead',
+          'A Python agent (any lightweight runtime) with the approval step in LangGraph or a durable workflow engine backed by a database',
+          'Mastra, because it is the newest framework',
+          'An AutoGen round-robin chat that keeps the conversation open for two days',
+        ],
+        correct: 1,
+        explanation:
+          'The deciding requirement is durable suspend/resume across restarts, not language overhead or novelty. Keep the agent simple and put the long wait in something that persists state to a database.',
+      },
+      source: 'Mastra docs — Agents, Tools, Workflows; Agno docs — Agents and Teams; Vercel AI SDK docs',
+    },
   ],
   codeChallenges: [
     {
@@ -974,6 +1265,39 @@ The goal is that even a fully hijacked model cannot spend money or leak data wit
         'No regression suite for injections',
       ],
     },
+    {
+      id: 'mas-iq-6',
+      difficulty: 'medium',
+      question: 'Your company is choosing between LangGraph, CrewAI, AutoGen (or its successor, Microsoft Agent Framework) and Mastra for three planned agent products. How do you run the decision?',
+      context: 'Products: (1) a TypeScript in-app assistant on Next.js, (2) a Python research-report generator with several specialist roles, (3) a Python claims workflow that waits for adjusters for days. Teams want one framework "for consistency".',
+      whatInterviewerLooksFor: [
+        'Matches framework shape to each product\'s control flow instead of forcing one choice',
+        'Knows what each framework is built around (graph, roles/tasks, actor messages, TS agents/workflows)',
+        'Flags durability, maintenance status and lock-in',
+        'Proposes a time-boxed spike with framework-independent evals',
+      ],
+      modelAnswer: `I would challenge "one framework for everything" first: the three products have different shapes, and consistency matters more for **tools, tracing and evals** than for the orchestration library.
+
+**Product 1 (TS assistant on Next.js):** a linear tool loop with streaming UI. Vercel AI SDK or **Mastra** (agents, Zod tools, workflows, built on the AI SDK) fits the stack; a Python framework would mean a second service for no gain.
+
+**Product 2 (research report with roles):** the natural shape is roles handing work along. **CrewAI** (sequential crew, typed task outputs, wrapped in a Flow) or an AutoGen-style team fits. I would check AutoGen's status — Microsoft has announced the Agent Framework as its successor — before starting new work on it.
+
+**Product 3 (claims workflow that waits days):** durability decides it. **LangGraph** with a Postgres checkpointer and interrupts, or a durable workflow engine, so a run survives deploys and resumes exactly at the approval step.
+
+**Common layer, regardless of framework:** tools as plain typed functions behind our own interfaces, prompts in the repo, OpenTelemetry traces to one backend, and a framework-independent eval set per product.
+
+**Process:** a one-week spike per product on its hardest flow (refund approval, report with citations, multi-day wait), scored on code size, trace quality, failure handling and upgrade risk, with pinned versions.`,
+      followUps: [
+        { q: 'Leadership insists on exactly one framework. Which would you pick and what do you give up?', a: 'Probably LangGraph (it has TS and Python versions and handles the durable case), accepting more boilerplate for the simple assistant and hand-modelling the role conversation as graph nodes.' },
+        { q: 'How do you keep the choice reversible?', a: 'Tools, prompts and evals live outside the framework; a thin runAgent adapter is the only framework-specific code; traces use OpenTelemetry so dashboards survive a switch.' },
+      ],
+      pitfalls: [
+        'Choosing on GitHub stars or micro-benchmarks of framework overhead',
+        'Ignoring that AutoGen is being succeeded by Microsoft Agent Framework',
+        'Using a chat-style multi-agent framework for a process that must survive restarts for days',
+        'Coupling business logic to framework classes',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1276,6 +1600,59 @@ return draft;`,
       correct: [0, 1, 3],
       explanation: 'Capability separation, structured hand-offs and code-enforced confirmations limit what a hijacked model can do. Prompt instructions help, but removing the human confirmation trades away the one control an injection cannot talk past.',
       followUps: [{ q: 'What is the "lethal combination" to avoid in one context?', a: 'Untrusted input, access to private data and a channel to act externally (spend, send or exfiltrate). Breaking any one of the three sharply limits injection impact.' }],
+    },
+    {
+      id: 'mas-q16',
+      difficulty: 'medium',
+      question: 'What problem can this AutoGen team configuration cause in production?',
+      code: {
+        language: 'python',
+        code: `team = SelectorGroupChat(
+    [researcher, analyst, editor],
+    model_client=model,
+    termination_condition=TextMentionTermination("APPROVED"),
+)`,
+      },
+      options: [
+        'The selector cannot choose between three agents',
+        'If the editor never writes APPROVED, the chat has no hard stop and can run up cost indefinitely',
+        'TextMentionTermination only works with round-robin teams',
+        'SelectorGroupChat requires every agent to use a different model',
+      ],
+      correct: [1],
+      explanation:
+        'A success keyword is not a cap. Combine it with MaxMessageTermination, a token budget or a timeout (conditions can be OR-ed) so a disagreement loop ends and the stop reason is recorded.',
+      followUps: [{ q: 'What should happen when the cap is hit instead of APPROVED?', a: 'Return the best draft marked as not approved with the stop reason, and route it to a human or a retry policy rather than presenting it as finished.' }],
+    },
+    {
+      id: 'mas-q17',
+      difficulty: 'hard',
+      question: 'Which statements about AutoGen 0.4+ and CrewAI are accurate? Select ALL that apply.',
+      options: [
+        'AutoGen 0.4 is built on an asynchronous actor model where agents communicate by messages',
+        'CrewAI tasks declare an expected_output that acts as the contract for that step',
+        'CrewAI\'s hierarchical process adds a manager agent that assigns and reviews work',
+        'Both frameworks persist every step to a database by default so runs resume after a crash',
+      ],
+      correct: [0, 1, 2],
+      explanation:
+        'AutoGen 0.4 moved to event-driven actors; CrewAI tasks carry an expected_output and the hierarchical process uses a manager model. Durable, crash-resumable execution is not the default in either; that needs explicit state persistence or a durable workflow engine.',
+      followUps: [{ q: 'Where does CrewAI recommend putting deterministic control flow?', a: 'In Flows: event-driven Python steps with typed state that can call crews where autonomy helps, giving a testable backbone around the agentic parts.' }],
+    },
+    {
+      id: 'mas-q18',
+      difficulty: 'medium',
+      question: 'A team building a TypeScript product on Next.js wants typed tools, workflows with human-approval suspend and resume, and any model provider. Which framework is the most natural first candidate?',
+      options: [
+        'Agno',
+        'Mastra',
+        'CrewAI',
+        'AutoGen Core',
+      ],
+      correct: [1],
+      explanation:
+        'Mastra is TypeScript-first, uses Zod-typed tools, has workflows with suspend and resume, and sits on the Vercel AI SDK provider layer. Agno, CrewAI and AutoGen are primarily Python, which would add a second service.',
+      followUps: [{ q: 'What would you verify in a spike before committing?', a: 'How suspended workflow state is persisted across deploys, how traces export (OpenTelemetry), and how often the APIs have changed between recent releases.' }],
     },
   ],
 };

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, GENERATED, GPU_GB, MODELS, PROMPT, SEQ_LENS, fmtBytes, fmtFlops, kvBytesPerToken, simulate, type Params, type Preset } from './sim';
 
 const CW = 30;
@@ -36,6 +37,7 @@ export default function KvCacheViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<Preset>

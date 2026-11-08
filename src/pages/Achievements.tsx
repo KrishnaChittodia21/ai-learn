@@ -18,6 +18,7 @@ import {
 } from '../content/achievements';
 import { badgeLabel, formatEarnedDate, shortEarnedDate, useAchievementEvaluations } from '../lib/achievements';
 import { useProgress } from '../lib/progress';
+import { HeadingReveal } from '../components/HeadingReveal';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -98,8 +99,8 @@ export default function AchievementsPage() {
         <p className="ach-kicker rise d1">
           Achievements · {ACHIEVEMENT_TOTAL} badges · {GROUPS.length} groups · {TIERS.length} tiers
         </p>
-        <h1 className="ach-title rise d2">
-          <span className="gtext">Your trophy sky</span>
+        <h1 className="ach-title">
+          <HeadingReveal text="Your trophy sky" />
         </h1>
         <p className="ach-lead rise d3">
           Badges for the milestones along the way. Tiered ones climb from <b className="ach-to ach-bronze">bronze</b> through{' '}
@@ -166,7 +167,7 @@ export default function AchievementsPage() {
       </header>
 
       <div className="ach-top">
-        {/* ---------- closest next: the one spinning-border card on this screen ---------- */}
+        {/* ---------- closest next: the aurora-border card on this screen ---------- */}
         <div className="gborder ach-next-border rise d3">
           <section className="gborder-in ach-next" aria-labelledby="ach-next-t">
             {next ? (

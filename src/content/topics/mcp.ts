@@ -32,6 +32,71 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Model Context Protocol (MCP) — hosts, clients, servers and JSON-RPC',
+      short: {
+        id: 'mcp-in-90-seconds',
+        title: 'MCP in 90 seconds',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: '5 apps, 10 tools',
+            head: 'From custom glue to *one protocol*',
+            rungs: [{ label: 'Without MCP: 5 × 10', amount: 50 }, { label: 'With MCP: 5 + 10', amount: 15 }],
+            unit: 'integrations',
+            sub: 'Each tool ships **one server**; each app implements **one client**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Architecture',
+            head: 'Host, client, *server*',
+            steps: [
+              'Host: the AI app; owns the LLM and consent',
+              'Client: one per server',
+              'Server: wraps GitHub, Postgres, Jira…',
+              'All messages are JSON-RPC 2.0',
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'Primitives',
+            head: 'Three primitives, *three owners*',
+            steps: ['Tools: the model decides to call', 'Resources: the app decides to attach', 'Prompts: the user picks from a menu'],
+          },
+          {
+            type: 'counter',
+            kicker: 'tools/list',
+            value: 26,
+            unit: 'tools from a GitHub server, create_issue among them',
+            sub: 'Each tool comes with a **JSON Schema** for its arguments.',
+          },
+          {
+            type: 'flow',
+            kicker: '"Open an issue for the flaky login test"',
+            head: 'One request, *end to end*',
+            steps: [
+              'Client calls tools/list',
+              'The model picks create_issue',
+              'The host asks the user to confirm',
+              'Client sends tools/call',
+              'Server creates the issue',
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'In MCP, who decides when a *tool* is called?',
+            answer: 0,
+            options: [
+              { text: 'The model', why: 'Tools are model-controlled; resources are app-controlled and prompts user-controlled.' },
+              { text: 'The user, from a slash-command menu', why: 'That is a prompt, the user-controlled primitive.' },
+              { text: 'The server, on its own schedule', why: 'Servers expose capabilities; they do not decide when the model uses them.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'MCP turns N × M integrations into *N + M*.',
+          sub: 'Each tool ships **one server**, each app one client, and they speak JSON-RPC 2.0.',
+        },
+      },
       body: `**Intuition:** MCP is "USB-C for AI apps". Before it, every app (Claude Desktop, Cursor, your agent) needed custom glue for every tool (GitHub, Jira, Postgres): N × M integrations. With MCP, each tool ships one **server** and each app implements one **client**: N + M.
 
 **Architecture**

@@ -538,7 +538,7 @@
 }
 [cmdk-item] {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s-3);
   padding: 9px var(--s-3);
   border: 1px solid transparent;
@@ -606,6 +606,83 @@
 }
 .cmdk-foot-note {
   margin-left: auto;
+}
+/* M9: type icon per row, Continue row, preview pane (≥ 720 px). Selection is instant: it tracks the keyboard. */
+.cmdk-ico {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--tint-2);
+  color: var(--text-2);
+}
+.cmdk-ico.ico-topic {
+  background: color-mix(in srgb, var(--c-ion) 18%, transparent);
+  color: var(--c-ion);
+}
+.cmdk-ico.ico-short {
+  background: color-mix(in srgb, var(--c-pulsar) 18%, transparent);
+  color: var(--c-pulsar);
+}
+.cmdk-ico.ico-prompt-lab {
+  background: color-mix(in srgb, var(--c-solar) 18%, transparent);
+  color: var(--c-solar);
+}
+.cmdk-ico.ico-next {
+  background: var(--grad-action);
+  color: var(--accent-text);
+}
+.cmdk-prev {
+  display: none;
+}
+@media (min-width: 720px) {
+  .cmdk-panel {
+    width: min(780px, 100%);
+  }
+  .cmdk-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  }
+  .cmdk-prev {
+    display: block;
+    min-width: 0;
+    padding: var(--s-4);
+    border-left: 1px solid var(--border);
+    font-size: var(--fs-sm);
+  }
+  .cmdk-prev h3 {
+    margin: 2px 0 0;
+    font-size: var(--fs-md);
+    overflow-wrap: anywhere;
+  }
+  .cmdk-prev-bar {
+    height: 6px;
+    margin: 12px 0 6px;
+    border-radius: 99px;
+    background: var(--tint-2);
+    overflow: hidden;
+  }
+  .cmdk-prev-bar span {
+    display: block;
+    height: 100%;
+    background: var(--grad-ion);
+    transform-origin: left;
+  }
+  .cmdk-prev-secs {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--text-2);
+  }
+  .cmdk-prev-secs li {
+    padding: 3px 0;
+  }
+  .cmdk-prev-secs li.done {
+    color: var(--muted);
+    text-decoration: line-through;
+  }
 }
 
 @media (max-width: 600px) {

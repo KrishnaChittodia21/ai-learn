@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, SCENARIOS, simulate, type EntryKind, type GraderMode, type Params, type ScenarioId, type Verdict } from './sim';
 
 const KIND: Record<EntryKind, { label: string; fill: string; stroke: string }> = {
@@ -50,6 +51,7 @@ export default function AgentTrajectoryEvalViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<ScenarioId>

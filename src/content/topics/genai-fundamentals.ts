@@ -217,6 +217,64 @@ for (const t of tasks) console.log(t.name, '=>', shouldUseLLM(t));
     // ---------------------------------------------------------------- 2
     {
       heading: 'LLM Fundamentals — tokens, next-token prediction, context windows and sampling',
+      short: {
+        id: 'how-an-llm-picks-the-next-word',
+        title: 'How an LLM picks the next word',
+        beats: [
+          {
+            type: 'tokens',
+            kicker: 'One step of generation',
+            head: 'Every word is a *probability* pick',
+            prompt: 'The capital of France is',
+            picks: [{ token: ' Paris', p: 0.8 }, { token: ' a', p: 0.1 }, { token: ' located', p: 0.06 }, { token: ' the', p: 0.04 }],
+            sub: 'The model scores **every token** it knows, then picks one. Here at temperature 1.0.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Tokens, not words',
+            value: 4,
+            unit: 'characters per token, roughly',
+            sub: '**1,000 words ≈ 1,350 tokens.** Price, limits and speed are all counted in tokens.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Then it loops',
+            head: 'Autocomplete, *one token at a time*',
+            steps: ['Read every token so far', 'Score every possible next token', 'Pick one', 'Append it, repeat until stop or max_tokens'],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Temperature',
+            head: 'Lower temperature, *sharper* pick',
+            rungs: [{ label: 'T = 0.5', amount: 98 }, { label: 'T = 1.0', amount: 80 }, { label: 'T = 2.0', amount: 54 }],
+            unit: '% Paris',
+            sub: 'Low temperature squashes the tail; high temperature lets **odd continuations** in.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'No memory between calls',
+            head: 'A chat *resends everything* each turn',
+            rungs: [{ label: 'Turn 1', amount: 300 }, { label: 'Turn 10', amount: 3000 }, { label: 'Turn 20', amount: 6000 }],
+            unit: 'tokens sent',
+            sub: 'About 300 tokens a turn. The model is **stateless**, so long chats cost more and finally overflow the window.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A classifier must give the same label every time. Which setting?',
+            answer: 0,
+            options: [
+              { text: 'Temperature near 0', why: 'Low temperature sharpens the distribution, so the top token wins almost every time.' },
+              { text: 'Temperature 2.0', why: 'That flattens the distribution and lets unlikely tokens in.' },
+              { text: 'A larger max_tokens', why: 'That only caps the length; it does not change which token is picked.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'An LLM is *autocomplete* in a loop.',
+          sub: 'Predict a distribution, **pick one token**, append, repeat. Temperature and top-p shape the pick.',
+        },
+      },
       body: `**Intuition:** an LLM is autocomplete on a planetary scale. It reads your text as **tokens** (word pieces), predicts a probability for every possible next token, picks one, appends it, and repeats until it emits a stop token or hits \`max_tokens\`.
 
 **How it got smart.** (1) *Pre-training*: predict the next token over trillions of tokens of web, books and code → learns grammar, facts and reasoning patterns. (2) *Instruction tuning (SFT)*: train on prompt→ideal-answer pairs so it follows instructions. (3) *Preference tuning (RLHF/DPO)*: humans or AI rank answers so it becomes helpful and safe. Newer *reasoning* models add RL that rewards correct step-by-step thinking.

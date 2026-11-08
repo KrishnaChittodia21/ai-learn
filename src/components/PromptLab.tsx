@@ -9,6 +9,8 @@ import { markPromptRevealed, recordPromptScore, setPromptDraft, useProgress } fr
 import { celebrate } from '../lib/celebrate';
 import { Badge, FollowUps, Markdown } from './ui';
 import { CountUp } from './CountUp';
+import { TypeReveal } from './TypeReveal';
+import { SaveButton } from './SaveButton';
 
 // react-simple-code-editor is CommonJS; the default import is either the component or a module wrapping it.
 const Editor = ((EditorModule as unknown as { default?: typeof EditorModule }).default ?? EditorModule) as typeof EditorModule;
@@ -36,8 +38,8 @@ function highlightPrompt(text: string): string {
   return out + escapeHtml(text.slice(last));
 }
 
-/** The Prompt Lab tab: every lab of the topic. The first unsolved lab's scorecard gets the spinning border. */
-export function PromptLabTab({ labs }: { labs: PromptLab[] }) {
+/** The Prompt Lab tab: every lab of the topic. The first unsolved lab's scorecard gets the aurora border. */
+export function PromptLabTab({ labs, topicId }: { labs: PromptLab[]; topicId: string }) {
   const p = useProgress();
   const firstOpen = labs.find((l) => !p.promptLabs?.[l.id]?.solvedAt)?.id;
   return (
@@ -47,13 +49,13 @@ export function PromptLabTab({ labs }: { labs: PromptLab[] }) {
         <code className="inline-code">{'{{variables}}'}</code> are placeholders your app fills in at runtime.
       </p>
       {labs.map((lab, i) => (
-        <PromptLabCard key={lab.id} lab={lab} n={i + 1} spotlight={lab.id === firstOpen} />
+        <PromptLabCard key={lab.id} lab={lab} n={i + 1} spotlight={lab.id === firstOpen} topicId={topicId} />
       ))}
     </div>
   );
 }
 
-function PromptLabCard({ lab, n, spotlight }: { lab: PromptLab; n: number; spotlight: boolean }) {
+function PromptLabCard({ lab, n, spotlight, topicId }: { lab: PromptLab; n: number; spotlight: boolean; topicId: string }) {
   const p = useProgress();
   const uid = useId();
   const reduce = useReducedMotion();
@@ -108,7 +110,7 @@ function PromptLabCard({ lab, n, spotlight }: { lab: PromptLab; n: number; spotl
   const scoreId = `${uid}-score`;
 
   return (
-    <article className={`plab ${solved ? 'is-solved' : ''}`} aria-labelledby={`${uid}-title`}>
+    <article id={`pl-${lab.id}`} className={`plab ${solved ? 'is-solved' : ''}`} aria-labelledby={`${uid}-title`}>
       <header className="plab-head">
         <div className="plab-head-text">
           <div className="tp-card-no">
@@ -119,6 +121,7 @@ function PromptLabCard({ lab, n, spotlight }: { lab: PromptLab; n: number; spotl
         <div className="plab-head-meta">
           {rec && rec.best > 0 && <span className="plab-best">best {rec.best}</span>}
           {solved ? <Badge tone="good">Solved</Badge> : revealed ? <Badge tone="ion">Answer revealed</Badge> : null}
+          <SaveButton kind="prompt-lab" refId={lab.id} topicId={topicId} title={lab.title} compact />
         </div>
       </header>
 
@@ -132,7 +135,7 @@ function PromptLabCard({ lab, n, spotlight }: { lab: PromptLab; n: number; spotl
               <figcaption>
                 <ShieldAlert size={14} aria-hidden /> What the weak prompt produced
               </figcaption>
-              <pre>{lab.sampleBadOutput}</pre>
+              <TypeReveal id={lab.id} text={lab.sampleBadOutput} />
             </figure>
           )}
           <div className="task">
@@ -354,7 +357,8 @@ function ScoreRing({ score, passScore, passed }: { score: number; passScore: num
       <div className="plab-ring-mark" />
       <div className="plab-ring-label">
         <div className="plab-ring-num">
-          <CountUp value={score} />
+          {/* 0.7 s for the first grade, then 0.18 s so the number keeps up with typing */}
+          <CountUp value={score} duration={0.7} then={0.18} />
         </div>
         <div className="plab-ring-cap">/ 100</div>
       </div>

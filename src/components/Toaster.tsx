@@ -28,10 +28,22 @@ export function Toaster() {
                 <Icon size={16} />
               </span>
               <div className="toast-body">
-                <span className="toast-kicker">{KICKER[t.tone]}</span>
+                <span className="toast-kicker">{t.kicker ?? KICKER[t.tone]}</span>
                 <strong className="toast-title">{t.title}</strong>
                 {t.detail && <span className="toast-detail">{t.detail}</span>}
               </div>
+              {t.action && (
+                <button
+                  type="button"
+                  className="btn btn-xs toast-action"
+                  onClick={() => {
+                    t.action!.run();
+                    dismissToast(t.id);
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
               <button type="button" className="btn-ghost btn-icon toast-close" aria-label="Dismiss" onClick={() => dismissToast(t.id)}>
                 <X size={15} aria-hidden />
               </button>

@@ -20,8 +20,16 @@
 //  mcq        per exam-question outcome (wrong count, lastCorrect, lastAt ISO)
 //  activityDays  local YYYY-MM-DD study days (last 120)
 //  promptLabs    Prompt Lab records (solvedAt / revealedAt ISO stamps per lab id)
-import type { Level, PhaseId, Topic } from '../types';
+//  shorts        Shorts watched (watchedAt ISO per Short id; the quiz is answered on the way to the end card)
+//  saved         Saved-for-later items (☆ Save), done or not
+//  studyPlan.log end-of-day [covered, expected] minutes while a study plan runs (M6)
+//  steps         sections finished in Steps view, by `<topic id>:<section index>` (M7)
+//  drills        from-scratch drills: passedAt / revealedAt ISO stamps per drill id (C4)
+//  (paths)       learning paths by role (src/content/roles.ts) whose topic exams are all passed (C4)
+import type { Level, PhaseId, TopicMeta } from '../types';
 import type { Progress } from '../lib/progress';
+// roles.ts is pure data (type-only imports), so plain node checks can still load this file
+import { pathsCertified, ROLES } from './roles.ts';
 
 export type Tier = 'bronze' | 'silver' | 'gold' | 'diamond';
 /** 'standard' is the only step of a single-step badge */
@@ -39,13 +47,13 @@ export interface StoredAchievement {
 export type AchievementGroupId = 'start' | 'content' | 'practice' | 'understanding' | 'consistency' | 'fun';
 
 export interface AchievementContext {
-  topics: Topic[];
+  topics: TopicMeta[];
   phases: { id: PhaseId; number: number; title: string; level: Level }[];
-  topicsByPhase: Map<PhaseId, Topic[]>;
-  topicsByLevel: Map<Level, Topic[]>;
+  topicsByPhase: Map<PhaseId, TopicMeta[]>;
+  topicsByLevel: Map<Level, TopicMeta[]>;
   /** architecture challenge ids */
   challenges: string[];
-  totals: { sections: number; exercises: number; quickChecks: number; codeLab: number; boe: number; iq: number; promptLabs: number };
+  totals: { sections: number; exercises: number; quickChecks: number; codeLab: number; boe: number; iq: number; promptLabs: number; stepLessons: number };
 }
 
 type Goal = number | ((ctx: AchievementContext) => number);
@@ -107,10 +115,10 @@ export const GROUPS: { id: AchievementGroupId; title: string; blurb: string }[] 
 const isPassed = (p: Progress, topicId: string) => !!p.tests[topicId]?.passedAt;
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 const time = (iso: string | undefined) => (iso ? Date.parse(iso) : NaN);
-const sumTopics = (ctx: AchievementContext, f: (t: Topic) => number) => ctx.topics.reduce((n, t) => n + f(t), 0);
+const sumTopics = (ctx: AchievementContext, f: (t: TopicMeta) => number) => ctx.topics.reduce((n, t) => n + f(t), 0);
 
 /** Learn sections marked read, counting only sections that still exist */
-const sectionsReadIn = (p: Progress, t: Topic) => new Set((p.sections[t.id] ?? []).filter((i) => i >= 0 && i < t.sections.length)).size;
+const sectionsReadIn = (p: Progress, t: TopicMeta) => new Set((p.sections[t.id] ?? []).filter((i) => i >= 0 && i < t.sections.length)).size;
 const sectionsRead = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (t) => sectionsReadIn(p, t));
 
 /** section "Try it" exercises marked solved */
@@ -132,7 +140,9 @@ const codeLabSolved = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (
 const drillsDone = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (t) => t.envelopeQuestions.filter((q) => p.boe[q.id]).length);
 const interviewsRated = (p: Progress, ctx: AchievementContext, only?: 'nailed') =>
   sumTopics(ctx, (t) => t.interviewQuestions.filter((q) => (only ? p.iq[q.id] === only : !!p.iq[q.id])).length);
-const examsPassed = (p: Progress, topics: Topic[]) => topics.filter((t) => isPassed(p, t.id)).length;
+/** Shorts in the course watched to the end card */
+const shortsWatched = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (t) => t.sections.filter((s) => s.short && p.shorts?.[s.short.id]?.watchedAt).length);
+const examsPassed = (p: Progress, topics: TopicMeta[]) => topics.filter((t) => isPassed(p, t.id)).length;
 
 /**
  * Prompt Labs solved on your own: solvedAt is set and the model answer was not revealed before it
@@ -165,7 +175,7 @@ export function failsBeforePass(p: Progress, topicId: string): number | null {
 }
 
 /** every part of a topic done: sections, Code Lab, interview ratings, drills and the exam (mirrors topicCompletion) */
-function topicComplete(p: Progress, t: Topic) {
+function topicComplete(p: Progress, t: TopicMeta) {
   return (
     isPassed(p, t.id) &&
     sectionsReadIn(p, t) >= t.sections.length &&
@@ -199,6 +209,30 @@ export function fullWeekends(days: string[] = []): number {
 }
 
 /** exam attempts and exam answers stamped between 00:00 and 03:59 local time */
+/** a gap (expected − covered, minutes) at or above this is "behind"; src/lib/pace.ts uses the same value */
+export const PACE_BEHIND_MIN = 15;
+
+/** Longest run of days the plan log shows on pace (not behind), in days from the run's first entry to its last.
+ *  Days without an entry are bridged: covered only grows while the app is open (which logs that day), so a day
+ *  that fell behind shows up as behind on the next entry. */
+export function daysOnPace(log: Record<string, [number, number]> = {}): number {
+  let best = 0;
+  let start: number | null = null;
+  for (const d of Object.keys(log).sort()) {
+    const [covered, expected] = log[d];
+    if (expected - covered >= PACE_BEHIND_MIN) {
+      start = null;
+      continue;
+    }
+    start ??= dayNum(d);
+    best = Math.max(best, Math.round(dayNum(d) - start));
+  }
+  return best;
+}
+
+/** sections finished in Steps view that still have steps */
+const stepsFinished = (p: Progress, ctx: AchievementContext) => sumTopics(ctx, (t) => t.sections.filter((s, i) => s.steps && p.steps?.[`${t.id}:${i}`]).length);
+
 function lateNightCount(p: Progress): number {
   const stamps = [...Object.values(p.tests).flatMap((t) => (t.history ?? []).map((h) => h.at)), ...Object.values(p.mcq).map((m) => m.lastAt)];
   return stamps.filter((at) => {
@@ -225,15 +259,15 @@ export function buildAchievementContext({
   phases,
   challenges,
 }: {
-  topics: Topic[];
+  topics: TopicMeta[];
   phases: { id: PhaseId; number: number; title: string; level: Level }[];
   challenges: { id: string }[];
 }): AchievementContext {
-  const topicsByPhase = new Map<PhaseId, Topic[]>();
+  const topicsByPhase = new Map<PhaseId, TopicMeta[]>();
   for (const t of topics) topicsByPhase.set(t.phase, [...(topicsByPhase.get(t.phase) ?? []), t]);
-  const topicsByLevel = new Map<Level, Topic[]>();
+  const topicsByLevel = new Map<Level, TopicMeta[]>();
   for (const ph of phases) topicsByLevel.set(ph.level, [...(topicsByLevel.get(ph.level) ?? []), ...(topicsByPhase.get(ph.id) ?? [])]);
-  const sum = (f: (t: Topic) => number) => topics.reduce((n, t) => n + f(t), 0);
+  const sum = (f: (t: TopicMeta) => number) => topics.reduce((n, t) => n + f(t), 0);
   return {
     topics,
     phases,
@@ -248,6 +282,7 @@ export function buildAchievementContext({
       boe: sum((t) => t.envelopeQuestions.length),
       iq: sum((t) => t.interviewQuestions.length),
       promptLabs: sum((t) => t.promptLabs?.length ?? 0),
+      stepLessons: sum((t) => t.sections.filter((s) => s.steps).length),
     },
   };
 }
@@ -327,6 +362,17 @@ export const ACHIEVEMENTS: Achievement[] = [
     requirement: () => 'Pass any full-length topic exam',
     unit: 'exams passed',
   },
+  {
+    id: 'premiere',
+    name: 'Premiere',
+    description: 'Watched your first Short to the end, quiz stop included.',
+    group: 'start',
+    art: 'clapper',
+    goal: 1,
+    measure: shortsWatched,
+    requirement: () => 'Watch any Short to the end card',
+    unit: 'Shorts',
+  },
 
   // ---- lessons & phases ----
   {
@@ -393,6 +439,22 @@ export const ACHIEVEMENTS: Achievement[] = [
     measure: (p, ctx) => ctx.topics.filter((t) => topicComplete(p, t)).length,
     requirement: (goal) => (goal === 1 ? 'Finish one topic 100%, every tab and the exam' : `Finish ${goal} topics 100%`),
     unit: 'topics',
+  },
+  {
+    id: 'path-finisher',
+    name: 'Path Finisher',
+    description: 'Learning paths by role with every topic exam passed (each one earns a local certificate).',
+    group: 'content',
+    art: 'route',
+    tiers: [
+      { tier: 'bronze', goal: 1 },
+      { tier: 'silver', goal: 3 },
+      { tier: 'gold', goal: 5 },
+      { tier: 'diamond', goal: ROLES.length },
+    ],
+    measure: (p) => pathsCertified(p),
+    requirement: (goal) => (goal === 1 ? 'Pass every topic exam in one learning path' : `Pass every topic exam in ${goal} learning paths`),
+    unit: 'paths',
   },
 
   // ---- practice ----
@@ -478,6 +540,55 @@ export const ACHIEVEMENTS: Achievement[] = [
         ? `Solve all ${goal} Prompt Labs without revealing the model answer first`
         : `Solve ${plural(goal, 'Prompt Lab')} without revealing the model answer first`,
     unit: 'labs solved',
+  },
+  {
+    id: 'from-scratch',
+    name: 'From Scratch',
+    description: 'From-scratch drills passed on your own: every test green before the solution was shown.',
+    group: 'practice',
+    art: 'braces',
+    // fixed goals: the drill catalogue (src/content/drills) is not part of the achievement context; 10 = all of them
+    tiers: [
+      { tier: 'bronze', goal: 1 },
+      { tier: 'silver', goal: 3 },
+      { tier: 'gold', goal: 6 },
+      { tier: 'diamond', goal: 10 },
+    ],
+    measure: (p) => Object.values(p.drills ?? {}).filter((d) => d.passedAt && !(d.revealedAt && d.revealedAt < d.passedAt)).length,
+    requirement: (goal) => `Pass ${plural(goal, 'from-scratch drill')} without revealing the solution first`,
+    unit: 'drills passed',
+  },
+  {
+    id: 'frame-by-frame',
+    name: 'Frame by Frame',
+    description: 'Sections finished in Steps view: watched, then worked through by hand.',
+    group: 'practice',
+    art: 'film',
+    tiers: [
+      { tier: 'bronze', goal: 1 },
+      { tier: 'gold', goal: (ctx) => ctx.totals.stepLessons },
+    ],
+    measure: stepsFinished,
+    requirement: (goal, ctx) =>
+      goal >= ctx.totals.stepLessons && goal > 1 ? `Finish all ${goal} step lessons in Steps view` : `Finish ${plural(goal, 'section')} in Steps view`,
+    unit: 'sections',
+  },
+  {
+    id: 'curator',
+    name: 'Curator',
+    description: 'Sections, questions, labs and Shorts saved for later with ☆ Save.',
+    group: 'practice',
+    art: 'bookmark',
+    tiers: [
+      { tier: 'bronze', goal: 5 },
+      { tier: 'silver', goal: 25 },
+      { tier: 'gold', goal: 75 },
+      { tier: 'diamond', goal: 200 },
+    ],
+    // items on the Saved page now (done ones included); an earned tier stays even if items are removed later
+    measure: (p) => p.saved?.length ?? 0,
+    requirement: (goal) => `Save ${plural(goal, 'item')} for later`,
+    unit: 'items saved',
   },
   {
     id: 'system-designer',
@@ -605,6 +716,17 @@ export const ACHIEVEMENTS: Achievement[] = [
     measure: (p) => longestStreak(p.activityDays),
     requirement: (goal) => `Study ${goal} days in a row`,
     unit: 'days',
+  },
+  {
+    id: 'pacesetter',
+    name: 'Pacesetter',
+    description: 'A full week level with or ahead of your study plan’s pacer.',
+    group: 'consistency',
+    art: 'gauge',
+    goal: 7,
+    measure: (p) => daysOnPace(p.studyPlan?.log),
+    requirement: () => 'Stay on pace with your study plan for 7 days',
+    unit: 'days on pace',
   },
   {
     id: 'regular',

@@ -32,6 +32,79 @@ const topic: Topic = {
   sections: [
     {
       heading: 'LLM Agents — the perceive / reason / act loop',
+      short: {
+        id: 'what-an-agent-actually-does',
+        title: 'What an agent actually does',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'The loop',
+            head: 'Perceive, reason, *act*, observe',
+            steps: [
+              'Perceive: the goal and every past result',
+              'Reason: pick the next action',
+              'Act: the runtime runs a tool',
+              'Observe: add the result, repeat',
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'Task: order A-1029 arrived broken',
+            head: 'Four steps to a *refund*',
+            steps: [
+              'get_order: delivered, $84.50',
+              'get_refund_policy: 30-day window',
+              '15 days ≤ 30, so issue_refund',
+              'No tool call: reply to the customer',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'What it spent',
+            value: 9,
+            suffix: 'K',
+            unit: 'input tokens across 4 model calls',
+            stats: [{ value: 3, label: 'tool calls' }, { value: 6, label: 'seconds' }],
+          },
+          {
+            type: 'race',
+            kicker: 'Agent vs workflow',
+            head: 'A fixed path is *cheaper*',
+            lanes: [{ label: 'Workflow: 1 model call', seconds: 1.2, tone: 'ion' }, { label: 'Agent: 4 model calls', seconds: 4, tone: 'pink' }],
+            sub: 'When the steps are known, put them in **code**.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Stop conditions',
+            head: 'Code decides when it *stops*',
+            items: [
+              { label: 'Step budget', keep: true },
+              { label: 'Token and cost budget', keep: true },
+              { label: 'Time budget', keep: true },
+              { label: 'Let the model decide alone' },
+            ],
+            keepLabel: 'CODE',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'When is an agent the right choice?',
+            answer: 1,
+            options: [
+              { text: 'Always: agents are smarter', why: 'Agents cost more calls and add failure modes; use the least autonomy that works.' },
+              {
+                text: 'The steps cannot be predicted and mistakes are cheap to catch',
+                why: 'That is an agent’s sweet spot: open-ended tasks with errors you can detect.',
+              },
+              { text: 'The steps are the same every time', why: 'A known path belongs in code, as a workflow.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'An agent is an LLM *in a loop* with tools.',
+          sub: 'Code owns the **stop conditions**; use the least autonomy that solves the task.',
+        },
+      },
       body: `A chatbot answers; an **agent acts**. Think of an intern handed a goal, a toolbox and the instruction "report back when done": they look at the situation, decide what to do, do it, look at the result, and repeat.
 
 **Mechanics.** An LLM agent is a model running in a loop:
@@ -402,6 +475,134 @@ export function createExecutor(opts: { maxWrites: number }) {
     },
     {
       heading: 'ReAct — Thought, Action, Observation, by hand',
+      core: `ReAct (Yao et al., 2022) is the pattern underneath most modern agents: **interleave reasoning with acting**. Like a detective who thinks aloud, then checks the window, then reasons about what they found.
+
+The cycle repeats until a final answer: **Thought** (free-text reasoning about what is known and what to do next), **Action** (a tool call with arguments) and **Observation** (the tool result, fed back into the context).
+
+It works because chain-of-thought alone reasons only over what the model memorised, so it hallucinates on fact-heavy tasks, while acting without thoughts loses track of the goal on long tasks. ReAct grounds each step in evidence.
+
+With native tool calling the mapping is direct: a text (or thinking) block is the Thought, a tool_use block is the Action, and a tool_result block in the next user turn is the Observation. Return one tool_result per tool_use id, mark failures with is_error, stop when stop_reason is not "tool_use", and always bound the loop.`,
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'the task', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'Thought → Action', x: 340, y: 70 },
+          { id: 'tool', kind: 'tool', label: 'Tool', sub: 'e.g. search', x: 570, y: 70 },
+          { id: 'loop', kind: 'agent', label: 'Agent loop', sub: 'your code', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Thought, Action, Observation',
+            lines: [
+              '**Thought**: reason about what is known and what to do next.',
+              '**Action**: call a tool with arguments.',
+              '**Observation**: the tool result goes back into the context.',
+            ],
+            script: [
+              { send: ['user', 'llm'], label: 'task' },
+              { say: 0 },
+              { lit: 'llm' },
+              { badge: 'llm', text: 'Thought' },
+              { say: 1 },
+              { send: ['llm', 'loop'], label: 'tool_use' },
+              { send: ['loop', 'tool'], label: 'call' },
+              { say: 2 },
+              { send: ['tool', 'loop'], label: 'result', tone: 'ok' },
+              { send: ['loop', 'llm'], label: 'tool_result', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one lap of the loop',
+            lines: ['The model never runs tools itself: it asks, and your code runs them.'],
+            task: {
+              type: 'order',
+              question: 'Put one lap of the loop in order.',
+              items: ['The model writes a Thought', 'It returns a tool_use block', 'Your code runs the tool', 'A tool_result goes back in the next user turn'],
+              hint: 'The model asks for the tool, your code runs it, and the result comes back as a user turn.',
+            },
+            solved: 'Thought → tool_use → your code runs the tool → tool_result, then the model reasons again.',
+            then: [
+              { send: ['llm', 'loop'], label: 'tool_use' },
+              { send: ['loop', 'tool'], label: 'call' },
+              { send: ['tool', 'loop'], label: 'result', tone: 'ok' },
+              { send: ['loop', 'llm'], label: 'tool_result', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Why interleaving works',
+            lines: [
+              'Chain-of-thought alone reasons only over what the model memorised, so it hallucinates on fact-heavy tasks.',
+              'Acting without thoughts loses track of the goal on long tasks.',
+              'ReAct grounds each step in evidence; the thoughts carry the plan.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: 'memory only', tone: 'err', ms: 1200 },
+              { say: 1 },
+              { send: ['loop', 'tool'], label: 'call', tone: 'miss', count: 3 },
+              { say: 2 },
+              { send: ['tool', 'loop'], label: 'evidence', tone: 'ok' },
+              { send: ['loop', 'llm'], label: 'tool_result', tone: 'ok' },
+              { badge: 'llm', text: 'Thought', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: map it to the API',
+            lines: ['Thought = text (or thinking) block. Action = tool_use block.'],
+            task: {
+              type: 'choose',
+              question: 'In the Anthropic Messages API, where does the Observation go?',
+              options: [
+                { text: 'A `tool_result` block in the next user turn' },
+                { text: 'A text block in the assistant turn', why: 'A text (or thinking) block is the Thought.' },
+                { text: 'A `tool_use` block', why: 'tool_use is the Action: the model asking for a tool call.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Observation = a tool_result block in the next user turn, one per tool_use id.',
+            then: [{ send: ['loop', 'llm'], label: 'tool_result', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: two tool calls',
+            lines: ['The model may ask for more than one tool in a single reply.'],
+            task: {
+              type: 'pick',
+              question: 'The model returned two tool_use blocks. Which part sends back both tool_result blocks, in one user message?',
+              answer: 'loop',
+              hints: {
+                llm: 'The model asks for tools; it never runs them.',
+                tool: 'Each tool only answers its own call; something has to collect the results.',
+                user: 'The person is not in the loop: the user turn holding the results is written by your code.',
+              },
+            },
+            solved: 'Your agent loop returns one tool_result per tool_use id, together in a single user message.',
+            then: [{ send: ['loop', 'llm'], label: '2 × tool_result', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Rules of the raw loop',
+            lines: [
+              'Append the assistant content verbatim, tool_use blocks included.',
+              'Mark failures with is_error.',
+              'Stop when stop_reason is not "tool_use", and always bound the loop.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'loop'], label: 'content' },
+              { say: 1 },
+              { send: ['loop', 'tool'], label: 'call' },
+              { send: ['tool', 'loop'], label: 'is_error', tone: 'err' },
+              { send: ['loop', 'llm'], label: 'tool_result', tone: 'miss' },
+              { say: 2 },
+              { badge: 'loop', text: 'stop: no tool_use', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `ReAct (Yao et al., 2022) is the pattern underneath most modern agents: **interleave reasoning with acting**. Like a detective who thinks aloud ("the butler had no key, so check the window"), then checks the window, then reasons about what they found.
 
 **The cycle**

@@ -1,0 +1,327 @@
+/* Guide Me (M3): spotlight walkthrough, "?" panel with the Guides list, first-visit offer. Design: new-features/guide-me.html */
+
+/* ---------- walkthrough: shield + gliding cut-out + bubble ---------- */
+.walk-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+.walk-hole {
+  position: fixed;
+  z-index: 81;
+  pointer-events: none;
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 200vmax light-dark(rgb(23 18 58 / 0.55), rgb(3 2 10 / 0.76)),
+    0 0 0 2px var(--c-ion),
+    0 0 34px 2px var(--glow-ion-c);
+  transition:
+    top 0.45s var(--ease-out),
+    left 0.45s var(--ease-out),
+    width 0.45s var(--ease-out),
+    height 0.45s var(--ease-out);
+}
+.walk-bubble {
+  position: fixed;
+  z-index: 82;
+  top: 12px;
+  left: 12px;
+  width: min(360px, calc(100vw - 32px));
+  padding: var(--s-4) var(--s-4) var(--s-3);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(160deg, var(--glass-1), transparent 60%),
+    light-dark(rgb(255 255 255 / 0.95), rgb(17 14 40 / 0.93));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 60px -24px var(--glow-action-c);
+  outline: none;
+  transition:
+    top 0.45s var(--ease-out),
+    left 0.45s var(--ease-out),
+    opacity 0.2s;
+}
+.walk-bubble::before {
+  content: '';
+  position: absolute;
+  inset: 0 18px auto;
+  height: 2px;
+  background: var(--grad-aurora-deep);
+  border-radius: 2px;
+}
+.wb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.wb-top .eyebrow {
+  margin: 0;
+}
+.wb-n {
+  font: 600 var(--fs-xs) var(--mono);
+  color: var(--text);
+}
+.wb-x.btn-icon {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+.walk-bubble h3 {
+  margin: 0 0 0.35em;
+  font-size: var(--fs-lg);
+}
+.walk-bubble p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin: 0 0 var(--s-3);
+}
+.wb-meter {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--s-3);
+}
+.wb-meter i {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--tint-2);
+  transition: background 0.3s;
+}
+.wb-meter i.on {
+  background: var(--grad-ion);
+  box-shadow: var(--glow-ion);
+}
+.wb-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.wb-foot .grow {
+  flex: 1;
+}
+.wb-keys {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.wb-keys span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .walk-hole,
+  .walk-bubble {
+    transition: none;
+  }
+}
+
+/* ---------- first-visit offer ---------- */
+.fv {
+  position: fixed;
+  z-index: 55;
+  right: var(--s-5);
+  bottom: var(--s-5);
+  width: min(360px, calc(100vw - 24px));
+  padding: var(--s-4);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(160deg, var(--glass-1), transparent 60%),
+    light-dark(rgb(255 255 255 / 0.94), rgb(17 14 40 / 0.92));
+  animation: fv-rise 0.5s var(--ease-out) both;
+}
+@keyframes fv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.fv-in {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-3);
+}
+.fv-ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--grad-action);
+  color: var(--accent-text);
+  box-shadow: var(--glow-action);
+}
+.fv h2 {
+  font-size: var(--fs-md);
+  margin: 2px 0 4px;
+}
+.fv p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  margin: 0 0 var(--s-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fv {
+    animation: none;
+  }
+}
+
+/* ---------- guide panel (the "?" launcher) ---------- */
+.modal.gp {
+  width: min(560px, 100%);
+  padding: 0;
+  overflow-y: auto;
+}
+.gp-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--s-4) var(--s-4) 0 var(--s-5);
+}
+.gp-top .eyebrow {
+  margin: 0;
+}
+.gp-body {
+  padding: var(--s-2) var(--s-5) var(--s-4);
+}
+.gp-body h2 {
+  margin-bottom: 0.25em;
+}
+.gp-body .muted {
+  margin: 0;
+}
+.gp-gloss {
+  margin: var(--s-3) 0 0;
+  display: grid;
+  gap: 10px;
+}
+.gp-gloss div {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  font-size: var(--fs-sm);
+}
+.gp-gloss dt {
+  font: 600 var(--fs-sm) var(--display);
+  color: var(--text);
+}
+.gp-gloss dd {
+  margin: 0;
+  color: var(--text-2);
+}
+.gp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  padding: 0 var(--s-5) var(--s-4);
+}
+.gp-list {
+  border-top: 1px solid var(--border);
+  padding: var(--s-3) var(--s-4) var(--s-4);
+}
+.gp-list .eyebrow {
+  padding: 0 var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.gp-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.gp-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: 600 var(--fs-sm) var(--display);
+  text-align: left;
+  cursor: pointer;
+}
+.gp-item:hover,
+.gp-item.here {
+  background: var(--tint-2);
+}
+.gp-item > svg {
+  color: var(--text-2);
+}
+.gp-item small {
+  margin-left: auto;
+  font: 500 0.66rem var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gp-item .seen {
+  color: var(--good);
+}
+.gp-item .new {
+  color: var(--c-ion);
+}
+.gp-item .new::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ion);
+  box-shadow: var(--glow-ion);
+}
+.gp-foot {
+  margin: 0;
+  padding: 0 var(--s-5) var(--s-4);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.gp-foot .link-btn {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .fv {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: calc(var(--tabbar) + 14px);
+  }
+}
+@media (max-width: 600px) {
+  .gp-list ul {
+    grid-template-columns: 1fr;
+  }
+  .gp-gloss div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .walk-bubble {
+    width: calc(100vw - 24px);
+  }
+  .wb-keys {
+    display: none;
+  }
+}
+.wb-foot .btn-icon {
+  width: 36px;
+  padding: 0;
+}

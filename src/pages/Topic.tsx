@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
+import { RouteSkeleton } from '../components/RouteSkeleton';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PHASES, TOPICS, TOPIC_BY_ID } from '../content';
 import type { CodeChallenge, EnvelopeQuestion, InterviewQuestion, Topic } from '../types';
@@ -6,6 +7,7 @@ import {
   rateIQ,
   setDraft,
   markAllSectionsRead,
+  recordSteps,
   setFlag,
   toggleSectionRead,
   useProgress,
@@ -17,14 +19,25 @@ import { topicSteps } from '../lib/nextStep';
 import { StudyPath, type TabId } from '../components/StudyPath';
 import { CoachTip } from '../components/CoachTip';
 import { NextUp } from '../components/NextUp';
-import { BookOpen, Check, ChevronDown, CirclePlay, Crosshair, Library, Lightbulb, Lock } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, CirclePlay, Crosshair, Library, Lightbulb, Lock, Play } from 'lucide-react';
 import { PREREQS } from '../content/prereqs';
+import { drillsForTopic } from '../content/drills';
 import { projectsForTopic } from '../content/projects';
 import { CapstoneTab } from '../components/Capstone';
 import { vizForSection } from '../viz/registry';
 import { SectionPractice } from '../components/SectionPractice';
 import { PromptLabTab } from '../components/PromptLab';
+import { SaveButton } from '../components/SaveButton';
+import { ShortThumb } from '../components/ShortThumb';
+import { shortLength } from '../lib/shorts';
+import { SHORTS, useShorts } from '../lib/useShorts';
 import { currentlyWrong, weakSections } from '../lib/weak';
+import { CoreView, GoDeeper, ModeSwitch } from '../components/ReadViewLearn';
+import { useLessonMode } from '../lib/uiPrefs';
+import { StepLesson } from '../components/steps/StepLesson';
+import { showToast } from '../lib/toast';
+import { useTopic } from '../lib/useTopic';
+import { CheatExtra } from '../components/CheatExtra';
 
 const TAB_IDS: TabId[] = ['learn', 'code', 'prompt-lab', 'interview', 'envelope', 'cheat', 'capstone', 'exam'];
 
@@ -63,10 +76,8 @@ const TIPS: Record<TabId, { title: string; text: string }> = {
 
 export default function TopicPage() {
   const { id = '' } = useParams();
-  const [params, setParams] = useSearchParams();
-  const topic = TOPIC_BY_ID.get(id);
-  const p = useProgress();
-  if (!topic) {
+  const topic = useTopic(id);
+  if (topic === null) {
     return (
       <div className="page">
         <h1>Topic not found</h1>
@@ -74,6 +85,12 @@ export default function TopicPage() {
       </div>
     );
   }
+  return topic ? <TopicView topic={topic} /> : <RouteSkeleton />;
+}
+
+function TopicView({ topic }: { topic: Topic }) {
+  const [params, setParams] = useSearchParams();
+  const p = useProgress();
   const tab = (TAB_IDS.find((t) => t === params.get('tab')) ?? 'learn') as TabId;
   const phase = PHASES.find((ph) => ph.id === topic.phase);
   const idx = TOPICS.findIndex((t) => t.id === topic.id);
@@ -87,6 +104,7 @@ export default function TopicPage() {
   };
   const pct = topicCompletion(p, topic);
   const selectTab = (t: TabId) => setParams({ tab: t }, { replace: true });
+  const at = params.get('at');
   // "Next up" target after the current tab: the following study-path step, else the next topic
   const stepIds = steps.map((s) => s.id as TabId);
   const after = tab === 'cheat' ? (stepIds.includes('exam') ? 'exam' : undefined) : stepIds[stepIds.indexOf(tab) + 1];
@@ -165,6 +183,9 @@ export default function TopicPage() {
               {titleRest && <span className="tp-title-rest">{titleRest}</span>}
             </h1>
             {topic.subtitle && <p className="tp-subtitle">{topic.subtitle}</p>}
+            <div className="tp-hero-save">
+              <SaveButton kind="topic" refId={topic.id} topicId={topic.id} title={topic.title} />
+            </div>
           </div>
           <ProgressRing pct={pct} passed={passed} />
         </div>
@@ -176,13 +197,23 @@ export default function TopicPage() {
         {TIPS[tab].text}
       </CoachTip>
 
+      {at && <ScrollToItem key={`${tab}:${at}`} domId={at} />}
       {tab === 'learn' && <LearnTab topic={topic} />}
       {tab !== 'learn' && (
         <div className="tp-tab-panel">
-          {tab === 'code' && topic.codeChallenges.map((c, i) => <ChallengeCard key={c.id} c={c} n={i + 1} />)}
-          {tab === 'prompt-lab' && (topic.promptLabs?.length ? <PromptLabTab labs={topic.promptLabs} /> : <p className="muted">This topic has no prompt labs yet.</p>)}
+          {tab === 'code' &&
+            drillsForTopic(topic.id).map((d) => (
+              <p key={d.id} className="tp-ex-bar">
+                <span>
+                  From-scratch drill: <Link to={`/drills/${d.id}`}>{d.title}</Link> (graded in your browser, {d.minutes} min)
+                </span>
+                {p.drills?.[d.id]?.passedAt && <Badge tone="good">Passed</Badge>}
+              </p>
+            ))}
+          {tab === 'code' && topic.codeChallenges.map((c, i) => <ChallengeCard key={c.id} c={c} n={i + 1} topicId={topic.id} />)}
+          {tab === 'prompt-lab' && (topic.promptLabs?.length ? <PromptLabTab labs={topic.promptLabs} topicId={topic.id} /> : <p className="muted">This topic has no prompt labs yet.</p>)}
           {tab === 'interview' && (locks.interview ? <StudyLock topic={topic} what="interview questions" /> : <InterviewTab topic={topic} />)}
-          {tab === 'envelope' && topic.envelopeQuestions.map((q, i) => <EnvelopeCard key={q.id} q={q} n={i + 1} />)}
+          {tab === 'envelope' && topic.envelopeQuestions.map((q, i) => <EnvelopeCard key={q.id} q={q} n={i + 1} topicId={topic.id} />)}
           {tab === 'cheat' && <CheatSheet topic={topic} />}
           {tab === 'capstone' && <CapstoneTab projects={capstones} />}
           {tab === 'exam' && (locks.exam ? <StudyLock topic={topic} what="exam" /> : <ExamIntro topic={topic} />)}
@@ -238,6 +269,21 @@ export default function TopicPage() {
   );
 }
 
+/** Deep link to one card (`?at=<element id>`, from the Saved page): scroll it into view and flash it once. */
+function ScrollToItem({ domId }: { domId: string }) {
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(domId);
+      if (!el) return;
+      el.scrollIntoView({ block: 'start' });
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 1800);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [domId]);
+  return null;
+}
+
 /** % complete as a glowing conic ring (real data from topicCompletion). */
 function ProgressRing({ pct, passed }: { pct: number; passed: boolean }) {
   const value = passed ? 100 : pct;
@@ -287,6 +333,14 @@ function LearnTab({ topic }: { topic: Topic }) {
   const active = useActiveSection(topic.sections.length);
   const [tocOpen, setTocOpen] = useState(false);
   const n = topic.sections.length;
+  const { open: openShorts, newToday, nextLocked, watched } = useShorts();
+  const shorts = SHORTS.filter((e) => e.topic.id === topic.id);
+  const [mode, setMode] = useLessonMode();
+  // the animation lives in the Read view: switch to it, then scroll there
+  const toViz = (i: number) => {
+    setMode('read');
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`viz-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+  };
 
   // deep link from weak-area reports: /topic/:id?tab=learn&s=<section index>
   useEffect(() => {
@@ -307,7 +361,7 @@ function LearnTab({ topic }: { topic: Topic }) {
 
   return (
     <div className="tp-learn">
-      <nav className={`tp-rail ${tocOpen ? 'open' : ''}`} aria-label="Sections in this topic">
+      <nav className={`tp-rail ${tocOpen ? 'open' : ''}`} aria-label="Sections in this topic" data-guide="sections">
         <button type="button" className="tp-rail-title" aria-expanded={tocOpen} onClick={() => setTocOpen((o) => !o)}>
           <span>
             Contents · {read.size}/{n} read
@@ -329,6 +383,7 @@ function LearnTab({ topic }: { topic: Topic }) {
                 >
                   <span className="tp-node" aria-hidden />
                   <span className="tp-rail-text">{headingParts(s.heading).title}</span>
+                  {s.short && <CirclePlay size={13} className="tp-rail-short" aria-label="has a Short" />}
                   <span className="sr-only">{read.has(i) ? ' (read)' : ''}</span>
                 </button>
               </li>
@@ -337,6 +392,29 @@ function LearnTab({ topic }: { topic: Topic }) {
         </ol>
       </nav>
       <div className="tp-read">
+        {shorts.length > 0 && (
+          <section className="tp-shorts" aria-labelledby="tp-shorts-h">
+            <div className="strip-head">
+              <h2 id="tp-shorts-h">
+                <CirclePlay size={16} aria-hidden /> Shorts for this topic
+              </h2>
+              <Link to="/shorts">All Shorts</Link>
+            </div>
+            <div className="strip">
+              {shorts.map((e) => {
+                const id = e.short.id;
+                return (
+                  <ShortThumb
+                    key={id}
+                    entry={e}
+                    state={!openShorts.has(id) ? 'locked' : watched(id) ? 'watched' : id === newToday ? 'new' : undefined}
+                    lockNote={e === nextLocked ? 'Unlocks next study day' : 'Locked'}
+                  />
+                );
+              })}
+            </div>
+          </section>
+        )}
         {topic.sections.map((s, i) => {
           const { title, sub } = headingParts(s.heading);
           const prevS = topic.sections[i - 1];
@@ -349,34 +427,78 @@ function LearnTab({ topic }: { topic: Topic }) {
                   <h2 id={`s-${i}-h`}>{title}</h2>
                   {sub && <p className="tp-sec-sub">{sub}</p>}
                 </div>
-                <label className={`tp-read-toggle ${read.has(i) ? 'on' : ''}`}>
-                  <input type="checkbox" checked={read.has(i)} onChange={() => toggleSectionRead(topic.id, i)} />
-                  {read.has(i) ? 'Read' : 'Mark as read'}
-                </label>
+                {s.short && (
+                  <Link className="watch-short" to={`/short/${s.short.id}`}>
+                    <span className="pp" aria-hidden>
+                      {openShorts.has(s.short.id) ? <Play size={13} /> : <Lock size={13} />}
+                    </span>
+                    <span>
+                      Watch the Short <small>{openShorts.has(s.short.id) ? shortLength(s.short) : 'locked'}</small>
+                    </span>
+                  </Link>
+                )}
+                <div className="tp-sec-acts" data-guide={i === 0 ? 'section-save' : undefined}>
+                  <SaveButton kind="section" refId={`${topic.id}:${i}`} topicId={topic.id} title={title} />
+                  <label className={`tp-read-toggle ${read.has(i) ? 'on' : ''}`}>
+                    <input type="checkbox" checked={read.has(i)} onChange={() => toggleSectionRead(topic.id, i)} />
+                    {read.has(i) ? 'Read' : 'Mark as read'}
+                  </label>
+                </div>
               </header>
-              {s.source && (
-                <div className="source">
-                  <BookOpen size={13} aria-hidden /> {s.source}
+              {s.steps && <ModeSwitch id={`s-${i}`} s={s} mode={mode} onChange={setMode} />}
+              {s.steps && mode === 'steps' ? (
+                <div id={`s-${i}-panel`} role="tabpanel" aria-labelledby={`s-${i}-tab-steps`}>
+                  <StepLesson
+                    lesson={s.steps}
+                    name={`${topic.title.split(/[:(]/)[0].trim()} §${i + 1}`}
+                    onRead={() => setMode('read')}
+                    onFinish={(missed) => {
+                      recordSteps(topic.id, i, missed);
+                      showToast(
+                        `Section ${i + 1} finished in Steps`,
+                        missed ? `${missed} Your-turn step${missed === 1 ? '' : 's'} needed help: it is in Weak areas until a clean run.` : 'Every Your turn right first time. Marked as read.',
+                        5000,
+                        'good',
+                      );
+                      if (i + 1 < n) scrollToSection(i + 1);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div id={`s-${i}-panel`} className="tp-panel" role={s.steps ? 'tabpanel' : undefined} aria-labelledby={s.steps ? `s-${i}-tab-read` : undefined}>
+                  {s.source && (
+                    <div className="source">
+                      <BookOpen size={13} aria-hidden /> {s.source}
+                    </div>
+                  )}
+                  <PrereqLinks topicId={topic.id} heading={s.heading} />
+                  {s.core ? (
+                    <CoreView s={s} />
+                  ) : (
+                    <>
+                      <div className="tp-body">
+                        <Markdown defs>{s.body}</Markdown>
+                      </div>
+                      {s.diagram && <Diagram text={s.diagram} />}
+                    </>
+                  )}
+                  <div id={`viz-${i}`} className="tp-viz-anchor" />
+                  <SectionViz topic={topic} sectionIndex={i} />
+                  {!s.core && s.code?.map((c, j) => <CodeBlock key={j} snippet={c} />)}
+                  {!s.core && s.keyPoints && s.keyPoints.length > 0 && (
+                    <div className="keypoints">
+                      <div className="keypoints-title">Key points</div>
+                      <ul>
+                        {s.keyPoints.map((k) => (
+                          <li key={k}>{k}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <SectionPractice topicId={topic.id} index={i} section={s} folded={!!s.core} />
                 </div>
               )}
-              <PrereqLinks topicId={topic.id} heading={s.heading} />
-              <div className="tp-body">
-                <Markdown>{s.body}</Markdown>
-              </div>
-              {s.diagram && <Diagram text={s.diagram} />}
-              <SectionViz topic={topic} sectionIndex={i} />
-              {s.code?.map((c, j) => <CodeBlock key={j} snippet={c} />)}
-              {s.keyPoints && s.keyPoints.length > 0 && (
-                <div className="keypoints">
-                  <div className="keypoints-title">Key points</div>
-                  <ul>
-                    {s.keyPoints.map((k) => (
-                      <li key={k}>{k}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <SectionPractice topicId={topic.id} index={i} section={s} />
+              {(s.core || s.steps) && <GoDeeper topic={topic} i={i} onViz={() => toViz(i)} onNext={() => scrollToSection(i + 1)} />}
               <nav className="tp-sec-pager" aria-label={`After section ${i + 1}`}>
                 {prevS ? (
                   <button type="button" className="tp-sec-prev" onClick={() => scrollToSection(i - 1)}>
@@ -412,7 +534,7 @@ function LearnTab({ topic }: { topic: Topic }) {
   );
 }
 
-function ChallengeCard({ c, n }: { c: CodeChallenge; n: number }) {
+function ChallengeCard({ c, n, topicId }: { c: CodeChallenge; n: number; topicId: string }) {
   const p = useProgress();
   const draftKey = `cc:${c.id}`;
   const code = p.drafts[draftKey] ?? c.starter.code;
@@ -420,13 +542,16 @@ function ChallengeCard({ c, n }: { c: CodeChallenge; n: number }) {
   const [showSolution, setShowSolution] = useState(false);
   const done = !!p.cc[c.id];
   return (
-    <article className={`tp-card tp-lab ${done ? 'done' : ''}`}>
+    <article id={`cc-${c.id}`} className={`tp-card tp-lab ${done ? 'done' : ''}`}>
       <div className="tp-card-head">
         <div>
           <div className="tp-card-no">Lab {sectionNo(n - 1)}</div>
           <h2>{c.title}</h2>
         </div>
-        {done && <Badge tone="good">Completed</Badge>}
+        <div className="tp-card-acts">
+          {done && <Badge tone="good">Completed</Badge>}
+          <SaveButton kind="code" refId={c.id} topicId={topicId} title={c.title} compact />
+        </div>
       </div>
       <Markdown>{c.context}</Markdown>
       <div className="task">
@@ -485,13 +610,13 @@ function InterviewTab({ topic }: { topic: Topic }) {
         and rate yourself honestly. <span className="muted">({rated}/{topic.interviewQuestions.length} rated)</span>
       </div>
       {topic.interviewQuestions.map((q, i) => (
-        <InterviewCard key={q.id} q={q} n={i + 1} />
+        <InterviewCard key={q.id} q={q} n={i + 1} topicId={topic.id} />
       ))}
     </div>
   );
 }
 
-function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
+export function InterviewCard({ q, n, topicId }: { q: InterviewQuestion; n: number; topicId: string }) {
   const p = useProgress();
   const draftKey = `iq:${q.id}`;
   const [answer, setAnswer] = useState(false);
@@ -499,13 +624,16 @@ function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
   const rating = p.iq[q.id];
   const rate = (r: Rating) => rateIQ(q.id, rating === r ? null : r);
   return (
-    <article className={`tp-card iq ${rating ? `rated-${rating}` : ''}`}>
+    <article id={`iq-${q.id}`} className={`tp-card iq ${rating ? `rated-${rating}` : ''}`}>
       <div className="tp-card-head">
         <div>
           <div className="tp-card-no">Question {sectionNo(n - 1)}</div>
           <h3>{q.question}</h3>
         </div>
-        <DifficultyBadge d={q.difficulty} />
+        <div className="tp-card-acts">
+          <DifficultyBadge d={q.difficulty} />
+          <SaveButton kind="interview" refId={q.id} topicId={topicId} title={q.question} compact />
+        </div>
       </div>
       {q.context && <div className="context">{q.context}</div>}
       <textarea
@@ -571,7 +699,7 @@ function InterviewCard({ q, n }: { q: InterviewQuestion; n: number }) {
   );
 }
 
-function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
+function EnvelopeCard({ q, n, topicId }: { q: EnvelopeQuestion; n: number; topicId: string }) {
   const p = useProgress();
   const draftKey = `boe:${q.id}`;
   // stage 0: question only · 1: assumptions · 2..k+1: steps · k+2: answer
@@ -579,7 +707,7 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
   const total = q.steps.length + 2;
   const done = !!p.boe[q.id];
   return (
-    <article className={`tp-card boe ${done ? 'done' : ''}`}>
+    <article id={`boe-${q.id}`} className={`tp-card boe ${done ? 'done' : ''}`}>
       <div className="tp-card-head">
         <div>
           <div className="tp-card-no">
@@ -587,7 +715,10 @@ function EnvelopeCard({ q, n }: { q: EnvelopeQuestion; n: number }) {
           </div>
           <h3>{q.question}</h3>
         </div>
-        {done && <Badge tone="good">Done</Badge>}
+        <div className="tp-card-acts">
+          {done && <Badge tone="good">Done</Badge>}
+          <SaveButton kind="drill" refId={q.id} topicId={topicId} title={q.question} compact />
+        </div>
       </div>
       <textarea
         className="answer-box mono"
@@ -657,6 +788,7 @@ function CheatSheet({ topic }: { topic: Topic }) {
           </li>
         ))}
       </ul>
+      <CheatExtra topicId={topic.id} />
     </div>
   );
 }
@@ -833,7 +965,7 @@ function SectionViz({ topic, sectionIndex }: { topic: Topic; sectionIndex: numbe
           );
         }
         return (
-          <Suspense key={meta.id} fallback={<div className="viz-loading">Loading interactive: {meta.title}…</div>}>
+          <Suspense key={meta.id} fallback={<RouteSkeleton kind="viz" label={`Loading interactive: ${meta.title}`} />}>
             <Component />
           </Suspense>
         );

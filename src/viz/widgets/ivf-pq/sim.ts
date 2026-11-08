@@ -11,7 +11,8 @@
 // default; the toy quantizes raw coordinates so the code grid is easy to see.
 // Re-rank (Faiss IndexRefineFlat): take the RERANK_K best by PQ distance and recompute exact distances.
 // Cost metric: "vectors measured" = centroid distances + vectors scored in the probed lists, vs NPTS for brute force.
-import { rng, type BaseFrame } from '../../core';
+import type { BaseFrame } from '../../core';
+import { rng } from '../_shared/rng.ts';
 
 export type QueryId = 'qa' | 'qb' | 'qc';
 export type Mode = 'flat' | 'pq';

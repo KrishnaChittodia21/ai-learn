@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useBlocker, useParams } from 'react-router-dom';
 import { MCQ_TOPIC, TOPICS, TOPIC_BY_ID } from '../content';
+import { useTopic } from '../lib/useTopic';
+import { RouteSkeleton } from '../components/RouteSkeleton';
 import { ArrowLeft, ArrowRight, Check, CircleCheck, CircleX, Flag, Lock, RotateCcw, Target } from 'lucide-react';
 import { NextUp } from '../components/NextUp';
 import type { Difficulty, MCQ } from '../types';
@@ -36,8 +38,9 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export default function ExamPage() {
   const { id = '' } = useParams();
   const p = useProgress();
-  const topic = TOPIC_BY_ID.get(id);
-  if (!topic) return <div className="page">Topic not found</div>;
+  const topic = useTopic(id);
+  if (topic === null) return <div className="page">Topic not found</div>;
+  if (!topic) return <RouteSkeleton />;
   if (practiceLocked(p, topic, 'exam')) {
     return (
       <div className="page">
@@ -240,7 +243,7 @@ export function Exam({ title, questions, recordTopicId, backHref }: ExamProps) {
               </p>
             </header>
 
-            <div className="setup-sheet glass rise d1">
+            <div className="setup-sheet glass rise d1" data-guide="exam-setup">
               <div className="setup-row">
                 <div className="setup-key">
                   <span className="setup-num">01</span>
@@ -385,7 +388,7 @@ export function Exam({ title, questions, recordTopicId, backHref }: ExamProps) {
           </div>
 
           <div className="setup-go-wrap rise d2">
-            <aside className="setup-go gborder" aria-label="Start">
+            <aside className="setup-go gborder" aria-label="Start" data-guide="exam-start">
               <div className="gborder-in setup-go-in">
                 <p className="lbl">Ready when you are</p>
                 <dl className="setup-sum">
@@ -451,6 +454,7 @@ export function Exam({ title, questions, recordTopicId, backHref }: ExamProps) {
           <div className="hud-prog">
             <div
               className={`hud-segs ${items.length > 24 ? 'dense' : ''}`}
+              data-guide="exam-navigator"
               style={{ '--n': items.length } as CSSProperties}
               role="progressbar"
               aria-label="Questions answered"
@@ -483,6 +487,7 @@ export function Exam({ title, questions, recordTopicId, backHref }: ExamProps) {
           </div>
           <div
             className={`hud-timer ${urgent ? 'urgent' : ''}`}
+            data-guide="exam-timer"
             role="timer"
             aria-label={`Time remaining ${formatClock(remaining)}`}
             style={{ '--p': `${left * 100}%` } as CSSProperties}
@@ -496,7 +501,7 @@ export function Exam({ title, questions, recordTopicId, backHref }: ExamProps) {
         </header>
 
         <div className="exam-grid">
-          <article className="qcard glass" aria-labelledby={qLabelId}>
+          <article className="qcard glass" aria-labelledby={qLabelId} data-guide="exam-question">
             <div className="qcard-glow" aria-hidden />
             <div className="qcard-body" key={item.q.id}>
               <header className="qhead">

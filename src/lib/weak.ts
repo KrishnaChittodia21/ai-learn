@@ -1,5 +1,5 @@
 // Weak-area analysis: which topics, sections and question types the learner struggles with.
-import type { Difficulty, MCQ, Topic } from '../types';
+import type { Difficulty, MCQ, MCQMeta, Topic, TopicMeta } from '../types';
 import type { Progress } from './progress';
 
 // ---------- question → section matching ----------
@@ -93,19 +93,27 @@ export function sectionForQuestion(topic: Topic, q: MCQ): number {
   return best;
 }
 
+/** the section a question of `topic` maps to: precomputed in the topic index (scripts/gen-topic-index.mjs), else matched here */
+function sectionOf(topic: TopicMeta, id: string): number {
+  const q = topic.test.find((x) => x.id === id);
+  if (!q) return 0;
+  // no precomputed section means `topic` is a full Topic (Topic page, tests)
+  return q.section ?? sectionForQuestion(topic as Topic, q as MCQ);
+}
+
 // ---------- aggregation ----------
 
-export interface WeakSection {
+export interface WeakSection<Q extends { id: string } = MCQMeta> {
   index: number;
   heading: string;
-  missed: MCQ[];
+  missed: Q[];
 }
 
 /** group a topic's missed questions by the section they map to, most-missed first */
-export function weakSections(topic: Topic, missed: MCQ[]): WeakSection[] {
-  const groups = new Map<number, MCQ[]>();
+export function weakSections<Q extends { id: string }>(topic: TopicMeta, missed: Q[]): WeakSection<Q>[] {
+  const groups = new Map<number, Q[]>();
   for (const q of missed) {
-    const i = sectionForQuestion(topic, q);
+    const i = sectionOf(topic, q.id);
     groups.set(i, [...(groups.get(i) ?? []), q]);
   }
   return [...groups]
@@ -114,30 +122,36 @@ export function weakSections(topic: Topic, missed: MCQ[]): WeakSection[] {
 }
 
 /** questions in this topic whose most recent answer was wrong */
-export function currentlyWrong(p: Progress, topic: Topic): MCQ[] {
+export function currentlyWrong<Q extends MCQMeta>(p: Progress, topic: { test: Q[] }): Q[] {
   return topic.test.filter((q) => p.mcq[q.id] && !p.mcq[q.id].lastCorrect);
 }
 
 export interface TopicWeakness {
-  topic: Topic;
+  topic: TopicMeta;
   last: number;
   best: number;
   attempts: number;
   passed: boolean;
   history: number[];
-  wrong: MCQ[];
+  wrong: MCQMeta[];
   sections: WeakSection[];
   /** interview questions self-rated missed/partial */
   shakyInterview: number;
+  /** sections whose latest Steps run (M7) needed help on a Your-turn step; a clean run clears it */
+  shakySteps: { index: number; heading: string; missed: number }[];
 }
 
 /** attempted topics that need work, weakest first */
-export function weakTopics(p: Progress, topics: Topic[]): TopicWeakness[] {
+export function weakTopics(p: Progress, topics: TopicMeta[]): TopicWeakness[] {
   return topics
     .map((topic) => {
       const rec = p.tests[topic.id];
       const wrong = currentlyWrong(p, topic);
       const shakyInterview = topic.interviewQuestions.filter((q) => p.iq[q.id] === 'missed' || p.iq[q.id] === 'partial').length;
+      const shakySteps = topic.sections.flatMap((s, index) => {
+        const missed = p.steps?.[`${topic.id}:${index}`]?.missed ?? 0;
+        return missed > 0 ? [{ index, heading: s.heading, missed }] : [];
+      });
       return {
         topic,
         last: rec?.last ?? 0,
@@ -148,9 +162,10 @@ export function weakTopics(p: Progress, topics: Topic[]): TopicWeakness[] {
         wrong,
         sections: weakSections(topic, wrong),
         shakyInterview,
+        shakySteps,
       };
     })
-    .filter((w) => w.wrong.length > 0 || w.shakyInterview > 0 || (w.attempts > 0 && !w.passed))
+    .filter((w) => w.wrong.length > 0 || w.shakyInterview > 0 || w.shakySteps.length > 0 || (w.attempts > 0 && !w.passed))
     .sort((a, b) => Number(a.passed) - Number(b.passed) || a.last - b.last || b.wrong.length - a.wrong.length);
 }
 
@@ -160,7 +175,7 @@ export interface Accuracy {
 }
 
 /** accuracy by difficulty and by question format, using the latest answer to each question */
-export function accuracyBreakdown(p: Progress, topics: Topic[]) {
+export function accuracyBreakdown(p: Progress, topics: TopicMeta[]) {
   const byDifficulty: Record<Difficulty, Accuracy> = {
     medium: { seen: 0, correct: 0 },
     hard: { seen: 0, correct: 0 },

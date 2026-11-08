@@ -7,7 +7,7 @@ const topic: Topic = {
   title: 'Agent Evaluation & Safety',
   subtitle:
     'Grade outcomes and trajectories, measure reliability with pass^k, build a sandboxed eval harness, read agent benchmarks critically, and keep agents safe and bounded in production',
-  estimatedMinutes: 50,
+  estimatedMinutes: 72,
   sources: [
     'Yao et al. 2024 — τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains (arXiv 2406.12045; introduces pass^k)',
     'Barres et al. 2025 — τ²-bench: Evaluating Conversational Agents in a Dual-Control Environment (Sierra)',
@@ -22,6 +22,11 @@ const topic: Topic = {
     'OWASP Top 10 for LLM Applications 2025 — LLM01 Prompt Injection, LLM06 Excessive Agency, LLM10 Unbounded Consumption',
     'OWASP GenAI Security Project — Agentic AI: Threats and Mitigations (2025)',
     'Simon Willison 2025 — The lethal trifecta for AI agents: private data, untrusted content, and external communication',
+    'Kwa et al. 2025 — Measuring AI Ability to Complete Long Tasks (METR time horizons)',
+    'Temporal docs — Workflows, Activities and deterministic replay',
+    'Garcia-Molina & Salem 1987 — Sagas (compensating transactions)',
+    'Stripe docs — Idempotent requests; LangGraph docs — Interrupts and persistence',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 15 lessons 01, 12, 15 and 16, adapted and rewritten',
   ],
   tags: ['agents', 'evaluation', 'trajectory', 'pass^k', 'benchmarks', 'tau-bench', 'swe-bench', 'safety', 'sandbox', 'prompt-injection', 'guardrails', 'budgets'],
   cheatSheet: [
@@ -993,6 +998,290 @@ export function detectStall(history: Step[]): { stalled: boolean; reason?: strin
       },
       source: 'OWASP Top 10 for LLM Applications 2025 — LLM10 Unbounded Consumption; Anthropic — Building effective agents (stopping conditions); OpenAI Agents SDK docs — Tracing; OpenTelemetry GenAI semantic conventions',
     },
+    {
+      heading: 'Long-horizon agents and durable execution — runs that survive crashes, deploys and waiting',
+      body: `**Intuition:** a 5-second chat reply can simply be retried. A 4-hour migration agent that has already opened 30 pull requests cannot: if the machine restarts at hour 3, starting again from zero repeats real side effects and burns the budget twice.
+
+**Why horizon length changes everything.** METR (Kwa et al. 2025) measures an agent's **50% time horizon**: the length of task, measured by how long it takes skilled humans, that the agent completes half the time. Across 2019–2025 frontier models this horizon roughly **doubled every seven months**. Agents are being given longer jobs, and long jobs break in new ways:
+- **Errors compound.** With 99% reliability per step, a 200-step run succeeds about 0.99²⁰⁰ ≈ 13% of the time. Long runs need checkpoints, verification along the way and the ability to resume rather than restart.
+- **Context runs out.** Hours of tool output do not fit; you need summaries, external memory and state stored outside the prompt.
+- **Review changes.** Nobody reads 1,000 steps. You review the *trajectory* with tools: traces, budgets, checkpoints and alerts (see the runaway-control section).
+
+**Durable execution** is the pattern workflow engines (Temporal, Restate, Inngest, DBOS and others) have used for years, and it fits agents well:
+- **Workflow** = deterministic orchestration code (the agent loop, branches, waits).
+- **Activities / steps** = anything non-deterministic or side-effecting: LLM calls, tool calls, HTTP requests. Each one's input and result is written to a durable **event history**.
+- **Replay** = after a crash the workflow code runs again from the start, but every step that already finished returns its recorded result instead of running again. Execution continues from the first unfinished step.
+
+**Rules that make replay safe:**
+- No \`Date.now()\`, random numbers, or direct I/O in workflow code — get them through steps so they are recorded.
+- Give steps stable names or ids; changing the order of steps breaks replay of runs already in flight (version your workflows).
+- A step can still run twice if the crash happens after the side effect but before the result is recorded — so side-effecting steps need **idempotency keys** (next section).
+
+**Waiting is a state, not a sleeping process.** "Wait for a manager's approval" or "retry in 6 hours" is recorded in the history; no process is held open, and the run resumes when the signal arrives — even after a deploy.
+
+**LangGraph checkpointers** (see Multi-Agent Systems) give a similar resume-from-last-step guarantee at the granularity of graph steps.
+
+**When to use:** runs longer than a few minutes, with side effects, human waits or expensive steps. For a short read-only Q&A, a plain retry is simpler.`,
+      example: `**Dependency-upgrade agent across 40 repositories (about 3 hours).**
+
+Per repo: plan (LLM) → edit (tools) → run tests (sandbox) → open PR (GitHub API) → wait for CI.
+
+- *Plain loop:* the worker was redeployed at repo 27. The rerun started from repo 1, opened 26 duplicate PRs and re-spent ~$38 of model calls.
+- *Durable workflow:* each LLM call, test run and PR creation is a recorded step; PR creation uses the key \`upgrade-<repo>-<targetVersion>\`. After the same redeploy the run replayed 26 repos from history in seconds (no model calls, no API calls) and continued at repo 27. Waiting for CI is a durable timer, so no worker sat idle for the 20-minute CI runs.
+
+Extra cost: one database write per step — negligible next to a model call.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'The core of durable execution: a journal that replays finished steps',
+          code: `type Journal = Map<string, unknown>; // persisted (e.g. a Postgres table keyed by runId + step name)
+
+export function durable(journal: Journal, persist: (name: string, value: unknown) => Promise<void>) {
+  return async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    if (journal.has(name)) return journal.get(name) as T; // replay: do not run again
+    const value = await fn();                               // first time: run the side effect
+    await persist(name, value);                             // record before moving on
+    journal.set(name, value);
+    return value;
+  };
+}
+
+// workflow code: deterministic; all I/O goes through step()
+export async function upgradeRepos(repos: string[], step: ReturnType<typeof durable>, deps: Deps) {
+  for (const repo of repos) {
+    const plan = await step('plan:' + repo, () => deps.llmPlan(repo));
+    await step('edit:' + repo, () => deps.applyEdits(repo, plan));
+    const tests = await step('test:' + repo, () => deps.runTests(repo));
+    if (tests.ok) await step('pr:' + repo, () => deps.openPr(repo, { idempotencyKey: 'upgrade-' + repo }));
+  }
+}
+interface Deps {
+  llmPlan(r: string): Promise<string>; applyEdits(r: string, p: string): Promise<void>;
+  runTests(r: string): Promise<{ ok: boolean }>; openPr(r: string, o: { idempotencyKey: string }): Promise<string>;
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Crashes and deploys resume the run instead of repeating finished work and side effects.',
+          'Long waits (approvals, CI, rate-limit backoff) cost nothing while idle.',
+          'The event history is a complete, replayable trace for debugging and audits.',
+        ],
+        cons: [
+          { con: 'Workflow code must be deterministic, which is easy to break by accident.', fix: 'Route time, randomness and all I/O through recorded steps, lint for forbidden calls, and test by replaying recorded histories in CI.' },
+          { con: 'Changing workflow code breaks runs already in flight.', fix: 'Version workflows and let old runs finish on the old version, or use the engine\'s patching or versioning API.' },
+          { con: 'A step may still execute twice around a crash.', fix: 'Make side-effecting steps idempotent with stable keys, and check the target state before acting.' },
+        ],
+      },
+      keyPoints: [
+        'METR time horizon: task length agents finish 50% of the time, roughly doubling every ~7 months (2019–2025).',
+        'Per-step errors compound over long runs: 0.99^200 ≈ 13%.',
+        'Durable execution: deterministic workflow + recorded steps + replay after a crash.',
+        'Waiting for humans or timers is durable state, not a held process.',
+        'Replay is safe only with deterministic workflow code and idempotent side effects.',
+      ],
+      exercise: {
+        prompt: `Write **\`replayRun(history, steps)\`** that simulates a resumed run.
+
+**Acceptance:**
+- \`history\`: \`Record<string, unknown>\` of results already recorded; \`steps\`: \`{ name, run: () => Promise<unknown> }[]\` in order.
+- Finished steps return their recorded result without calling \`run\`; unfinished ones run and their results are added to history.
+- If a step throws, stop and return \`{ status: 'failed', at: name, executed }\`; otherwise \`{ status: 'done', executed, results }\`.
+- \`executed\` lists the names of steps that actually ran in this call.`,
+        hints: [
+          'Use "name in history" to decide between replay and execution.',
+          'Record a result only after the step succeeds.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Step = { name: string; run: () => Promise<unknown> };
+
+export async function replayRun(history: Record<string, unknown>, steps: Step[]) {
+  const executed: string[] = [];
+  const results: unknown[] = [];
+  for (const s of steps) {
+    if (s.name in history) { results.push(history[s.name]); continue; }
+    try {
+      const v = await s.run();
+      history[s.name] = v; // in production: persist durably before continuing
+      executed.push(s.name);
+      results.push(v);
+    } catch {
+      return { status: 'failed' as const, at: s.name, executed };
+    }
+  }
+  return { status: 'done' as const, executed, results };
+}
+
+// crash after 'pr:a' was recorded → only later steps run on resume
+const h: Record<string, unknown> = { 'plan:a': 'bump x', 'pr:a': 'PR#12' };
+replayRun(h, [
+  { name: 'plan:a', run: async () => 'never called' },
+  { name: 'pr:a', run: async () => 'never called' },
+  { name: 'plan:b', run: async () => 'bump y' },
+]).then(console.log); // executed: ['plan:b']`,
+        },
+        explanation:
+          'Replay is just "look up before you run". The hard parts in real engines are durability of the history and determinism of the code between steps; the simulation makes clear why a step that never recorded its result will run again — hence idempotency keys.',
+      },
+      quickCheck: {
+        question: 'A durable agent workflow calls Date.now() directly in its workflow code to decide whether a deadline passed. What goes wrong?',
+        options: [
+          'Nothing; time is the same on every machine',
+          'On replay the value differs, so the workflow can take a different branch than the original run and diverge from its recorded history',
+          'Date.now() is too slow for workflows',
+          'It disables the event history',
+        ],
+        correct: 1,
+        explanation:
+          'Replay re-runs workflow code and expects the same decisions. Reading the clock directly gives a new value on replay; get time through a recorded step or the engine\'s deterministic time API.',
+      },
+      source: 'Kwa et al. 2025 — Measuring AI Ability to Complete Long Tasks (METR); Temporal docs — Workflows and Activities',
+    },
+    {
+      heading: 'Propose-then-commit, checkpoints and rollback — making consequential actions safe to retry and undo',
+      body: `**Intuition:** a bank transfer is not "click and hope". It is drafted, approved, executed once, confirmed, and reversible by a defined procedure if something goes wrong. Agents that act on real systems need the same discipline. The safety section covered *when* to ask for confirmation; this section is *how* to make the action itself reliable.
+
+**Propose-then-commit — four states**
+1. **Propose.** The agent produces a structured proposal, saved durably: the exact action and arguments, *why* (intent and evidence), what it touches, the worst case (blast radius), the **rollback plan**, a **precondition** (the state it was planned against, e.g. a record version or ETag), and an **idempotency key**.
+2. **Review.** A person or a policy engine approves or rejects — never the agent reviewing itself. For high-impact actions, make reviewers confirm specifics (resource, blast radius, rollback) instead of a single Approve button that invites rubber-stamping.
+3. **Commit.** Persist "in flight" first, re-check the precondition (did the world change since approval?), then execute with the idempotency key.
+4. **Verify.** Read the target back and confirm the effect ("GET the refund", "check the row"). A 200 status code is not proof. Mark "committed" only after verification.
+
+**The classic double-execute.** Action runs → process crashes before recording success → on resume the workflow sees "approved, not committed" and runs it again. The idempotency key makes the second call a no-op at the receiving API (or your own ledger), and the verify step tells you what actually happened.
+
+**Rollback options:**
+- **Undo** — reverse it directly (delete the created record, revert the commit).
+- **Compensating action** — a new action that cancels the effect (a refund reverses a charge; the saga pattern chains these for multi-step processes, undoing completed steps in reverse order).
+- **Escalate** — when nothing can undo it (an email sent), pause and alert a human. Actions with no rollback deserve the strictest review.
+
+**Checkpoints for agent work itself.** Before a risky phase, snapshot state so you can go back:
+- coding agents: a git commit or branch per step, or a sandbox/VM snapshot;
+- data agents: write to a staging table or a transaction, then promote;
+- graph runtimes: the checkpoint id before the step, to resume or "time-travel" from there.
+Test rollbacks like backups: a rollback that has never run probably does not work.
+
+**When to use:** any irreversible, financial, external or production-changing action. Reads and drafts need none of this.`,
+      example: `**Billing agent issuing credits.**
+
+Proposal #8812: \`credit(account=A-77, amount=$240)\`, intent "duplicate charge on invoice 5531", evidence: two charges with the same invoice id, precondition: \`account.version = 41\`, rollback: "reverse credit", key \`credit-5531-dup\`.
+
+- A manager approves at 09:14. At 09:15 the worker sends the credit, then crashes before recording success.
+- On resume: state is "in flight". The worker retries with key \`credit-5531-dup\`; the billing API returns the existing credit instead of creating a second one. Verify reads the account: one credit of $240. Marked committed.
+- A different proposal fails its precondition (\`version\` is now 43 because the customer paid in the meantime) and goes back to "needs re-review" instead of crediting an account that no longer owes anything.
+
+In a quarter: 0 duplicate credits (previously 3–5 a month from retries), and 2 caught stale approvals.`,
+      diagram: `propose ──► review ──approve──► commit ──────────────► verify ──ok──► committed
+   │            │                │ persist in-flight        │
+   │         reject          precondition still true?       fail
+   ▼            ▼                │ no → back to review       ▼
+ saved       closed              │ yes → execute(key)    rollback: undo │ compensate │ escalate`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Commit an approved proposal: in-flight record, precondition, idempotency, verify, rollback',
+          code: `interface Proposal {
+  id: string; action: string; args: Record<string, unknown>;
+  idempotencyKey: string; expectedVersion: number;
+  status: 'approved' | 'in-flight' | 'committed' | 'rolled-back' | 'needs-review';
+}
+interface Deps {
+  save(p: Proposal): Promise<void>;
+  currentVersion(p: Proposal): Promise<number>;
+  execute(p: Proposal): Promise<void>;          // receiver de-duplicates on idempotencyKey
+  verify(p: Proposal): Promise<boolean>;        // read back the target state
+  rollback(p: Proposal): Promise<void>;         // undo or compensating action
+  alert(msg: string): Promise<void>;
+}
+
+export async function commit(p: Proposal, d: Deps) {
+  if (p.status !== 'approved' && p.status !== 'in-flight') return p.status; // already done or closed
+  if (p.status === 'approved') {
+    if ((await d.currentVersion(p)) !== p.expectedVersion) { p.status = 'needs-review'; await d.save(p); return p.status; }
+    p.status = 'in-flight'; await d.save(p);    // record intent BEFORE the side effect
+  }
+  await d.execute(p);                           // safe to repeat thanks to the key
+  if (await d.verify(p)) { p.status = 'committed'; await d.save(p); return p.status; }
+  await d.rollback(p);
+  p.status = 'rolled-back'; await d.save(p);
+  await d.alert('proposal ' + p.id + ' failed verification and was rolled back');
+  return p.status;
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Retries and crashes cannot double-execute an approved action.',
+          'Reviewers see intent, evidence, blast radius and rollback, so approvals mean something.',
+          'Every action has a durable audit trail from proposal to verified result.',
+        ],
+        cons: [
+          { con: 'More states and storage than a simple "confirm?" prompt.', fix: 'Apply it only to consequential actions by risk tier; reads and drafts go straight through.' },
+          { con: 'Approvals go stale while waiting for a reviewer.', fix: 'Store a precondition (version or ETag) with the proposal and re-check it at commit; expire proposals after a time limit.' },
+          { con: 'Rollback plans that were never tested fail when needed.', fix: 'Rehearse rollbacks in staging, alert on any failed verification, and require stricter review for actions without a rollback.' },
+        ],
+      },
+      keyPoints: [
+        'Propose → review → commit → verify, each state stored durably.',
+        'Idempotency key prevents double execution; a precondition catches stale approvals.',
+        'Persist "in flight" before the side effect; mark committed only after read-back verification.',
+        'Rollback = undo, compensating action (saga), or escalate when irreversible.',
+        'Checkpoint before risky phases (git commits, snapshots, staging) and test rollbacks.',
+      ],
+      exercise: {
+        prompt: `Implement a tiny **saga**: \`runSaga(steps)\`.
+
+**Acceptance:**
+- Each step is \`{ name, action: () => Promise<void>, compensate: () => Promise<void> }\`.
+- Run actions in order. If one fails, run the **compensations of the steps that already succeeded, in reverse order**, then return \`{ ok: false, failed: name, compensated: string[] }\`.
+- If a compensation itself throws, keep going with the others and list it in \`compensationErrors\`.
+- If everything succeeds, return \`{ ok: true }\`.`,
+        hints: [
+          'Keep a stack of completed steps; pop from it to compensate.',
+          'Wrap each compensation in its own try/catch so one failure does not stop the rest.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type SagaStep = { name: string; action: () => Promise<void>; compensate: () => Promise<void> };
+
+export async function runSaga(steps: SagaStep[]) {
+  const done: SagaStep[] = [];
+  for (const s of steps) {
+    try {
+      await s.action();
+      done.push(s);
+    } catch {
+      const compensated: string[] = [];
+      const compensationErrors: string[] = [];
+      for (const c of done.reverse()) {
+        try { await c.compensate(); compensated.push(c.name); }
+        catch { compensationErrors.push(c.name); } // needs a human
+      }
+      return { ok: false as const, failed: s.name, compensated, compensationErrors };
+    }
+  }
+  return { ok: true as const };
+}
+
+// book flight → book hotel → charge card (fails) ⇒ cancel hotel, cancel flight`,
+        },
+        explanation:
+          'Multi-step agent actions rarely run inside one database transaction, so the saga pattern gives "all or nothing" by undoing completed steps in reverse. Compensation errors must surface for a human, because the system is then in a known-bad state.',
+      },
+      quickCheck: {
+        question: 'An approved "credit $240" action executed, but the worker crashed before recording success. On resume, what prevents a second credit?',
+        options: [
+          'Asking the reviewer to approve again',
+          'Sending the retry with the same idempotency key, then verifying the account state before marking it committed',
+          'Lowering the model temperature',
+          'Skipping the action on resume because it was approved',
+        ],
+        correct: 1,
+        explanation:
+          'The idempotency key lets the receiving system return the existing credit instead of creating another, and read-back verification confirms what actually happened. Skipping blindly could miss a credit that never went through.',
+      },
+      source: 'Garcia-Molina & Salem 1987 — Sagas; LangGraph docs — Interrupts and persistence; Stripe docs — Idempotent requests',
+    },
   ],
   codeChallenges: [
     {
@@ -1620,6 +1909,41 @@ Grade this run.`,
         'Monthly spend alerts as the only financial guard',
       ],
     },
+    {
+      id: 'agent-evaluation-safety-iq-06',
+      difficulty: 'expert',
+      question: 'Design an agent that migrates 2,000 customer accounts to a new billing plan over several days, with manager approval for high-value accounts. It must survive deploys and never double-charge or double-credit.',
+      context: 'Each account needs: read usage, compute the new plan (LLM-assisted for edge cases), apply the plan change, issue a pro-rated credit, email the customer. Accounts over $10k/year need a manager to approve.',
+      whatInterviewerLooksFor: [
+        'Durable execution: deterministic workflow, recorded steps, resume after crash',
+        'Propose-then-commit for consequential steps with idempotency keys and preconditions',
+        'Verification after side effects and a rollback / compensation plan per step',
+        'Budgets, monitoring and a canary rollout for a long-running job',
+      ],
+      modelAnswer: `**Shape.** One durable workflow per account (so failures stay isolated) plus a parent that schedules them with a concurrency limit. Workflow code is deterministic; usage reads, LLM calls, billing API calls and emails are recorded steps.
+
+**Per-account steps.**
+1. \`readUsage\` (read-only, no approval).
+2. \`proposePlan\` — LLM-assisted for edge cases; output is a structured proposal: new plan, credit amount, evidence, account version (precondition), rollback ("restore old plan, reverse credit"), and idempotency keys like \`plan-<account>-v2\` and \`credit-<account>-v2\`.
+3. **Review** — accounts over $10k wait on a durable signal for manager approval (no process held open; survives deploys); others pass an automated policy check (credit within bounds, plan in allowed list).
+4. **Commit** — persist "in flight", re-check the account version, apply the plan change and the credit with their keys.
+5. **Verify** — read back the plan and the ledger; exactly one credit with the expected amount.
+6. **Email** last, only after verification, with its own key — it is the one step with no undo.
+
+**Failure handling.** Verification failure → compensate in reverse (reverse credit, restore plan) and alert. A stale precondition → back to review. Compensation errors → page a human.
+
+**Operations.** Canary: 20 accounts first, compare against a manual calculation, then ramp. Per-run and total budgets for LLM calls, a kill switch checked between steps, and dashboards for in-flight, waiting-for-approval, verified and rolled-back counts.`,
+      followUps: [
+        { q: 'Why email last?', a: 'It is the only irreversible step. Sending it after the plan and credit are verified means you never tell a customer about a change that was later rolled back.' },
+        { q: 'You must change the workflow code while 600 runs are in flight. What do you do?', a: 'Version the workflow: in-flight runs finish on the old version (or use the engine\'s patch API with a version check), new runs start on the new one, and I replay recorded histories in CI to confirm the old version still replays.' },
+      ],
+      pitfalls: [
+        'A plain loop with an in-memory cursor that restarts from account 1 after a deploy',
+        'Retrying side effects without idempotency keys',
+        'Treating an API 200 as proof without reading state back',
+        'Sending customer emails before the change is verified',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1924,6 +2248,59 @@ console.log(passHatK(8, 6, 3).toFixed(2));`,
       followUps: [
         { q: 'What should a run do when the switch trips mid-task?', a: 'Stop before the next action, persist its state and partial results, record stopReason "kill_switch", and tell the user the task was paused, so it can be resumed or handed to a human once the issue is fixed.' },
       ],
+    },
+    {
+      id: 'agent-evaluation-safety-mcq-15',
+      difficulty: 'medium',
+      question: 'An agent completes each step correctly 98% of the time, independently. Roughly how often does a 100-step run finish with no failed step, and what follows?',
+      options: [
+        'About 98%; per-step reliability carries over to the run',
+        'About 13%; long runs need checkpoints, verification and resume, not just a better prompt',
+        'About 50%; errors cancel out over long runs',
+        'About 2%; any run longer than 50 steps always fails',
+      ],
+      correct: [1],
+      explanation:
+        '0.98^100 ≈ 0.13. Small per-step error rates compound over long horizons, which is why long-running agents need intermediate verification, durable checkpoints and the ability to resume or retry a step instead of restarting.',
+      followUps: [{ q: 'What does METR\'s time-horizon metric measure?', a: 'The length of task, by how long it takes skilled humans, that an agent completes with 50% success; it roughly doubled about every seven months for frontier models between 2019 and 2025.' }],
+    },
+    {
+      id: 'agent-evaluation-safety-mcq-16',
+      difficulty: 'hard',
+      question: 'Which practices keep durable-execution replay correct for an agent workflow? Select ALL that apply.',
+      options: [
+        'Run LLM and tool calls as recorded steps (activities) rather than inline in workflow code',
+        'Read the current time and random numbers through recorded steps or the engine\'s deterministic APIs',
+        'Reorder steps freely in a new deploy, since finished steps are cached by position',
+        'Use idempotency keys on side-effecting steps in case a step runs twice around a crash',
+      ],
+      correct: [0, 1, 3],
+      explanation:
+        'Replay needs the workflow code to make the same decisions and every non-deterministic or side-effecting call to be recorded. Reordering steps without versioning breaks runs in flight, and steps can still run twice at the crash boundary, hence idempotency keys.',
+      followUps: [{ q: 'Why are LLM calls a natural fit for activities?', a: 'They are non-deterministic, slow, cost money and can fail transiently, so recording their results avoids re-paying and re-deciding on replay while retries handle rate limits.' }],
+    },
+    {
+      id: 'agent-evaluation-safety-mcq-17',
+      difficulty: 'hard',
+      question: 'What is the most serious bug in this commit step for an approved refund?',
+      code: {
+        language: 'typescript',
+        code: `async function commitRefund(p: Proposal) {
+  await billing.refund(p.orderId, p.amount); // no idempotency key
+  await db.proposals.update(p.id, { status: 'committed' });
+}
+// on worker restart: every proposal with status 'approved' is committed again`,
+      },
+      options: [
+        'The refund amount should be rounded first',
+        'A crash between the refund and the status update re-runs the refund on restart, issuing it twice; persist "in flight", use an idempotency key and verify before marking committed',
+        'The status should be updated before calling the billing API, with no other change',
+        'Refunds should never need human approval',
+      ],
+      correct: [1],
+      explanation:
+        'Without an idempotency key or an in-flight record, the window between the side effect and the status write causes a double refund on resume. Updating status first instead would lose refunds that never ran; the fix is in-flight + key + read-back verification.',
+      followUps: [{ q: 'What else should commit check before executing?', a: 'A precondition such as the order version or remaining refundable amount, so an approval made against an old state goes back to review instead of executing.' }],
     },
   ],
 };

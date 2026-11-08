@@ -21,7 +21,7 @@ export function AchievementsSummary({ p }: { p: Progress }) {
   const census = TIERS.map((t) => ({ t, n: earned.filter((e) => e.tier !== 'standard' && tierRank(e.tier) >= tierRank(t)).length }));
 
   return (
-    <section className="card ach-shelf" aria-labelledby="ach-shelf-title">
+    <section className="card ach-shelf" aria-labelledby="ach-shelf-title" data-guide="achievements">
       <div className="td-head">
         <h2 id="ach-shelf-title" className="td-h2">
           Trophy shelf

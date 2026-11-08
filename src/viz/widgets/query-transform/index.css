@@ -1,0 +1,129 @@
+/* query-transform drawing. Reduced motion: viz.css stops all transitions inside .viz */
+.qt {
+  display: grid;
+  gap: 12px;
+}
+.qt-box {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: light-dark(rgb(255 255 255 / 0.7), rgb(5 4 13 / 0.35));
+  font-size: var(--fs-sm);
+  animation: qt-in 400ms var(--ease-out);
+}
+.qt-box.llm {
+  border-color: color-mix(in srgb, var(--c-pulsar) 50%, transparent);
+}
+.qt-box.truth {
+  border-color: var(--good);
+}
+.qt-lbl {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.qt-wrong {
+  border-radius: 4px;
+  padding: 0 3px;
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+@keyframes qt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.qt-vec {
+  display: grid;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) 4.5rem;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-sm);
+  transition: opacity 300ms;
+}
+.qt-vec.off {
+  opacity: 0.25;
+}
+.qt-bar {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--tint-2);
+}
+.qt-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--grad-action);
+  transition: width 500ms var(--ease-out);
+}
+.qt-v {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+}
+.qt-v.top {
+  color: var(--good);
+  font-weight: 700;
+}
+.qt-vars {
+  margin: 0;
+  padding-left: 1.2em;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+.qt-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  table-layout: fixed;
+}
+.qt-tbl th,
+.qt-tbl td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.qt-tbl th:first-child,
+.qt-tbl td:first-child {
+  text-align: left;
+  width: 40%;
+}
+.qt-tbl thead th {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.qt-tbl td.dim {
+  opacity: 0.25;
+}
+.qt-tbl td.r1 {
+  color: var(--good);
+  font-weight: 700;
+}
+.qt-tbl tr.win td:first-child {
+  color: var(--good);
+  font-weight: 700;
+}
+.qt-tbl td.score {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+@media (max-width: 600px) {
+  .qt-vec {
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) 4rem;
+    gap: 6px;
+  }
+  .qt-tbl {
+    font-size: 0.75rem;
+  }
+}

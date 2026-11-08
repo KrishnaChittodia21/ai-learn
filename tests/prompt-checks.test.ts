@@ -1,36 +1,19 @@
-// Unit tests for the Prompt Lab grader (src/lib/promptChecks.ts), in plain node (TypeScript is
-// type-stripped; the grader has type-only imports). Usage:
-//   node --no-warnings scripts/test-prompt-checks.mjs
-// Covers every check kind with pass and fail cases, odd input that must never throw, and every
-// shipped lab: its starter scores below the pass mark (≤ 25) and its model answer scores 100.
-import { readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+// Prompt Lab grader (src/lib/promptChecks.ts): every check kind with pass and fail cases, odd input that
+// must never throw, and every shipped lab (its starter scores <= 25, its model answer scores 100).
+// Also run by `npm run validate`, so shipped labs stay checked there.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import * as G from '../src/lib/promptChecks.ts';
+import { TOPICS } from './helpers.ts';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const load = async (rel) => import(pathToFileURL(join(root, rel)).href);
-const G = await load('src/lib/promptChecks.ts');
-
-let passed = 0;
-const failures = [];
-function test(name, fn) {
-  try {
-    fn();
-    passed++;
-  } catch (e) {
-    failures.push(`${name}: ${e.message}`);
-  }
-}
-function eq(actual, expected, what = 'value') {
-  if (actual !== expected) throw new Error(`${what}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-}
+const eq = (actual: unknown, expected: unknown, what = 'value') => assert.equal(actual, expected, what);
 /** grade a single check: returns {pass, detail} */
-const one = (check, draft) => {
+const one = (check: any, draft: any) => {
   const g = G.gradePrompt({ checks: [{ weight: 100, label: 'x', why: 'y', ...check }] }, draft);
   return g.results[0];
 };
-const ok = (check, draft, name) => test(`${check.kind} passes: ${name}`, () => eq(one(check, draft).pass, true, `pass (${one(check, draft).detail})`));
-const no = (check, draft, name) => test(`${check.kind} fails: ${name}`, () => eq(one(check, draft).pass, false, `pass (${one(check, draft).detail})`));
+const ok = (check: any, draft: any, name: string) => test(`${check.kind} passes: ${name}`, () => eq(one(check, draft).pass, true, `pass (${one(check, draft).detail})`));
+const no = (check: any, draft: any, name: string) => test(`${check.kind} fails: ${name}`, () => eq(one(check, draft).pass, false, `pass (${one(check, draft).detail})`));
 
 // ---------- has-system ----------
 const hs = { kind: 'has-system' };
@@ -150,32 +133,21 @@ test('never throws on odd input', () => {
 test('CRLF and inner-space variables', () => eq(G.variableOccurrences('a {{ x }} b {{X}}', 'x').length, 2, 'occurrences'));
 
 // ---------- shipped labs: starter low, model answer 100 ----------
-const topicDir = join(root, 'src/content/topics');
-let labs = 0;
-for (const f of readdirSync(topicDir).filter((f) => f.endsWith('.ts'))) {
-  const t = (await load(`src/content/topics/${f}`)).default;
-  for (const lab of t.promptLabs ?? []) {
-    labs++;
-    test(`${lab.id}: starter scores ≤ 25`, () => {
-      const g = G.gradePrompt(lab, lab.starter);
-      if (g.score > 25) throw new Error(`starter scores ${g.score}`);
-    });
-    test(`${lab.id}: model answer scores 100`, () => {
-      const g = G.gradePrompt(lab, lab.modelAnswer);
-      const failed = g.results.filter((r) => !r.pass).map((r) => `${r.check.label} (${r.detail})`);
-      if (g.score !== 100) throw new Error(`model answer scores ${g.score}: ${failed.join('; ')}`);
-    });
-    test(`${lab.id}: every check has a fail detail on an empty prompt`, () => {
-      const g = G.gradePrompt(lab, { system: '', user: '' });
-      for (const r of g.results) if (!r.detail) throw new Error(`${r.check.label}: empty detail`);
-      eq(g.score, 0, 'empty prompt score');
-    });
-  }
+const labs = TOPICS.flatMap((t) => t.promptLabs ?? []);
+test('there are shipped prompt labs', () => assert.ok(labs.length > 0));
+for (const lab of labs) {
+  test(`${lab.id}: starter scores ≤ 25`, () => {
+    const g = G.gradePrompt(lab, lab.starter);
+    assert.ok(g.score <= 25, `starter scores ${g.score}`);
+  });
+  test(`${lab.id}: model answer scores 100`, () => {
+    const g = G.gradePrompt(lab, lab.modelAnswer);
+    const failed = g.results.filter((r) => !r.pass).map((r) => `${r.check.label} (${r.detail})`);
+    assert.equal(g.score, 100, `model answer: ${failed.join('; ')}`);
+  });
+  test(`${lab.id}: every check has a fail detail on an empty prompt`, () => {
+    const g = G.gradePrompt(lab, { system: '', user: '' });
+    for (const r of g.results) assert.ok(r.detail, `${r.check.label}: empty detail`);
+    eq(g.score, 0, 'empty prompt score');
+  });
 }
-
-if (failures.length) {
-  for (const f of failures) console.log(`✗ ${f}`);
-  console.log(`\n${failures.length} prompt-check test(s) failed, ${passed} passed.`);
-  process.exit(1);
-}
-console.log(`✓ ${passed} prompt-check tests passed (${labs} shipped prompt lab${labs === 1 ? '' : 's'}: starter low, model answer 100)`);

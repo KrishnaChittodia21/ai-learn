@@ -6,7 +6,7 @@ const shortTitle = (title: string) => title.split(/: | — /)[0];
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * Today: the weakest spot, framed by the screen's one spinning gradient border, with one-click revise / drill,
+ * Today: the weakest spot, framed by a static aurora gradient border, with one-click revise / drill,
  * plus the next few weak topics. Empty states before any exam answer and when nothing is weak.
  */
 export function WeakReattempt({

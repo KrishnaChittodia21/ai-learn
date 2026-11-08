@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, MAX_STEPS, MIN_STEPS, SCENARIOS, simulate, type EntryKind, type Params, type ScenarioId } from './sim';
 
 const KIND: Record<EntryKind, { label: string; fill: string; stroke: string }> = {
@@ -37,6 +38,7 @@ export default function ReactAgentLoopViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<ScenarioId>

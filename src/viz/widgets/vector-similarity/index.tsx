@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, DOCS, METRICS, QUERIES, norm, simulate, unit, type Metric, type Params, type QueryId } from './sim';
 
 const OX = 112;
@@ -45,6 +46,7 @@ export default function VectorSimilarityViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<QueryId>

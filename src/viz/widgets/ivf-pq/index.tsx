@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import {
   DEFAULT_PARAMS,
   K,
@@ -113,6 +114,7 @@ export default function IvfPqViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(params)}
       controls={
         <>
           <Choice<Mode>
