@@ -8,7 +8,6 @@ import type { Section, Topic } from '../types';
 import { useProgress } from '../lib/progress';
 import { wordCount } from '../lib/steps';
 import { shortLength } from '../lib/shorts';
-import { useShorts } from '../lib/useShorts';
 import { vizForSection } from '../viz/registry';
 import { CodeBlock, Diagram, Markdown } from './ui';
 import { ProsConsTable } from './SectionPractice';
@@ -42,7 +41,6 @@ export function ModeSwitch({ id, s, mode, onChange }: { id: string; s: Section; 
           </span>
         )}
       </div>
-      <span className="rvl-remember">Your choice is remembered for every section with steps.</span>
     </div>
   );
 }
@@ -134,7 +132,6 @@ export function CoreView({ s }: { s: Section }) {
 /** Learn more about this section: only links that exist (its Short, animation, prompt lab, sources, next section) */
 export function GoDeeper({ topic, i, onViz, onNext }: { topic: Topic; i: number; onViz: () => void; onNext: () => void }) {
   const p = useProgress();
-  const { open } = useShorts();
   const s = topic.sections[i];
   const viz = vizForSection(topic.id, s.heading)[0];
   const lab = topic.promptLabs?.[0];
@@ -153,7 +150,7 @@ export function GoDeeper({ topic, i, onViz, onNext }: { topic: Topic; i: number;
         {s.short && (
           <Link to={`/short/${s.short.id}`} className="gd-card tone-short">
             <span className="gd-k">
-              <Clapperboard size={14} aria-hidden /> Short · {open.has(s.short.id) ? shortLength(s.short) : 'locked'}
+              <Clapperboard size={14} aria-hidden /> Short · {shortLength(s.short)}
             </span>
             <span className="gd-t">{s.short.title}</span>
             <span className="gd-d">{s.short.takeaway.head.replace(/\*/g, '')}</span>
@@ -196,7 +193,7 @@ export function GoDeeper({ topic, i, onViz, onNext }: { topic: Topic; i: number;
         {next && (
           <button type="button" className="gd-card gd-wide gd-next" onClick={onNext}>
             <span className="gd-k">
-              <ArrowRight size={14} aria-hidden /> Next section · § {String(i + 2).padStart(2, '0')}
+              <ArrowRight size={14} aria-hidden /> Next section · {String(i + 2).padStart(2, '0')}
               {next.steps ? ' · has steps' : ''}
             </span>
             <span className="gd-t">{next.heading}</span>

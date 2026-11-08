@@ -19,6 +19,11 @@ const KIND_LABEL: Record<ActorKind, string> = {
   tool: 'TOOL',
   agent: 'AGENT',
   judge: 'JUDGE',
+  server: 'SERVER',
+  cache: 'CACHE',
+  guard: 'GUARD',
+  data: 'DATA',
+  metric: 'METRIC',
 };
 
 const NS = 'http://www.w3.org/2000/svg';

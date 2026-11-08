@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { BookA, Braces, ChartColumn, ChartSpline, CircleDot, CircleHelp, CirclePlay, Ellipsis, Flame, Lock, Medal, Moon, Route, Search, Settings, Sparkles, Star, Sun, Target, Trophy, X } from 'lucide-react';
+import { Activity, BookA, Braces, ChartSpline, CircleDot, CircleHelp, CirclePlay, Ellipsis, Flame, Lock, Medal, Moon, Route, Search, Settings, Sparkles, Star, Sun, Target, Trophy, X } from 'lucide-react';
 import { COMPANY_QUESTIONS, TOPICS } from '../content';
 import { localDay, setSettings, setStudyPlan, useProgress } from '../lib/progress';
 import { planWithLog } from '../lib/pace';
@@ -19,6 +19,7 @@ import { studyStreak } from '../lib/streak';
 import { useAchievementDetection } from '../lib/useAchievements';
 import { ACHIEVEMENT_TOTAL, achievementById, TIER_LABEL } from '../content/achievements';
 import { useTip } from './Tip';
+import { trackPage } from '../lib/navHistory';
 
 // cmdk is only needed once the palette is opened
 const CommandPalette = lazy(() => import('./CommandPalette'));
@@ -69,6 +70,8 @@ export default function Layout() {
   useEffect(() => {
     saveUiPrefs(loc === '/' ? { lastLocation: loc } : { lastLocation: loc, lastStudyLocation: stableLocation(loc) });
   }, [loc]);
+  // for "← Back to …" labels (src/lib/navHistory.ts)
+  useEffect(() => trackPage(location.pathname), [location.pathname]);
 
   // study plan: keep today's [covered, expected] in the plan log (the curve's past and the Pacesetter badge)
   useEffect(() => {
@@ -171,9 +174,9 @@ export default function Layout() {
   const toggleTheme = () => setSettings({ theme: isDark ? 'light' : 'dark' });
   const themeLabel = isDark ? 'Switch to light mode' : 'Switch to dark mode';
   const savedTip = useTip('Saved for later');
-  const achTip = useTip(achLabel);
-  const guideTip = useTip('Guide for this page', { kbd: '?' });
-  const themeTip = useTip(isDark ? 'Light mode' : 'Dark mode');
+  const achTip = useTip(achLabel, { end: true });
+  const guideTip = useTip('Guide for this page', { kbd: '?', end: true });
+  const themeTip = useTip(isDark ? 'Light mode' : 'Dark mode', { end: true });
   const settingsTip = useTip('Settings', { end: true });
 
   // phone dock: one pill slides (transform only) to the active tab; reduced motion fades it out and in instead
@@ -217,13 +220,15 @@ export default function Layout() {
 
   const lockTitle = unlocked ? undefined : 'Unlocks when every topic exam is passed';
   const navItems = [
-    { to: '/', label: 'Today', short: 'Today', icon: Sparkles, end: true },
+    // `short` saves room in a narrow desktop header; the phone tab bar has room for the full name
+    { to: '/', label: 'Dashboard', short: 'Home', tab: 'Dashboard', icon: Sparkles, end: true },
+    { to: '/track', label: 'Track', short: 'Track', icon: Activity },
     { to: '/contents', label: 'Syllabus', short: 'Syllabus', icon: CircleDot, active: onTopic },
     // phones reach Shorts from the More sheet (the tab bar keeps five tabs)
     { to: '/shorts', label: 'Shorts', short: 'Shorts', icon: CirclePlay, active: location.pathname.startsWith('/short/'), desktopOnly: true },
     { to: '/plan', label: 'Plan', short: 'Plan', icon: ChartSpline, desktopOnly: true },
-    { to: '/practice', label: 'Practice', short: 'Practice', icon: ChartColumn, count: mistakes },
-    { to: '/weak-areas', label: 'Weak areas', short: 'Weak', icon: Target },
+    // the mistakes drill (/practice) is an action from Weak areas, not a destination of its own
+    { to: '/weak-areas', label: 'Weak areas', short: 'Weak', icon: Target, count: mistakes, active: location.pathname.startsWith('/practice') },
     { to: '/challenges', label: 'Challenges', short: 'Challenges', icon: Trophy, locked: !unlocked },
   ];
   const cls =
@@ -246,7 +251,8 @@ export default function Layout() {
           <nav className="primary-nav" aria-label="Primary">
             {navItems.map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={cls('nav-link', n.active)} title={n.locked ? lockTitle : undefined}>
-                {n.label}
+                <span className="nav-full">{n.label}</span>
+                {n.short !== n.label && <span className="nav-short">{n.short}</span>}
                 {!!n.count && (
                   <span className="nav-count" aria-label={`${n.count} mistakes to drill`}>
                     {n.count}
@@ -257,10 +263,9 @@ export default function Layout() {
             ))}
           </nav>
           <div className="masthead-tools">
-            <button type="button" className="search-trigger" onClick={openPalette} aria-label="Search topics and sections (⌘K)">
+            <button type="button" className="search-trigger" onClick={openPalette} aria-label="Search topics and sections (⌘K)" title="Search (⌘K)">
               <Search size={16} aria-hidden />
               <span className="search-trigger-text">Search</span>
-              <kbd>⌘K</kbd>
             </button>
             <span className={`streak-chip${streak > 0 ? '' : ' is-zero'}`} title="Study streak: consecutive days with study activity" aria-label={streakLabel}>
               <Flame size={15} aria-hidden className="streak-flame" />
@@ -282,10 +287,13 @@ export default function Layout() {
               {achTip.tip}
               <Medal size={16} aria-hidden className="ach-hdr-icon" />
               <span className="ach-hdr-text">Achievements</span>
-              <span className="ach-hdr-num" aria-hidden>
-                {earnedCount}
-                <small>/{ACHIEVEMENT_TOTAL}</small>
-              </span>
+              {/* a red "0" reads as an alert, so the count appears with the first badge */}
+              {earnedCount > 0 && (
+                <span className="ach-hdr-num" aria-hidden>
+                  {earnedCount}
+                  <small>/{ACHIEVEMENT_TOTAL}</small>
+                </span>
+              )}
             </NavLink>
             <button type="button" className="tool-btn guide-btn" onClick={openGuide} aria-label="Guide for this page (?)" {...guideTip.host}>
               <CircleHelp size={18} aria-hidden />
@@ -412,7 +420,7 @@ export default function Layout() {
                 )}
                 {n.locked && <Lock size={10} aria-label="locked" className="tab-lock" />}
               </span>
-              <span className="tab-label">{n.short}</span>
+              <span className="tab-label">{n.tab ?? n.short}</span>
             </NavLink>
           );
         })}

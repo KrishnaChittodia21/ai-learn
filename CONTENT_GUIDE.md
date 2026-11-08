@@ -137,6 +137,7 @@ Fix everything until both pass. (The cross-topic duplicate check may flag pairs 
 - `multimodal-vision` (multimodal 1): Multimodal AI · Vision-Language Models · Image Understanding · Image Generation
 - `audio-video` (multimodal 2): Audio Processing · Speech-to-Text · Text-to-Speech · Video Understanding
 - `ai-applications` (multimodal 3): Text-to-SQL · AI Chatbots · Enterprise Search
+- `generative-media` (multimodal 4): How Diffusion Works · Conditioning and Guidance · Control and Editing · Video Generation · Audio Generation · Shipping Safely
 - `ai-security-injection` (security 1): AI Security · Prompt Injection · Jailbreak Prevention
 - `privacy-guardrails` (security 2): Data Privacy · PII Redaction · Guardrails · Output Validation
 - `red-teaming-responsible-ai` (security 3): AI Red Teaming · Responsible AI · AI Governance

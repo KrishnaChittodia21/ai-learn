@@ -22,6 +22,7 @@ const PracticePage = lazy(() => import('./pages/WeakAreas').then((m) => ({ defau
 const ShortsPage = lazy(() => import('./pages/Shorts'));
 const ShortPage = lazy(() => import('./pages/Short'));
 const PlanPage = lazy(() => import('./pages/Plan'));
+const TrackPage = lazy(() => import('./pages/Track'));
 // drills carry the TypeScript runner (sucrase), so they load only when opened
 const DrillsPage = lazy(() => import('./pages/Drills'));
 const DrillPage = lazy(() => import('./pages/Drills').then((m) => ({ default: m.DrillPage })));
@@ -64,6 +65,7 @@ const router = createHashRouter([
       { path: 'shorts', element: later(<ShortsPage />, 'shorts') },
       { path: 'short/:id', element: later(<ShortPage />) },
       { path: 'plan', element: later(<PlanPage />) },
+      { path: 'track', element: later(<TrackPage />) },
       { path: 'drills', element: later(<DrillsPage />) },
       { path: 'drills/:id', element: later(<DrillPage />) },
       { path: 'glossary', element: later(<GlossaryPage />) },

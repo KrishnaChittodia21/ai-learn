@@ -41,6 +41,114 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Faithfulness and Groundedness — claim decomposition and per-claim verification',
+      steps: {
+        actors: [
+          { id: 'answer', kind: 'llm', label: 'Answer', sub: 'the RAG reply', x: 110, y: 70 },
+          { id: 'split', kind: 'chunker', label: 'Decompose', sub: 'atomic claims', x: 340, y: 70 },
+          { id: 'judge', kind: 'judge', label: 'Verifier', sub: 'NLI or LLM judge', x: 570, y: 70 },
+          { id: 'context', kind: 'document', label: 'Context', sub: 'supplied chunks', x: 800, y: 70 },
+          { id: 'score', kind: 'metric', label: 'Faithfulness', sub: 'supported ÷ total', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Decompose, verify, score',
+            lines: [
+              '**Decompose** the answer into atomic claims, pronouns resolved so each stands alone.',
+              '**Verify** each claim against the supplied context.',
+              '**Score** = supported claims ÷ total claims.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['answer', 'split'], label: 'answer' },
+              { lit: 'split' },
+              { say: 1 },
+              { send: ['split', 'judge'], label: 'claims', count: 3 },
+              { send: ['context', 'judge'], label: 'chunks' },
+              { say: 2 },
+              { send: ['judge', 'score'], label: 'verdicts', tone: 'ok' },
+              { lit: 'score' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the claim check',
+            lines: ['Faithfulness is measured claim by claim, not answer by answer.'],
+            task: {
+              type: 'order',
+              question: 'Put claim-level verification in order.',
+              items: ['Split the answer into atomic claims', 'Check each claim against the context', 'Divide supported claims by total claims'],
+              hint: 'You need the claims before you can check them, and the verdicts before you can count them.',
+            },
+            solved: 'Decompose → verify each claim → score = supported ÷ total, keeping the per-claim verdicts.',
+            then: [
+              { send: ['split', 'judge'], label: 'claims', count: 3 },
+              { send: ['judge', 'score'], label: 'verdicts', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A returns answer, scored',
+            lines: [
+              'The answer splits into 5 claims.',
+              '30-day returns, 5 business days and original card: **supported**.',
+              'Free return shipping and store credit: **unsupported**.',
+              'Faithfulness = 3 ÷ 5 = **0.60**; the two unsupported sentences are flagged.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['split', 'judge'], label: '5 claims', count: 5 },
+              { say: 1 },
+              { send: ['context', 'judge'], label: 'chunks 1–2', tone: 'ok' },
+              { badge: 'judge', text: '3 supported', tone: 'ok', ms: 1100 },
+              { say: 2 },
+              { badge: 'judge', text: '2 unsupported', tone: 'err', ms: 1100 },
+              { say: 3 },
+              { send: ['judge', 'score'], label: 'verdicts' },
+              { badge: 'score', text: '3 ÷ 5 = 0.60' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: grounded is not correct',
+            lines: ['Groundedness asks "is it backed by the context?", not "is it true?".'],
+            task: {
+              type: 'choose',
+              question: 'An answer repeats a stale source word for word. Where does it sit?',
+              options: [
+                { text: 'Grounded but incorrect' },
+                { text: 'A hallucination', why: 'A hallucination is not grounded; this answer is backed by its source.' },
+                { text: 'Ideal', why: 'Ideal is grounded and correct; a stale source makes the answer wrong.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Faithful to a wrong or stale source is grounded but incorrect, so measure both.',
+            then: [{ send: ['context', 'judge'], label: 'stale chunk', tone: 'miss' }, { badge: 'judge', text: 'supported', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Two kinds of verifier',
+            lines: [
+              '**NLI cross-encoder**: premise = context chunk, hypothesis = claim; take the max over chunks.',
+              'NLI is fast but has a ~512-token premise limit, so check each chunk separately.',
+              '**LLM judge**: long contexts and paraphrase, but costs more and varies between runs.',
+              'Ask the judge for an evidence quote, and check it exists verbatim in the context.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['context', 'judge'], label: 'chunk 1' },
+              { send: ['context', 'judge'], label: 'chunk 2' },
+              { badge: 'judge', text: 'max P(entail)', ms: 1100 },
+              { say: 1 },
+              { say: 2 },
+              { lit: 'judge' },
+              { say: 3 },
+              { send: ['judge', 'context'], label: 'quote?', tone: 'req' },
+              { badge: 'context', text: 'found verbatim', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       short: {
         id: 'air-canada-chatbot-ruling',
         title: 'The Air Canada chatbot ruling',
@@ -272,6 +380,108 @@ export function faithfulnessScore(claims: string[], entail: (c: string) => numbe
     },
     {
       heading: 'Citation Evaluation — citation recall, citation precision and attribution checks',
+      steps: {
+        actors: [
+          { id: 'answer', kind: 'llm', label: 'Answer', sub: 'sentences + [n]', x: 110, y: 70 },
+          { id: 'sources', kind: 'document', label: 'Cited passages', sub: 'retrieved sources', x: 340, y: 70 },
+          { id: 'nli', kind: 'judge', label: 'Entailment judge', sub: 'NLI or LLM judge', x: 570, y: 70 },
+          { id: 'recall', kind: 'metric', label: 'Citation recall', sub: 'supported ÷ stmts', x: 340, y: 230 },
+          { id: 'precision', kind: 'metric', label: 'Citation prec.', sub: 'relevant ÷ citations', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Recall: is each statement backed?',
+            lines: [
+              'For each statement, join its cited passages.',
+              'The statement counts if that join **entails** it.',
+              'Recall = supported statements ÷ statements; no citation scores 0.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['answer', 'sources'], label: 'S + citations' },
+              { say: 1 },
+              { send: ['sources', 'nli'], label: 'joined passages' },
+              { badge: 'nli', text: 'entails?', ms: 1000 },
+              { say: 2 },
+              { send: ['nli', 'recall'], label: 'supported', tone: 'ok' },
+              { lit: 'recall' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Precision: does each citation pull its weight?',
+            lines: [
+              'A citation is irrelevant if it does not entail the statement alone…',
+              '…**and** removing it does not change whether the rest entail it.',
+              'Precision = relevant citations ÷ all citations, so padding is penalised.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['sources', 'nli'], label: 'citation alone', tone: 'miss' },
+              { say: 1 },
+              { send: ['sources', 'nli'], label: 'leave it out' },
+              { badge: 'nli', text: 'irrelevant', tone: 'err', ms: 1100 },
+              { say: 2 },
+              { send: ['nli', 'precision'], label: 'relevant' },
+              { lit: 'precision' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: jointly necessary',
+            lines: ['S4 cites [5] and [6]. Neither alone entails S4; together they do.'],
+            task: {
+              type: 'choose',
+              question: 'Are [5] and [6] relevant citations?',
+              options: [
+                { text: 'Both relevant: removing either breaks support' },
+                { text: 'Both irrelevant: neither entails S4 alone', why: 'Irrelevant also needs "removing it changes nothing"; here removing either breaks support.' },
+                { text: 'Only the first one counts', why: 'Order does not matter; each is needed for the joint support.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Leave-one-out rewards jointly necessary citations: [5] and [6] are both relevant.',
+            then: [{ send: ['sources', 'nli'], label: '[5] + [6]', tone: 'ok' }, { badge: 'nli', text: 'both relevant', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The worked example',
+            lines: [
+              '5 statements: S1, S2 and S4 are supported → recall 3 ÷ 5 = **0.60**.',
+              '6 citations: [1], [2], [5], [6] are relevant → precision 4 ÷ 6 = **0.667**.',
+              'Citation F1 = **0.632**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['nli', 'recall'], label: '3 of 5', tone: 'ok' },
+              { badge: 'recall', text: '0.60' },
+              { say: 1 },
+              { send: ['nli', 'precision'], label: '4 of 6', tone: 'ok' },
+              { badge: 'precision', text: '0.667' },
+              { say: 2 },
+              { badge: 'nli', text: 'F1 0.632', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the cheap checks first',
+            lines: ['Some citation bugs need no entailment model at all.'],
+            task: {
+              type: 'choose',
+              question: 'The answer cites [7], but only 4 sources were retrieved. Which check catches it?',
+              options: [
+                { text: 'Cited id exists among the retrieved sources' },
+                { text: 'Citation precision', why: 'Precision judges whether real citations pull their weight; first check the id exists at all.' },
+                { text: 'Citation density', why: 'Density catches uncited claims, not invented ids.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Validate cited ids and quoted spans exist before any semantic check.',
+            then: [{ send: ['answer', 'sources'], label: '[7]?', tone: 'err' }, { badge: 'sources', text: 'no such id', tone: 'err' }],
+          },
+        ],
+      },
       short: {
         id: 'lawyer-who-cited-fake-cases',
         title: 'The lawyer who cited fake cases',
@@ -501,6 +711,111 @@ export async function citationScores(statements: Statement[], sources: string[],
     },
     {
       heading: 'Hallucination Detection — NLI checks, trained detectors and self-consistency (SelfCheckGPT)',
+      steps: {
+        actors: [
+          { id: 'answer', kind: 'llm', label: 'Main answer', sub: 'sentence by sentence', x: 110, y: 70 },
+          { id: 'context', kind: 'document', label: 'Source context', sub: 'grounding route', x: 340, y: 70 },
+          { id: 'samples', kind: 'llm', label: 'N samples', sub: 'same question again', x: 340, y: 230 },
+          { id: 'detector', kind: 'judge', label: 'Detector', sub: 'NLI, HHEM, SelfCheck', x: 570, y: 70 },
+          { id: 'judge', kind: 'judge', label: 'LLM judge', sub: 'flagged + sampled', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human review', sub: 'disagreements', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two ways to catch a made-up story',
+            lines: [
+              '**Grounding**: check the answer against the documents.',
+              '**Consistency**: ask again several times and see if the details change.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['answer', 'detector'], label: 'sentence' },
+              { send: ['context', 'detector'], label: 'premise' },
+              { badge: 'detector', text: 'entailed?', ms: 1000 },
+              { say: 1 },
+              { send: ['samples', 'detector'], label: 'samples', count: 3 },
+              { badge: 'detector', text: 'agree?', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'SelfCheckGPT on a bio',
+            lines: [
+              'If the model **knows** a fact, independent samples repeat it; if it guesses, they diverge.',
+              'Lise Meitner bio: "Won the Nobel Prize in Physics in 1944" scores **0.83**.',
+              'Above the 0.5 threshold, so that one sentence is flagged.',
+              'No retrieval or logits needed, but an error the model always repeats slips through.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['samples', 'detector'], label: '5 samples', count: 5 },
+              { say: 1 },
+              { send: ['answer', 'detector'], label: 'Nobel 1944?' },
+              { badge: 'detector', text: '0.83 contradicted', tone: 'err' },
+              { say: 2 },
+              { badge: 'answer', text: 'flag', tone: 'err', ms: 1100 },
+              { say: 3 },
+              { down: 'context' },
+              { wait: 600 },
+              { down: 'context', on: false },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: closed-book',
+            lines: ['There is no retrieval and no access to logits.'],
+            task: {
+              type: 'choose',
+              question: 'Which detector family still works?',
+              options: [
+                { text: 'Self-consistency (SelfCheckGPT)' },
+                { text: 'NLI against the source', why: 'NLI needs a source context as the premise, and there is none here.' },
+                { text: 'Token log-probs', why: 'Uncertainty signals need logprobs, which are not available here.' },
+              ],
+              answer: 0,
+            },
+            solved: 'SelfCheckGPT is black-box and zero-resource: it compares the answer with its own samples.',
+            then: [{ send: ['samples', 'detector'], label: 'samples', count: 3, tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The production pattern',
+            lines: [
+              'A cheap detector on 100% of responses → threshold → flag, strip or regenerate.',
+              'An LLM judge on flagged and sampled responses.',
+              'Humans review the disagreements.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['answer', 'detector'], label: '100%', count: 3 },
+              { badge: 'detector', text: 'threshold', ms: 1000 },
+              { say: 1 },
+              { send: ['detector', 'judge'], label: 'flagged', tone: 'miss' },
+              { say: 2 },
+              { send: ['judge', 'human'], label: 'disagree', tone: 'err' },
+              { lit: 'human' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who sees disagreements?',
+            lines: ['Each layer costs more and sees less traffic than the one before.'],
+            task: {
+              type: 'pick',
+              question: 'The detector and the LLM judge disagree on a response. Who looks at it next?',
+              answer: 'human',
+              hints: {
+                detector: 'The cheap detector already ran on everything; it is one side of the disagreement.',
+                judge: 'The judge is the other side of the disagreement.',
+                samples: 'Samples feed the consistency check; they do not settle disputes.',
+              },
+            },
+            solved: 'Cheap detector on everything, LLM judge on flagged and sampled, humans on disagreements.',
+            then: [{ send: ['judge', 'human'], label: 'disagree' }, { lit: 'human' }],
+          },
+        ],
+      },
       short: {
         id: 'catch-a-hallucination',
         title: 'Catching a hallucination',
@@ -715,6 +1030,112 @@ export function flagSentences(main: string, samples: string[], threshold = 0.5):
     },
     {
       heading: 'Why LLMs Hallucinate — and how to prevent it',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'dishwasher-safe?', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'plausible next token', x: 340, y: 70 },
+          { id: 'docs', kind: 'document', label: 'Spec sheet', sub: 'Brewmax X200', x: 570, y: 70 },
+          { id: 'check', kind: 'guard', label: 'Quote check', sub: 'verbatim, in code', x: 570, y: 230 },
+          { id: 'app', kind: 'server', label: 'App', sub: 'what the user sees', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An improviser, not a database',
+            lines: [
+              'The model always produces a **plausible** next token.',
+              'When the answer is in neither its weights nor its context, plausible and true part ways.',
+              'Ungrounded, temperature 0.9: "Yes, the jug is dishwasher-safe."',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'question' },
+              { lit: 'llm' },
+              { say: 1 },
+              { down: 'docs' },
+              { say: 2 },
+              { send: ['llm', 'app'], label: '"Yes"', tone: 'err' },
+              { badge: 'app', text: 'plausible, wrong', tone: 'err' },
+              { down: 'docs', on: false },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why guessing pays',
+            lines: ['100 questions the model cannot know; a guess is right 20% of the time.'],
+            task: {
+              type: 'choose',
+              question: 'Under accuracy-only grading (+1 / 0 / 0), which scores higher?',
+              options: [
+                { text: 'Always guess: 20 vs 0' },
+                { text: 'Saying "I don\'t know": it avoids 80 errors', why: 'Accuracy-only grading gives no penalty for wrong answers, so the 80 errors cost nothing.' },
+                { text: 'They tie', why: 'Abstaining scores 0, guessing scores 20.' },
+              ],
+              answer: 0,
+            },
+            solved: 'With no penalty for errors a guess beats "I don\'t know", so a model tuned to it learns to guess.',
+            then: [{ badge: 'llm', text: 'guess: 20', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Ground it, and permit abstention',
+            lines: [
+              '**Ground** with retrieval or tools: move facts out of the weights.',
+              '**Quote first**, then answer only from the quote.',
+              'Allow an exact abstain phrase: `NOT_IN_DOCUMENTS`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'llm'], label: 'spec sheet', tone: 'ok' },
+              { say: 1 },
+              { badge: 'llm', text: 'quote: ""', ms: 1000 },
+              { say: 2 },
+              { send: ['llm', 'app'], label: 'NOT_IN_DOCUMENTS', tone: 'ok' },
+              { badge: 'app', text: 'not stated', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the code check',
+            lines: ['Suppose the model returned `quote: "The jug is dishwasher-safe."`'],
+            task: {
+              type: 'pick',
+              question: 'Which part catches the invented quote?',
+              answer: 'check',
+              hints: {
+                llm: 'The model wrote the quote; it cannot be trusted to check itself.',
+                docs: 'The spec sheet is what gets searched, but something has to do the lookup.',
+                app: 'The app acts on the result of the check, it does not run it.',
+              },
+            },
+            solved: 'The verbatim lookup finds 0 matches, so the app abstains anyway.',
+            then: [
+              { send: ['llm', 'check'], label: 'quote' },
+              { send: ['check', 'docs'], label: 'lookup' },
+              { badge: 'check', text: '0 matches', tone: 'err' },
+              { send: ['check', 'app'], label: 'abstain', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Stack the defences',
+            lines: [
+              'Constrain output, lower randomness, verify then answer, detect, human review.',
+              'No layer reaches zero.',
+              'Stack them and measure faithfulness and abstention rate.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'llm'], label: 'evidence', tone: 'ok' },
+              { send: ['llm', 'check'], label: 'answer + quote' },
+              { send: ['check', 'app'], label: 'verified', tone: 'ok' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'app', text: 'measure', ms: 1200 },
+            ],
+          },
+        ],
+      },
       short: {
         id: 'why-models-hallucinate',
         title: 'Why models hallucinate',
@@ -806,7 +1227,7 @@ export function flagSentences(main: string, samples: string[], threshold = 0.5):
 5. **Constrain output**: schemas, enums, \`null\` for unknown fields.
 6. **Lower randomness** for factual tasks (low temperature where the model supports it).
 7. **Verify, then answer**: Chain-of-Verification drafts, answers its own check questions independently, then revises.
-8. **Detect**: claim checks (§1) and self-consistency (§3, [Reasoning](#/topic/prompt-reasoning)).
+8. **Detect**: claim checks (section 1) and self-consistency (section 3, [Reasoning](#/topic/prompt-reasoning)).
 9. **Human review** for high-stakes output.
 
 No layer reaches zero. Stack them and measure faithfulness and abstention rate. Prompt-side grounding rules live in [Prompt Workflow](#/topic/prompt-engineering); the Prompt Lab tab lets you practise steps 2–3 and a claim-checking judge.`,
@@ -919,7 +1340,7 @@ export async function answerOrAbstain(question: string, docs: Doc[], llm: (promp
 }`,
         },
         explanation:
-          'The prompt does steps 1–3 of the playbook (ground, permit abstention, quote first); the code does step 4 and never trusts the model\'s claim of support. An empty quote, a quote from the wrong document or a number that the quote does not contain all become an abstention instead of a confident answer. It catches invented support, not a real quote that fails to entail the answer: add an NLI or judge check (§1) for that.',
+          'The prompt does steps 1–3 of the playbook (ground, permit abstention, quote first); the code does step 4 and never trusts the model\'s claim of support. An empty quote, a quote from the wrong document or a number that the quote does not contain all become an abstention instead of a confident answer. It catches invented support, not a real quote that fails to entail the answer: add an NLI or judge check (section 1) for that.',
       },
       quickCheck: {
         question: 'A benchmark gives 1 point for a correct answer and 0 for both a wrong answer and "I don\'t know". Why does training a model to maximise it tend to increase hallucination?',

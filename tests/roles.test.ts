@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { pathsCertified, pathStatus, ROLE_BY_ID, ROLES, roleTopicIds } from '../src/content/roles.ts';
+import { ROLE_SCENARIOS } from '../src/content/roleScenarios.ts';
 import { achievementById, buildAchievementContext, evaluateAchievement } from '../src/content/achievements.ts';
 import { COMPANY_QUESTIONS } from '../src/content/companies.ts';
 import { PHASES } from '../src/content/phases.ts';
@@ -107,4 +108,31 @@ test('backup carries rolePath and certName, validates them and merges (this devi
   assert.equal(m.rolePath, 'applied-ai-engineer');
   assert.equal(m.certName, 'Ada');
   assert.equal('rolePath' in mergeProgress(normalize(emptyProgress()), normalize(emptyProgress())), false);
+});
+
+test('role scenarios: 5–8 per path, complete shape, ids unique across roles and topics, rating keys survive backup', () => {
+  assert.deepEqual(Object.keys(ROLE_SCENARIOS).sort(), ROLES.map((r) => r.id).sort(), 'one scenario set per path, no strays');
+  const topicQ = new Set(TOPICS.flatMap((t) => t.interviewQuestions.map((q) => q.id)));
+  const seen = new Set<string>();
+  for (const r of ROLES) {
+    const list = ROLE_SCENARIOS[r.id];
+    assert.ok(list.length >= 5 && list.length <= 8, `${r.id}: ${list.length} scenarios`);
+    list.forEach((q, i) => {
+      assert.equal(q.id, `role-${r.id}-s${i + 1}`, 'stable ids: ratings in progress.iq are keyed by them');
+      assert.ok(!seen.has(q.id) && !topicQ.has(q.id), `${q.id}: duplicate id`);
+      seen.add(q.id);
+      assert.ok(['medium', 'hard', 'expert'].includes(q.difficulty), q.id);
+      assert.ok(q.question.trim().length > 20, `${q.id}: question`);
+      assert.ok(q.whatInterviewerLooksFor.length >= 3, `${q.id}: looks-for`);
+      assert.ok(q.modelAnswer.length >= 300, `${q.id}: model answer too short`);
+      assert.ok(q.followUps.length >= 2 && q.followUps.every((f) => f.q.trim() && f.a.trim().length >= 40), `${q.id}: follow-ups`);
+      assert.ok(q.pitfalls.length >= 2, `${q.id}: pitfalls`);
+      if (q.context !== undefined) assert.ok(q.context.trim(), `${q.id}: empty context`);
+    });
+  }
+  // ratings on scenarios are ordinary iq entries: they export, import and merge
+  const iq = { [[...seen][0]]: 'nailed' as const, [[...seen].at(-1)!]: 'missed' as const };
+  const back = parseBackup(JSON.stringify(exportBackup(normalize(emptyProgress({ iq })))));
+  assert.ok(back.ok);
+  if (back.ok) assert.deepEqual(back.progress.iq, iq);
 });

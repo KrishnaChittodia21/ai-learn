@@ -22,6 +22,98 @@
   margin: 0;
 }
 
+/* ---------- categories: a sidebar of tabs, one panel at a time ---------- */
+.settings {
+  max-width: 1080px;
+}
+.set-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+  margin-top: var(--s-5);
+}
+.set-tabs {
+  position: sticky;
+  top: calc(var(--masthead) + var(--s-4));
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+}
+.set-tab {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: none;
+  color: var(--text-2);
+  font: 600 var(--fs-sm) / 1.3 var(--display);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur),
+    color var(--dur),
+    border-color var(--dur);
+}
+.set-tab svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.set-tab span {
+  display: grid;
+  gap: 2px;
+}
+.set-tab small {
+  font: 400 var(--fs-xs) / 1.35 var(--sans);
+  color: var(--muted);
+}
+.set-tab:hover {
+  background: var(--tint);
+  color: var(--text);
+}
+.set-tab.on {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text);
+}
+.set-tab.on svg {
+  color: var(--accent);
+}
+.set-panel > .set-group:first-child {
+  margin-top: 0;
+}
+@media (max-width: 760px) {
+  .set-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+  /* phones: the categories become a row of chips that scrolls sideways inside itself */
+  .set-tabs {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .set-tab {
+    flex: none;
+    width: auto;
+    align-items: center;
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+  .set-tab small {
+    display: none;
+  }
+}
+
 .set-group {
   margin-top: var(--s-5);
   padding: var(--s-4) var(--s-5) var(--s-2);

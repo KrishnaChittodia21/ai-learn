@@ -48,6 +48,110 @@ const topic: Topic = {
     // ───────────────────────────── 1. LLM Evaluation
     {
       heading: 'LLM Evaluation — datasets, graders and the eval loop',
+      steps: {
+        actors: [
+          { id: 'data', kind: 'data', label: 'Dataset', sub: '200 support tickets', x: 110, y: 70 },
+          { id: 'app', kind: 'llm', label: 'App under test', sub: 'prompt v12 · top_k=5', x: 340, y: 70 },
+          { id: 'code', kind: 'guard', label: 'Code checks', sub: 'regex · JSON schema', x: 570, y: 70 },
+          { id: 'judge', kind: 'judge', label: 'LLM judge', sub: 'tone · helpfulness', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Humans', sub: 'gold standard', x: 800, y: 230 },
+          { id: 'rate', kind: 'metric', label: 'Pass rate', sub: 'per grader, per slice', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The three parts of every eval',
+            lines: [
+              '**Dataset**: inputs plus optional reference facts.',
+              '**System under test**: prompt + model + retrieval + tools, pinned by version.',
+              '**Graders** turn each output into pass/fail or a score.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'data' },
+              { send: ['data', 'app'], label: 'inputs', count: 3 },
+              { say: 1 },
+              { lit: 'app' },
+              { say: 2 },
+              { send: ['app', 'code'], label: 'outputs' },
+              { send: ['code', 'rate'], label: 'pass/fail', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the grader ladder',
+            lines: ['Always pick the cheapest grader that measures what you care about.'],
+            task: {
+              type: 'order',
+              question: 'Order the grader ladder from cheapest to the gold standard.',
+              items: ['Code checks', 'Reference similarity', 'LLM-as-a-judge', 'Humans'],
+              hint: 'Free and deterministic first; the people who calibrate everything else last.',
+            },
+            solved: 'Code checks → reference similarity → LLM judge → humans.',
+            then: [
+              { send: ['app', 'code'], label: 'free' },
+              { send: ['app', 'judge'], label: 'tone', curve: true },
+              { send: ['judge', 'human'], label: 'calibrate' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'v11 vs v12 on 200 tickets',
+            lines: [
+              'v12 adds "always cite the policy id".',
+              'Cites a policy id: 60.5% → **94.0%**. Correct policy: 75.0% → **81.0%**.',
+              'Judge "helpful & polite": 91.0% → 88.0%, a 3-point dip.',
+              'Ship v12, but open a ticket for the politeness dip.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'app'], label: '200 tickets', count: 3 },
+              { say: 1 },
+              { send: ['app', 'code'], label: 'POL-\\d{4}' },
+              { badge: 'code', text: '94.0%', tone: 'ok' },
+              { say: 2 },
+              { send: ['app', 'judge'], label: 'polite?', curve: true },
+              { badge: 'judge', text: '88.0%', tone: 'miss' },
+              { say: 3 },
+              { badge: 'rate', text: 'ship + ticket', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cheapest grader',
+            lines: ['You want to know whether each answer cites a policy id like `POL-1234`.'],
+            task: {
+              type: 'pick',
+              question: 'Which grader should you use?',
+              answer: 'code',
+              hints: {
+                judge: 'A judge works, but a regex measures this for free and deterministically.',
+                human: 'Humans are the gold standard, but this is a pattern a regex can check.',
+              },
+            },
+            solved: 'A regex code check: free, deterministic, and it measures exactly this.',
+            then: [{ send: ['app', 'code'], label: 'regex' }, { badge: 'code', text: 'pass', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Offline and online',
+            lines: [
+              '**Offline**: a fixed dataset before you ship; fast and comparable over time.',
+              '**Online**: score sampled production traffic to catch drift.',
+              'Production failures become new offline cases.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'app'], label: 'fixed set' },
+              { send: ['app', 'rate'], label: 'scores', curve: true },
+              { say: 1 },
+              { send: ['app', 'judge'], label: 'live traces', curve: true },
+              { say: 2 },
+              { send: ['judge', 'data'], label: 'new case', curve: true, tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an eval is a unit-test suite for behaviour that is fuzzy. You cannot assert \`output === "Paris"\` for every prompt, but you *can* run 200 representative inputs through your app, grade each output, and track the pass rate like a test-coverage number.
 
 **The three parts of every eval**
@@ -243,6 +347,102 @@ export async function runEval(
     // ───────────────────────────── 2. Golden Datasets
     {
       heading: 'Golden Datasets — curation, labelling and versioning',
+      steps: {
+        actors: [
+          { id: 'prod', kind: 'data', label: 'Prod traffic', sub: 'sampled, anonymised', x: 110, y: 70 },
+          { id: 'bugs', kind: 'document', label: 'Past bugs', sub: 'incidents', x: 110, y: 230 },
+          { id: 'experts', kind: 'user', label: 'Labellers', sub: 'two adjusters', x: 340, y: 70 },
+          { id: 'golden', kind: 'data', label: 'Golden set', sub: 'JSONL in git', x: 570, y: 70 },
+          { id: 'dev', kind: 'data', label: 'Dev split', sub: 'for tuning', x: 800, y: 70 },
+          { id: 'test', kind: 'data', label: 'Held-out test', sub: 'for reporting', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An exam, built from real cases',
+            lines: [
+              'Sample real production traffic, stratified by intent, PII redacted.',
+              'Every past incident becomes a regression case forever.',
+              'Add expert edge cases, adversarial prompts, and reviewed synthetic cases.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prod', 'experts'], label: 'by intent', count: 3 },
+              { say: 1 },
+              { send: ['bugs', 'experts'], label: 'incidents', curve: true },
+              { say: 2 },
+              { send: ['experts', 'golden'], label: 'cases', tone: 'ok' },
+              { lit: 'golden' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where cases come from',
+            lines: ['Some sources earn their place before others.'],
+            task: {
+              type: 'order',
+              question: 'Put case sources in priority order.',
+              items: ['Real production traffic', 'Past bugs', 'Domain-expert edge cases', 'Adversarial cases', 'Synthetic cases'],
+              hint: 'What real users actually ask comes first; LLM-generated variations only fill gaps at the end.',
+            },
+            solved: 'Production samples → past bugs → expert edge cases → adversarial → reviewed synthetic.',
+            then: [{ send: ['prod', 'experts'], label: 'samples' }, { send: ['experts', 'golden'], label: 'labelled', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Label, resolve, split',
+            lines: [
+              'Two adjusters labelled 220 cases independently and disagreed on 19.',
+              'They resolved 15 and **dropped 4** ambiguous ones → 216 cases.',
+              'Split into dev (130) for tuning and held-out test (86) for reporting.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'experts' },
+              { badge: 'experts', text: '19 disagree', tone: 'miss' },
+              { say: 1 },
+              { send: ['experts', 'golden'], label: '216 cases', tone: 'ok' },
+              { say: 2 },
+              { send: ['golden', 'dev'], label: '130' },
+              { send: ['golden', 'test'], label: '86', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Version it like code',
+            lines: [
+              'Bump the version on any change, keep a changelog, record the **content hash** with every result.',
+              'v2: 11 answers relabelled for a policy update, 30 cases added.',
+              'Baseline re-run on v2: 78.2% (it was 84.0% on v1).',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'golden', text: 'v1 → v2', ms: 1100 },
+              { say: 1 },
+              { send: ['prod', 'golden'], label: '+30 cases', curve: true },
+              { say: 2 },
+              { badge: 'golden', text: '78.2% on v2', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: did the model get worse?',
+            lines: ['The same baseline scored 84.0% on v1 and 78.2% on v2.'],
+            task: {
+              type: 'choose',
+              question: 'What does the drop mean?',
+              options: [
+                { text: 'The set got harder; compare only on the same dataset version' },
+                { text: 'The model got worse', why: 'The model did not change; the dataset did. Scores across versions are not comparable.' },
+                { text: 'The labellers made mistakes', why: 'The relabels followed a real policy update, and new cases came from real failures.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Never compare scores across dataset versions without re-running the baseline on the new one.',
+            then: [{ badge: 'golden', text: 'v2 hash', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a golden dataset is the exam your AI system sits before every release. If the exam only has easy questions, every student gets an A; if the exam changes every week, grades mean nothing. So it must be **representative, hard where it matters, labelled correctly and frozen per version**.
 
 **Where cases come from (in priority order)**
@@ -417,6 +617,182 @@ export function stratifiedSample(cases: Case[], perTag: number, seed: number): C
     // ───────────────────────────── 3. LLM-as-a-Judge
     {
       heading: 'LLM-as-a-Judge — rubrics, biases and calibration',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'data', label: 'Question', sub: 'same input', x: 110, y: 70 },
+          { id: 'a', kind: 'llm', label: 'Answer A', sub: 'prompt v12', x: 340, y: 70 },
+          { id: 'b', kind: 'llm', label: 'Answer B', sub: 'prompt v13', x: 340, y: 230 },
+          { id: 'judge', kind: 'judge', label: 'LLM judge', sub: 'anchored rubric', x: 570, y: 70 },
+          { id: 'humans', kind: 'user', label: 'Human labels', sub: '120 cases', x: 800, y: 70 },
+          { id: 'kappa', kind: 'metric', label: "Cohen's kappa", sub: 'chance-corrected', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A marking scheme for a model',
+            lines: [
+              'One criterion per call, with anchored PASS and FAIL levels.',
+              '**Reasoning first, verdict last**, as structured JSON.',
+              'Temperature 0; prefer binary or 3-point scales over 1–10.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a', 'judge'], label: 'answer' },
+              { badge: 'judge', text: '1 criterion', ms: 1000 },
+              { say: 1 },
+              { badge: 'judge', text: 'reasoning…', ms: 1000 },
+              { badge: 'judge', text: 'PASS', tone: 'ok' },
+              { say: 2 },
+              { lit: 'judge' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Position bias, caught',
+            lines: [
+              'v12 first: v12 wins 58. v13 first: v13 wins 57.',
+              'Run both orders; a win counts only if both agree, otherwise it is a tie.',
+              'Consistent verdicts: 40 vs 38 with **22 ties**, so no real winner.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a', 'judge'], label: 'A, B' },
+              { send: ['b', 'judge'], label: 'B, A', curve: true },
+              { badge: 'judge', text: 'flip-flops', tone: 'err' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'judge', text: '40 · 38 · 22 ties', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: name the bias',
+            lines: ['Each bias has its own fix.'],
+            task: {
+              type: 'choose',
+              question: 'The judge favours outputs from its own model family. What is the fix?',
+              options: [
+                { text: 'A judge from a different provider, or a panel with majority vote' },
+                { text: 'Run both orders', why: 'Swapping order fixes position bias, not self-preference.' },
+                { text: 'Cap answer length', why: 'Length control fixes verbosity bias, not self-preference.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Self-preference → cross-family judge or a 2–3 judge panel; position → swap order; verbosity → length control.',
+            then: [{ badge: 'judge', text: 'other provider', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Calibrate before you trust it',
+            lines: [
+              'Humans label cases; the judge grades the same cases.',
+              'Agreement was 0.875, but chance alone gives 0.590.',
+              '**κ = 0.70**: substantial, usable as a CI gate with human spot checks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['humans', 'kappa'], label: 'labels' },
+              { send: ['judge', 'kappa'], label: 'verdicts', curve: true },
+              { say: 1 },
+              { badge: 'kappa', text: 'p_o 0.875', ms: 1000 },
+              { say: 2 },
+              { badge: 'kappa', text: 'κ = 0.70', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what decides trust?',
+            lines: ['Raw agreement looks good even when much of it is luck.'],
+            task: {
+              type: 'pick',
+              question: 'Which part tells you whether the judge can be trusted?',
+              answer: 'kappa',
+              hints: {
+                judge: 'The judge cannot vouch for itself; compare it with humans.',
+                humans: 'Human labels are the reference, but the number that decides is the agreement measure.',
+                a: 'The answers being graded do not measure the grader.',
+                b: 'The answers being graded do not measure the grader.',
+              },
+            },
+            solved: "Cohen's kappa against human labels: ≥0.6 substantial, ≥0.8 near-perfect.",
+            then: [{ send: ['humans', 'kappa'], label: 'labels' }, { send: ['judge', 'kappa'], label: 'verdicts', curve: true }, { badge: 'kappa', text: '0.70', tone: 'ok' }],
+          },
+        ],
+      },
+      short: {
+        id: 'judge-that-flips-its-verdict',
+        title: 'The judge that flips its verdict',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Prompt v12 vs v13 · 100 pairs',
+            value: 15,
+            prefix: '~',
+            suffix: '%',
+            unit: 'of pairs flip winner when the order is swapped',
+            sub: 'Same pairs, same judge: only **which answer came first** changed.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Position bias',
+            head: 'Whoever goes first *wins more*',
+            rungs: [
+              { label: 'v12 wins, v12 shown first', amount: 58 },
+              { label: 'v12 wins, v13 shown first', amount: 43 },
+              { label: 'v12 wins, both orders agree', amount: 40 },
+            ],
+            unit: 'wins of 100',
+            sub: 'Consistent verdicts: v12 40, v13 38, **22 ties**. No real winner.',
+          },
+          {
+            type: 'flow',
+            kicker: 'The fix',
+            head: 'Judge *both orders*',
+            steps: ['Judge (A, B)', 'Judge (B, A)', 'Same winner both times: count the win', 'They disagree: call it a tie'],
+          },
+          {
+            type: 'toggles',
+            kicker: 'A marking scheme for a model',
+            head: 'A rubric that *decides*',
+            items: [
+              { label: 'One criterion per call', keep: true },
+              { label: 'Reasoning first, verdict last', keep: true },
+              { label: 'Temperature 0', keep: true },
+              { label: 'A 1–10 score' },
+              { label: 'Length as a merit' },
+            ],
+            keepLabel: 'RUBRIC',
+          },
+          {
+            type: 'counter',
+            kicker: 'Calibrate against 120 human labels',
+            value: 0.7,
+            decimals: 2,
+            prefix: 'κ = ',
+            unit: 'Cohen’s kappa: substantial',
+            stats: [
+              { value: '0.875', label: 'raw agreement' },
+              { value: '0.590', label: 'agreement by chance' },
+            ],
+            sub: '≥0.6 substantial, ≥0.8 near-perfect: usable as a CI gate with **human spot checks**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The judge favours answers from its own model family. The fix?',
+            answer: 0,
+            options: [
+              { text: 'A judge from a different provider, or a panel with majority vote', why: 'Self-preference needs a cross-family judge or a 2–3 judge panel.' },
+              { text: 'Run both orders', why: 'Swapping order fixes position bias, not self-preference.' },
+              { text: 'Cap answer length', why: 'Length control fixes verbosity bias, not self-preference.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Trust a judge only after you *measure* it.',
+          sub: 'Swap the order, anchor the rubric, and check **kappa** against human labels.',
+        },
+      },
       body: `**Intuition:** when correctness can't be checked by code ("is this answer helpful and faithful?"), ask a strong model to grade it, like a teaching assistant with a marking scheme. Zheng et al. (2023) found GPT-4 judges agreed with human experts over 80% of the time, about the same as humans agree with each other — **but only with a good rubric and bias controls**.
 
 **Three judge modes**
@@ -605,6 +981,107 @@ export function calibrationReport(human: boolean[], judge: boolean[]) {
     // ───────────────────────────── 4. Prompt Regression Testing
     {
       heading: 'Prompt Regression Testing — promptfoo-style suites in CI',
+      steps: {
+        actors: [
+          { id: 'pr', kind: 'user', label: 'Pull request', sub: 'edits prompts/**', x: 110, y: 70 },
+          { id: 'ci', kind: 'server', label: 'CI', sub: 'promptfoo suite', x: 340, y: 70 },
+          { id: 'app', kind: 'llm', label: 'Prompt × model', sub: '60 smoke cases', x: 570, y: 70 },
+          { id: 'hard', kind: 'guard', label: 'Hard asserts', sub: 'is-json · no PII', x: 800, y: 70 },
+          { id: 'soft', kind: 'judge', label: 'Soft metrics', sub: 'llm-rubric', x: 800, y: 230 },
+          { id: 'base', kind: 'metric', label: 'Main baseline', sub: 'compare against', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A prompt is code',
+            lines: [
+              'Prompts live in files under version control.',
+              'A config lists **prompts × providers × test cases**, each with asserts.',
+              'CI runs the suite on every PR and compares against the main-branch baseline.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pr', 'ci'], label: 'prompts/support.txt' },
+              { say: 1 },
+              { send: ['ci', 'app'], label: 'cases', count: 3 },
+              { send: ['app', 'hard'], label: 'outputs' },
+              { send: ['app', 'soft'], label: 'outputs', curve: true },
+              { say: 2 },
+              { send: ['base', 'ci'], label: 'baseline' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: hard or soft?',
+            lines: ['Judged scores are noisy; some checks must never fail.'],
+            task: {
+              type: 'choose',
+              question: 'How should a judged "polite & empathetic" pass rate gate the build?',
+              options: [
+                { text: 'Fail only if it drops more than a tolerance below baseline' },
+                { text: 'Fail on any single failed case', why: 'That is a hard assert, meant for checks like valid JSON; judged scores are too noisy.' },
+                { text: 'Never gate on it', why: 'Soft metrics still gate: on a drop beyond the tolerance.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Hard asserts block on any failure; soft judged metrics gate on a drop vs baseline.',
+            then: [{ send: ['app', 'soft'], label: 'rubric', curve: true }, { badge: 'soft', text: 'within tolerance', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'PR #482: "make answers friendlier"',
+            lines: [
+              'llm-rubric "polite & empathetic": 19/25 → 24/25, pass.',
+              'Cost per case +14.6%, under the 20% budget, pass.',
+              'is-json: **57/60**: three outputs start with "Sure! Here\'s…". Red build.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'soft'], label: '24/25', curve: true, tone: 'ok' },
+              { say: 1 },
+              { badge: 'base', text: '+14.6% cost', tone: 'ok' },
+              { say: 2 },
+              { send: ['app', 'hard'], label: '57/60', tone: 'err' },
+              { badge: 'hard', text: 'FAIL', tone: 'err' },
+              { send: ['hard', 'ci'], label: 'red', tone: 'err', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who blocked the merge?',
+            lines: ['The friendliness edit had deleted "Return ONLY the JSON object".'],
+            task: {
+              type: 'pick',
+              question: 'Which part turned the build red?',
+              answer: 'hard',
+              hints: {
+                soft: 'The judged politeness score went up; it passed.',
+                base: 'The baseline is what results are compared with; it does not fail builds itself.',
+                app: 'The prompt produced the bad outputs, but a check had to catch them.',
+              },
+            },
+            solved: 'The hard is-json assert: any failure turns the build red.',
+            then: [{ send: ['app', 'hard'], label: '60/60', tone: 'ok' }, { badge: 'hard', text: 'pass', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Keep it cheap',
+            lines: [
+              'Cache responses for unchanged (prompt, vars, model) tuples.',
+              'A 50-case smoke subset on every push.',
+              'The full 300-case suite nightly or on merge.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'app', text: 'cached', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { send: ['ci', 'app'], label: 'smoke' },
+              { say: 2 },
+              { send: ['ci', 'app'], label: 'full suite', count: 3 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a prompt is code. Changing one sentence ("be concise") can silently break JSON output or citations for 10% of users. Regression testing runs a fixed suite of cases against every prompt, model or config change and **fails the pull request** if quality drops — exactly like unit tests for normal code.
 
 **How it works**
@@ -790,6 +1267,100 @@ export function compareToBaseline(current: Report, baseline: Report, opts: { max
     // ───────────────────────────── 5. Online Evaluation
     {
       heading: 'Online Evaluation — shadow traffic, A/B tests and user feedback',
+      steps: {
+        actors: [
+          { id: 'users', kind: 'user', label: 'Live traffic', sub: 'real users', x: 110, y: 70 },
+          { id: 'control', kind: 'llm', label: 'Control', sub: 'prompt v13', x: 340, y: 70 },
+          { id: 'treat', kind: 'llm', label: 'Treatment', sub: 'prompt v14 + model', x: 340, y: 230 },
+          { id: 'judge', kind: 'judge', label: 'Async judge', sub: 'sampled traces', x: 570, y: 70 },
+          { id: 'metrics', kind: 'metric', label: 'Metrics', sub: 'success + guardrails', x: 800, y: 70 },
+          { id: 'golden', kind: 'data', label: 'Golden set', sub: 'new failure cases', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Shadow traffic',
+            lines: [
+              'The variant runs on a **copy** of live requests; its output is discarded.',
+              'You learn crashes, parse errors, latency, cost and judge scores on real inputs.',
+              'Users never see it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['users', 'control'], label: 'request' },
+              { send: ['users', 'treat'], label: 'mirror', tone: 'miss', curve: true },
+              { say: 1 },
+              { send: ['treat', 'judge'], label: 'trace', curve: true },
+              { say: 2 },
+              { badge: 'treat', text: 'discarded', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the rollout ladder',
+            lines: ['Increase user exposure only as confidence grows.'],
+            task: {
+              type: 'order',
+              question: 'Order the rollout from lowest risk.',
+              items: ['Shadow traffic', 'Canary (1–5% of users)', 'A/B test'],
+              hint: 'Start where no user sees the variant; end with a randomised split.',
+            },
+            solved: 'Shadow → canary → A/B test.',
+            then: [{ send: ['users', 'treat'], label: '50/50', curve: true }, { send: ['users', 'control'], label: '50/50' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Success and guardrails',
+            lines: [
+              'Pick one **success metric** before the test starts.',
+              '**Guardrails** must not get worse: p95 latency, cost, errors, escalations.',
+              'Resolved without escalation +1.4 pts; latency and cost within budget → ship.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['treat', 'metrics'], label: 'resolved', curve: true },
+              { say: 1 },
+              { badge: 'metrics', text: 'p95 2.9 s ✓', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { badge: 'metrics', text: '+1.4 pts → ship', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: randomise by what?',
+            lines: ['Nobody should see both variants in one conversation.'],
+            task: {
+              type: 'choose',
+              question: 'What unit should the A/B split randomise on?',
+              options: [
+                { text: 'The user' },
+                { text: 'Each request', why: 'Per-request splits can show one person both variants mid-conversation.' },
+                { text: 'The time of day', why: 'That is not random assignment, and every user in that window sees one variant.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Randomise by user, log the variant id everywhere, and fix the duration up front.',
+            then: [{ send: ['users', 'treat'], label: 'user id', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Closing the loop',
+            lines: [
+              'Run the calibrated judge **asynchronously**, never in the request path.',
+              'Triage thumbs-down, retries, judge FAILs and escalations each week.',
+              'Real failures become new golden-set cases.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['treat', 'judge'], label: '2% sample', curve: true },
+              { say: 1 },
+              { send: ['judge', 'metrics'], label: 'FAILs', tone: 'miss' },
+              { say: 2 },
+              { send: ['metrics', 'golden'], label: '24 failures', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** offline evals tell you a change *should* be better. Online evals tell you whether it *is* better for real users on real traffic, which your golden set never fully represents.
 
 **Rollout ladder (lowest risk first)**
@@ -1019,6 +1590,105 @@ export function sampleTracesForReview(
     // ───────────────────────────── 6. Comparative Evaluation
     {
       heading: 'Comparative Evaluation — pairwise preference, win rate and Bradley–Terry',
+      steps: {
+        actors: [
+          { id: 'input', kind: 'data', label: 'Same input', sub: '300 inputs', x: 110, y: 70 },
+          { id: 'champ', kind: 'llm', label: 'Champion v7', sub: 'current best', x: 340, y: 70 },
+          { id: 'cand', kind: 'llm', label: 'Candidate v8', sub: 'new prompt', x: 340, y: 230 },
+          { id: 'judge', kind: 'judge', label: 'Pairwise judge', sub: 'both orders, blind', x: 570, y: 70 },
+          { id: 'win', kind: 'metric', label: 'Win rate', sub: '(wins + ½ ties) / n', x: 800, y: 70 },
+          { id: 'bt', kind: 'metric', label: 'Bradley–Terry', sub: 'strength per variant', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Which is better, A or B?',
+            lines: [
+              'Judges are better at "A beats B" than at stable absolute scores.',
+              'Pointwise: v7 94.3%, v8 95.0%, both at the ceiling, the gap is noise.',
+              'Pairwise asks the judge to choose, with ties allowed.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['input', 'champ'], label: 'input' },
+              { send: ['input', 'cand'], label: 'input', curve: true },
+              { say: 1 },
+              { badge: 'champ', text: '94.3%', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { send: ['champ', 'judge'], label: 'A' },
+              { send: ['cand', 'judge'], label: 'B', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: an order flip',
+            lines: ['Each pair is judged in both orders.'],
+            task: {
+              type: 'choose',
+              question: 'v8 wins when shown first, v7 wins when shown first. How does it count?',
+              options: [
+                { text: 'As a tie' },
+                { text: 'As a win for v8', why: 'A win counts only if both orders agree.' },
+                { text: 'Throw the pair away', why: 'It stays in the total as a tie; win rate counts ties as half.' },
+              ],
+              answer: 0,
+            },
+            solved: 'A disagreement between orders is position bias, so it counts as a tie.',
+            then: [{ badge: 'judge', text: 'tie', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'v8 vs v7',
+            lines: [
+              'v8 wins 141, v7 wins 99, ties 60.',
+              'Win rate = (141 + 0.5 × 60) / 300 = **57.0%**.',
+              'Sign test on the 240 decisive pairs: z ≈ 2.71, so v8 is genuinely preferred.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['judge', 'win'], label: '141 · 99 · 60' },
+              { say: 1 },
+              { badge: 'win', text: '57.0%', tone: 'ok' },
+              { say: 2 },
+              { badge: 'win', text: 'z ≈ 2.71', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'From comparisons to a leaderboard',
+            lines: [
+              'Bradley–Terry gives each variant a strength from **all** comparisons at once.',
+              'v7 1000 (anchor), v8 1049, v9 1062.',
+              'The v8–v9 intervals overlap heavily, so v9 is not yet promoted.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['judge', 'bt'], label: '900 comparisons', curve: true },
+              { say: 1 },
+              { badge: 'bt', text: 'v9 1062', ms: 1100 },
+              { say: 2 },
+              { badge: 'bt', text: 'CIs overlap', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who does v9 face?',
+            lines: ['All-pairs among m variants is m(m−1)/2 pairs, each judged in both orders.'],
+            task: {
+              type: 'choose',
+              question: 'v9 arrives. Which comparisons keep the cost down?',
+              options: [
+                { text: 'v9 vs the current champion plus a fixed anchor' },
+                { text: 'v9 vs every earlier variant', why: 'All-pairs grows as m(m−1)/2; that is the cost you are avoiding.' },
+                { text: 'Only its pointwise score', why: 'Near the ceiling pointwise cannot separate good variants; keep it as a gate, not a ranking.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Champion plus anchor keeps it cheap; keep a pointwise gate too, since both outputs in a pair can be bad.',
+            then: [{ send: ['cand', 'judge'], label: 'vs champion', curve: true }, { send: ['champ', 'judge'], label: 'champion' }],
+          },
+        ],
+      },
       body: `**Intuition:** humans and LLM judges are much better at saying "A is better than B" than at giving either one a stable absolute score. Comparative (pairwise) evaluation uses that: show the same input with two outputs and ask which is better.
 
 **When pairwise beats absolute (pointwise) scoring**
@@ -1215,6 +1885,111 @@ export function fitBradleyTerry(cmps: Cmp[], anchor: string, iters = 500): Recor
     // ───────────────────────────── 7. Statistical Confidence
     {
       heading: 'Statistical Confidence — error bars, paired tests and sample size',
+      steps: {
+        actors: [
+          { id: 'items', kind: 'data', label: 'Eval items', sub: 'n = 200', x: 110, y: 70 },
+          { id: 'a', kind: 'llm', label: 'Prompt A', sub: '78%', x: 340, y: 70 },
+          { id: 'b', kind: 'llm', label: 'Prompt B', sub: '82%', x: 340, y: 230 },
+          { id: 'diff', kind: 'metric', label: 'Per-item diff', sub: 'd = B − A', x: 570, y: 70 },
+          { id: 'ci', kind: 'metric', label: '95% CI', sub: 'paired bootstrap', x: 800, y: 70 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A score is an estimate',
+            lines: [
+              'Your items are a sample of all possible inputs, so the score has error bars.',
+              'At p = 0.8 and n = 200 the 95% CI is about **±5.5 points**.',
+              'Generation randomness adds noise: run k trials per item and average.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['items', 'a'], label: 'items', count: 3 },
+              { say: 1 },
+              { badge: 'a', text: '±5.5 points', tone: 'miss' },
+              { say: 2 },
+              { send: ['items', 'b'], label: 'k trials', count: 3, curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the overlapping CIs',
+            lines: ['A is 78% ± 5.7 and B is 82% ± 5.3. The intervals overlap.'],
+            task: {
+              type: 'choose',
+              question: 'What does the overlap tell you?',
+              options: [
+                { text: 'Nothing either way; compare the per-item differences instead' },
+                { text: 'A and B are the same', why: '"The two CIs overlap" is not a valid test.' },
+                { text: 'B is better because 82 > 78', why: 'A 4-point gap is well inside the noise of separate 200-item scores.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Same items → analyse the difference dᵢ = B − A; item difficulty cancels out.',
+            then: [{ send: ['a', 'diff'], label: 'A' }, { send: ['b', 'diff'], label: 'B', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'The paired view',
+            lines: [
+              '180 items agree; B-only passes 14, A-only passes 6 → **+4.0 pts**.',
+              '95% CI **[−0.4, +8.4]**: zero is inside, so inconclusive.',
+              'MDE at n = 200 ≈ 6.2 pts: this eval could not detect a 4-point gain.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a', 'diff'], label: '6' },
+              { send: ['b', 'diff'], label: '14', curve: true },
+              { badge: 'diff', text: '+4.0 pts' },
+              { say: 1 },
+              { send: ['diff', 'ci'], label: 'bootstrap' },
+              { badge: 'ci', text: '[−0.4, +8.4]', tone: 'miss' },
+              { say: 2 },
+              { badge: 'items', text: 'MDE 6.2 pts', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: make it answerable',
+            lines: ['The MDE is bigger than the effect you care about.'],
+            task: {
+              type: 'pick',
+              question: 'Which part do you grow to shrink the interval?',
+              answer: 'items',
+              hints: {
+                a: 'Changing the prompt changes the question, not the precision.',
+                b: 'Changing the prompt changes the question, not the precision.',
+                ci: 'The interval is the output; widen the input to tighten it.',
+                diff: 'The difference is computed from the items; it needs more of them.',
+              },
+            },
+            solved: 'At 600 items the CI is [+1.5, +6.5]: ship B and report the interval, not just "+4".',
+            then: [
+              { send: ['items', 'b'], label: '600 items', count: 3, curve: true },
+              { send: ['diff', 'ci'], label: 'bootstrap' },
+              { badge: 'ci', text: '[+1.5, +6.5]', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Many tries, false winners',
+            lines: [
+              'B4 "won" on one of 5 metrics at p = 0.04, out of 6 variants.',
+              'Across 6 variants × 5 metrics that is expected by chance; on fresh items it vanished.',
+              'Pre-register **one primary metric**; correct for the rest and re-test.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'b', text: 'B4 p = 0.04', tone: 'miss' },
+              { say: 1 },
+              { send: ['items', 'b'], label: 'fresh items', curve: true },
+              { badge: 'b', text: 'gain vanished', tone: 'err' },
+              { say: 2 },
+              { lit: 'ci' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an eval score is an estimate from a sample, so it has error bars. "B scored 84%, A scored 81%" means nothing until you know how much the score would move with different items, or with fresh samples on the same items.
 
 **Two sources of noise**
@@ -2321,7 +3096,7 @@ console.log({ a, b });`,
       ],
       correct: [1],
       explanation:
-        'Different case samples have different difficulty; with 100 cases each pass-rate estimate has a 95% interval of roughly ±7.5 points, so a 3-point gap is noise. Running both prompts on identical cases and testing the discordant pairs (McNemar) isolates the prompt effect. Cryptographic randomness, slice bounds and median vs mean are irrelevant.',
+        'Different case samples have different difficulty; with 100 cases each pass-rate estimate has a 95% interval of roughly ±8 points at an ~80% pass rate, so a 3-point gap is noise. Running both prompts on identical cases and testing the discordant pairs (McNemar) isolates the prompt effect. Cryptographic randomness, slice bounds and median vs mean are irrelevant.',
       followUps: [
         { q: 'What else is risky about sort(() => Math.random() - 0.5)?', a: 'It is a biased shuffle and it mutates the original array in place, so other code using `cases` now sees a reordered set; use a seeded Fisher–Yates shuffle on a copy for reproducible splits.' },
       ],

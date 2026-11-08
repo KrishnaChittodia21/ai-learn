@@ -34,6 +34,118 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Knowledge Graphs — entities, relationships, triples and schemas',
+      steps: {
+        actors: [
+          { id: 'us', kind: 'data', label: 'Us', sub: 'Organization', x: 110, y: 70 },
+          { id: 'boltco', kind: 'data', label: 'BoltCo', sub: 'supplier', x: 340, y: 70 },
+          { id: 'factory', kind: 'data', label: 'Factory-17', sub: 'facility', x: 570, y: 70 },
+          { id: 'region', kind: 'data', label: 'Region-X', sub: 'status: sanctioned', x: 800, y: 70 },
+          { id: 'user', kind: 'user', label: 'Question', sub: 'sanctioned suppliers?', x: 110, y: 230 },
+          { id: 'vec', kind: 'retriever', label: 'Vector RAG', sub: 'similar chunks', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A mind map a computer can query',
+            lines: [
+              'Dots are *things* (people, companies, products); arrows are *named relationships* (WORKS_AT, ACQUIRED).',
+              'The atom is a triple: `(Acme, ACQUIRED, Globex)` = subject, predicate, object.',
+              'Triples connect into a graph you can traverse hop by hop.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'boltco' },
+              { lit: 'factory' },
+              { say: 1 },
+              { send: ['boltco', 'us'], label: 'SUPPLIES' },
+              { say: 2 },
+              { send: ['boltco', 'factory'], label: 'SOURCES_FROM' },
+              { send: ['factory', 'region'], label: 'LOCATED_IN' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A 3-hop supply-chain answer',
+            lines: [
+              '"Which of our suppliers depend on a factory in a sanctioned region?"',
+              'Path: BoltCo SUPPLIES Us; BoltCo SOURCES_FROM Factory-17; Factory-17 LOCATED_IN Region-X (sanctioned).',
+              'Returned in ~20 ms, with the path itself as evidence.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'us'], label: 'question' },
+              { say: 1 },
+              { send: ['us', 'boltco'], label: '← SUPPLIES' },
+              { send: ['boltco', 'factory'], label: 'SOURCES_FROM' },
+              { send: ['factory', 'region'], label: 'LOCATED_IN' },
+              { say: 2 },
+              { badge: 'region', text: 'sanctioned', tone: 'err', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why vector RAG missed it',
+            lines: ['Vector RAG found the BoltCo contract (similarity 0.81) and answered "no suppliers found".'],
+            task: {
+              type: 'choose',
+              question: 'Why did it miss the answer?',
+              options: [
+                { text: 'The fact chain was spread over 3 documents; no single chunk contained it' },
+                {
+                  text: 'The BoltCo contract was not retrieved',
+                  why: 'It was retrieved (0.81); the registry entry linking Factory-17 to Region-X was not (0.42).',
+                },
+                {
+                  text: 'The embedding model was too small',
+                  why: 'No single chunk resembles the question as a whole; this is structural, not a model-size issue.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Vectors find similar text; graphs answer structural questions like multi-hop chains, with explainable paths.',
+            then: [
+              { send: ['user', 'vec'], label: 'similar text', tone: 'miss', curve: true },
+              { send: ['factory', 'region'], label: 'LOCATED_IN', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Decide the schema up front',
+            lines: [
+              'Entity types (Person, Organization, Product), relation types with direction (Person -WORKS_AT-> Organization), required properties.',
+              'Without it, extraction yields 40 synonyms of "works for" and the graph is unqueryable.',
+              'Property graphs (Cypher / GQL) or RDF (SPARQL, ontologies).',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'boltco', text: 'Organization', ms: 1200 },
+              { say: 1 },
+              { badge: 'factory', text: '40 synonyms?', tone: 'miss', ms: 1300 },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: graph or plain RAG?',
+            lines: ['Graphs suit domains rich in entities and relationships.'],
+            task: {
+              type: 'choose',
+              question: 'Which question is worth a knowledge graph?',
+              options: [
+                { text: '"Which suppliers depend on a factory in a sanctioned region?"' },
+                { text: '"Summarise this policy"', why: 'One document, no chain of relationships: plain RAG is enough.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use graphs for questions that combine facts across documents: chains, counts, exact relationships.',
+            then: [
+              { send: ['us', 'boltco'], label: '← SUPPLIES' },
+              { send: ['boltco', 'factory'], label: 'SOURCES_FROM' },
+              { send: ['factory', 'region'], label: 'LOCATED_IN', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a knowledge graph is a mind map a computer can query: dots are *things* (people, companies, products), arrows are *named relationships* (WORKS_AT, ACQUIRED), and both carry facts.
 
 **The atom is a triple:** \`(Acme, ACQUIRED, Globex)\` = subject, predicate, object. Thousands of triples connect into a graph you can traverse: "Who works at companies Acme acquired?" is a 2-hop walk.
@@ -181,6 +293,107 @@ export function explain(start: string, target: string, maxHops: number): string 
     },
     {
       heading: 'Graph Databases — Neo4j, Cypher patterns, constraints and vector indexes',
+      steps: {
+        actors: [
+          { id: 'triples', kind: 'document', label: 'Triples', sub: '50,000 extracted', x: 110, y: 70 },
+          { id: 'loader', kind: 'tool', label: 'Loader', sub: 'UNWIND batches', x: 340, y: 70 },
+          { id: 'constraint', kind: 'guard', label: 'Constraint', sub: 'org id IS UNIQUE', x: 340, y: 230 },
+          { id: 'neo', kind: 'data', label: 'Neo4j', sub: 'nodes + edges', x: 570, y: 150 },
+          { id: 'app', kind: 'server', label: 'App', sub: 'driver + $params', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The arrows are stored',
+            lines: [
+              'A graph database stores relationships themselves: following one is a pointer hop, not a JOIN.',
+              'Cost depends on the neighbourhood you touch, not the table size.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'neo'], label: 'MATCH pattern' },
+              { lit: 'neo' },
+              { say: 1 },
+              { badge: 'neo', text: 'pointer hops', tone: 'ok', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The naive load',
+            lines: [
+              'One `CREATE` per triple, no constraint.',
+              '50,000 round trips (~8 minutes)…',
+              '…and 3,100 duplicate Organization nodes: "Acme" created once per mention.',
+            ],
+            script: [
+              { say: 0 },
+              { down: 'constraint' },
+              { send: ['triples', 'loader'], label: 'one at a time' },
+              { say: 1 },
+              { send: ['loader', 'neo'], label: 'CREATE', count: 3 },
+              { say: 2 },
+              { badge: 'neo', text: '3,100 duplicates', tone: 'err', ms: 1400 },
+              { down: 'constraint', on: false },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: fix the load',
+            lines: ['A uniqueness constraint also creates an index, making MERGE fast and duplicate-free.'],
+            task: {
+              type: 'choose',
+              question: 'How should the 50,000 triples be loaded?',
+              options: [
+                { text: 'Unique constraint on id, then `UNWIND $rows` in batches of 5,000 with `MERGE` on id' },
+                {
+                  text: 'Keep one `CREATE` per triple and dedupe afterwards',
+                  why: 'Still 50,000 round trips, and the graph holds duplicates until you clean up.',
+                },
+                { text: '`MERGE` on every property of each node', why: 'MERGE on the key only, then SET the other properties.' },
+              ],
+              answer: 0,
+            },
+            solved: '10 transactions, ~9 seconds, zero duplicates.',
+            then: [
+              { send: ['triples', 'loader'], label: '5,000 rows' },
+              { send: ['loader', 'neo'], label: 'UNWIND + MERGE' },
+              { send: ['constraint', 'neo'], label: 'unique id', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Multi-hop as a pattern',
+            lines: [
+              '`(s)-[:SUPPLIES*1..3]->(:Organization {id:\'us\'})`: a variable-length path; always set an upper bound.',
+              'Suppliers within 3 hops in sanctioned regions: 2 rows in 14 ms on a 2M-edge graph.',
+              'The equivalent SQL needed 3 self-joins plus a union for each depth.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'neo'], label: '*1..3' },
+              { say: 1 },
+              { send: ['neo', 'app'], label: '2 rows, 14 ms', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: passing values',
+            lines: ['`driver.executeQuery(cypher, params, ...)` handles sessions, retries and routing.'],
+            task: {
+              type: 'choose',
+              question: 'How should the app put an organisation name into a Cypher query?',
+              options: [
+                { text: 'As a parameter: `{name: $name}`' },
+                { text: 'String-concatenate it into the query', why: 'That invites Cypher injection and defeats plan caching.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Always pass parameters: safe from injection, and the plan is cached.',
+            then: [{ send: ['app', 'neo'], label: '$name', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a graph database stores the arrows themselves, so following a relationship is a pointer hop instead of a JOIN. A 4-hop question stays fast because cost depends on the neighbourhood you touch, not the table size.
 
 **Cypher essentials (Neo4j)**
@@ -327,6 +540,101 @@ export async function neighbours(driver: Driver, entityId: string, relTypes: str
     },
     {
       heading: 'Entity Extraction — LLM-based entities and relations with schemas and provenance',
+      steps: {
+        actors: [
+          { id: 'chunk', kind: 'document', label: 'Chunk', sub: 'press release', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM extractor', sub: 'JSON schema, enums', x: 340, y: 150 },
+          { id: 'evidence', kind: 'guard', label: 'Evidence check', sub: 'quote in chunk?', x: 570, y: 70 },
+          { id: 'schema', kind: 'judge', label: 'Schema check', sub: 'types + direction', x: 570, y: 230 },
+          { id: 'graph', kind: 'data', label: 'Graph', sub: '+ provenance', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Sentences in, triples out',
+            lines: [
+              '"In 2024 Acme bought Globex for $2.1B" → `(Acme, ACQUIRED {year: 2024, amount: 2.1e9}, Globex)`.',
+              'The LLM is the reader; your schema is the form it must fill in.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['chunk', 'llm'], label: 'sentence' },
+              { send: ['llm', 'schema'], label: 'triple' },
+              { say: 1 },
+              { badge: 'llm', text: 'fill the form', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Constrain, ground, validate',
+            lines: [
+              'Chunks of ~500–1,500 tokens; output constrained by a JSON Schema with entity and relation types as **enums**.',
+              'Each relation must carry a verbatim `evidence` quote and a confidence.',
+              'Validate against the graph schema, then attach provenance: docId, chunkId, model, timestamp.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['chunk', 'llm'], label: 'chunk' },
+              { say: 1 },
+              { send: ['llm', 'evidence'], label: 'relations + quotes' },
+              { say: 2 },
+              { send: ['llm', 'schema'], label: 'relations' },
+              { send: ['schema', 'graph'], label: 'valid', tone: 'ok' },
+              { badge: 'graph', text: 'docId · chunkId', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: catch the invented fact',
+            lines: ['A draft extracted `Acme -HEADQUARTERED_IN-> Berlin` with evidence "Acme\'s Berlin headquarters". That quote is not in the chunk.'],
+            task: {
+              type: 'pick',
+              question: 'Which check rejects this relation?',
+              answer: 'evidence',
+              hints: {
+                schema: 'The schema check looks at types and directions; the problem here is the quote.',
+                llm: 'The LLM produced the relation; a separate check must catch it.',
+              },
+            },
+            solved: 'If the evidence quote is not verbatim in the chunk, reject it: a cheap hallucination filter.',
+            then: [{ send: ['llm', 'evidence'], label: 'HQ in Berlin?', tone: 'err' }, { badge: 'evidence', text: 'rejected', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What the filter buys',
+            lines: [
+              'Valid output: Acme Corp -ACQUIRED{date: \'2024-03\'}-> Globex (conf 0.97), Lena Ortiz -WORKS_AT{role: \'CEO\'}-> Globex, …',
+              'Across 2,000 chunks the evidence check removed 6.4% of relations; a human judged 81% of those wrong.',
+              'Extraction yields *mentions*; entity resolution turns them into canonical entities next.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['schema', 'graph'], label: 'ACQUIRED', tone: 'ok' },
+              { say: 1 },
+              { badge: 'evidence', text: '−6.4%', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { badge: 'graph', text: 'mentions', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: gleaning',
+            lines: ['Gleaning: a second "did you miss any?" pass finds ~10–20% more relations at ~2x cost.'],
+            task: {
+              type: 'choose',
+              question: 'Where do you run gleaning?',
+              options: [
+                { text: 'On high-value documents' },
+                { text: 'On every chunk, always', why: 'It roughly doubles extraction cost; spend it where the extra relations matter.' },
+                { text: 'Never: one pass is enough', why: 'It does raise recall; on high-value documents that is worth paying for.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Gleaning trades ~2x cost for recall: use it where documents are worth it.',
+            then: [{ send: ['chunk', 'llm'], label: 'second pass' }, { send: ['llm', 'schema'], label: 'more relations', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** extraction turns sentences into triples: "In 2024 Acme bought Globex for $2.1B" → \`(Acme, ACQUIRED {year: 2024, amount: 2.1e9}, Globex)\`. The LLM is the reader; your schema is the form it must fill in.
 
 **Pipeline**
@@ -490,6 +798,211 @@ export function scoreExtraction(predicted: R[], gold: R[]) {
     },
     {
       heading: 'Entity Resolution — blocking, similarity scoring and LLM adjudication',
+      short: {
+        id: 'entity-resolution-four-acmes',
+        title: 'Entity resolution: four Acmes',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'Four mentions · one block',
+            head: 'Same company, or *not*?',
+            claims: [
+              {
+                text: 'Acme Corp = ACME Corporation',
+                ok: true,
+                note: '0.98, same domain → auto-merge',
+              },
+              {
+                text: 'Acme Corp = Acme Ltd',
+                ok: false,
+                note: '0.80, grey zone → LLM: UK subsidiary',
+              },
+              {
+                text: 'Acme Corp = Acme Analytics',
+                ok: false,
+                note: '0.79, grey zone → LLM: different company',
+              },
+            ],
+            sub: 'Result: **3** canonical nodes, 1 alias, 1 new SUBSIDIARY_OF edge.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Blocking key = first 3 chars + type',
+            value: 6,
+            unit: 'pairs to score, instead of comparing against all 40K orgs',
+            sub: 'All-pairs on 1M mentions is **≈ 5×10^11** comparisons.',
+          },
+          {
+            type: 'flow',
+            kicker: 'The pipeline',
+            head: 'Normalise, block, *score*, decide',
+            steps: [
+              'Normalise: lowercase, strip legal suffixes',
+              'Block on a cheap key',
+              'Score: 0.5 × Jaro-Winkler + 0.5 × cosine, then attributes',
+              '≥ 0.92 merge · ≤ 0.70 distinct · grey zone → LLM',
+              'Cluster; keep aliases and a merge log',
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Precision beats recall here',
+            head: 'Keep merges *reversible*',
+            items: [
+              {
+                label: 'Keep aliases',
+                keep: true,
+              },
+              {
+                label: 'Log who or what merged, and the score',
+                keep: true,
+              },
+              {
+                label: 'Use several blocking keys',
+                keep: true,
+              },
+              {
+                label: 'Auto-merge on name similarity alone',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: '"Apple Inc." and "Apple Records" were merged: Jaro-Winkler 0.91 on normalised names. Best fix?',
+            options: [
+              {
+                text: 'Lower the threshold to 0.85',
+                why: 'That merges more, not less.',
+              },
+              {
+                text: 'Add attribute and context evidence; send borderline pairs to adjudication',
+                why: 'Right: name similarity alone cannot separate organisations that share tokens.',
+              },
+              {
+                text: 'Merge only exact string matches',
+                why: 'Exact matching misses most real variants.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Wrong merges are worse than *duplicates*.',
+          sub: 'Block to scale, score names **and** attributes, adjudicate the grey zone, keep a reversible merge log.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'mentions', kind: 'document', label: 'Mentions', sub: 'four "Acme" variants', x: 110, y: 70 },
+          { id: 'norm', kind: 'chunker', label: 'Normalise', sub: 'strip inc, ltd', x: 340, y: 70 },
+          { id: 'block', kind: 'retriever', label: 'Blocking', sub: 'first 3 chars + type', x: 570, y: 70 },
+          { id: 'score', kind: 'metric', label: 'Pair scorer', sub: 'JW + cosine + attrs', x: 800, y: 150 },
+          { id: 'llm', kind: 'judge', label: 'LLM adjudicator', sub: 'grey zone', x: 570, y: 230 },
+          { id: 'graph', kind: 'data', label: 'Canonical nodes', sub: 'aliases + audit', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Same real-world thing?',
+            lines: [
+              '"IBM", "International Business Machines" and "I.B.M. Corp" → one node.',
+              '"Apple" vs "Apple Inc." → maybe not.',
+              'Without resolution the graph has 5 Acmes and every traversal is broken.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['mentions', 'graph'], label: 'merge', tone: 'ok', curve: true },
+              { say: 1 },
+              { badge: 'mentions', text: 'maybe not', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { badge: 'graph', text: '5 Acmes', tone: 'err', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Normalise, then block',
+            lines: [
+              'Normalise: lowercase, strip punctuation and legal suffixes → "acme", "acme", "acme", "acme analytics".',
+              'Block on a cheap key (first 3 chars + type): 6 pairs instead of comparing against all 40K orgs.',
+              'All-pairs on 1M mentions would be ≈ 5×10^11 comparisons.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['mentions', 'norm'], label: '4 mentions' },
+              { say: 1 },
+              { send: ['norm', 'block'], label: 'acme…' },
+              { badge: 'block', text: '6 pairs', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { send: ['block', 'score'], label: 'pairs' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: Acme Corp vs Acme Ltd',
+            lines: [
+              'Name scores give 0.95, but the domains differ (acme.com vs acme.co.uk, −0.15) → **0.80**.',
+              'Thresholds: ≥ 0.92 auto-merge; ≤ 0.70 distinct.',
+            ],
+            task: {
+              type: 'choose',
+              question: 'What happens to this pair?',
+              options: [
+                { text: 'Grey zone: an LLM adjudicates with both records\' context' },
+                { text: 'Auto-merge', why: 'Auto-merge needs ≥ 0.92; the domain mismatch pulled it down to 0.80.' },
+                { text: 'Distinct, no further check', why: 'Distinct needs ≤ 0.70; 0.80 sits in between.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The LLM reads "UK subsidiary of Acme Corp": distinct, with a new SUBSIDIARY_OF edge.',
+            then: [{ send: ['score', 'llm'], label: '0.80' }, { send: ['llm', 'graph'], label: 'SUBSIDIARY_OF', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The other pairs',
+            lines: [
+              'Acme Corp ↔ ACME Corporation: 0.98 and the same domain → **auto-merge**.',
+              'Acme Corp ↔ Acme Analytics: 0.79 → grey zone → LLM: a different company.',
+              'Result: 3 canonical nodes, 1 alias, 1 new relationship.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['score', 'graph'], label: '0.98 merge', tone: 'ok', curve: true },
+              { say: 1 },
+              { send: ['score', 'llm'], label: '0.79' },
+              { badge: 'llm', text: 'different', ms: 1200 },
+              { say: 2 },
+              { badge: 'graph', text: '3 nodes, 1 alias', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the ER pipeline',
+            lines: ['Keep aliases and a merge audit so merges can be undone.'],
+            task: {
+              type: 'order',
+              question: 'Put entity resolution in order.',
+              items: [
+                'Normalise names',
+                'Block on a cheap key',
+                'Score candidate pairs',
+                'Decide by thresholds (LLM for the grey zone)',
+                'Cluster matches into canonical entities',
+              ],
+              hint: 'Blocking needs normalised names, scoring only runs on blocked pairs, and clustering needs the merge decisions.',
+            },
+            solved: 'Normalise → block → score → decide → cluster (union-find), with aliases and an audit trail.',
+            then: [
+              { send: ['mentions', 'norm'], label: 'normalise' },
+              { send: ['norm', 'block'], label: 'block' },
+              { send: ['block', 'score'], label: 'score' },
+              { send: ['score', 'llm'], label: 'grey zone' },
+              { send: ['llm', 'graph'], label: 'cluster', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** entity resolution (ER) answers "are these two mentions the same real-world thing?" — "IBM", "International Business Machines" and "I.B.M. Corp" → one node; "Apple" (fruit company?) vs "Apple Inc." → maybe not. Without ER your graph has 5 Acmes and every traversal is broken.
 
 **Pipeline**
@@ -652,6 +1165,109 @@ Acceptance: path compression; handles chains (A–B, B–C → one cluster); sin
     },
     {
       heading: 'Graph-Based Retrieval — seed, expand, rank and combine with vectors',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'Globex products?', x: 110, y: 150 },
+          { id: 'vec', kind: 'retriever', label: 'Vector seed', sub: 'entity embeddings', x: 340, y: 70 },
+          { id: 'globex', kind: 'data', label: 'Globex', sub: 'seed, 0.91', x: 570, y: 70 },
+          { id: 'hub', kind: 'data', label: 'Acme', sub: 'hub, degree 1,840', x: 800, y: 150 },
+          { id: 'rank', kind: 'metric', label: 'Rank', sub: 'sim × conf × decay', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'facts + chunks, cites', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Find the neighbourhood, walk the streets',
+            lines: [
+              'Vector search finds the right *neighbourhood* in your documents.',
+              'Graph traversal then *walks the streets* to collect connected facts no single chunk states.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'vec'], label: 'question' },
+              { send: ['vec', 'globex'], label: 'seed' },
+              { say: 1 },
+              { send: ['globex', 'hub'], label: 'ACQUIRED_BY' },
+              { send: ['globex', 'rank'], label: 'PRODUCES' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Seed, then expand',
+            lines: [
+              '**Seed**: entity embeddings return Globex (0.91) and Acme (0.74).',
+              '**Expand** 1–2 hops on relevant relation types: Globex `PRODUCES` RoboArm X2 and VisionKit; `ACQUIRED_BY` Acme.',
+              'Use degree caps and a node budget.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['vec', 'globex'], label: '0.91' },
+              { say: 1 },
+              { send: ['globex', 'rank'], label: 'RoboArm X2, VisionKit' },
+              { send: ['globex', 'hub'], label: 'ACQUIRED_BY' },
+              { say: 2 },
+              { badge: 'hub', text: 'degree 1,840', tone: 'miss', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where to stop expanding',
+            lines: ['Acme produces 41 products and has 1,840 connections.'],
+            task: {
+              type: 'pick',
+              question: 'Beyond one hop from which node should expansion be skipped?',
+              answer: 'hub',
+              hints: {
+                globex: 'Globex is the seed the question is about; expanding from it finds its products.',
+                rank: 'Rank scores facts after expansion; it is not a node in the graph.',
+              },
+            },
+            solved: 'Degree caps skip hubs: walking from Acme would flood the context with unrelated products.',
+            then: [{ down: 'hub' }, { send: ['globex', 'rank'], label: '2 products', tone: 'ok' }, { down: 'hub', on: false }],
+          },
+          {
+            kind: 'watch',
+            title: 'Rank, serialise, answer',
+            lines: [
+              'Facts touching Globex directly score highest: 2 products + the acquisition edge + the press release chunk.',
+              '6 facts + 2 chunks ≈ 900 tokens, versus ~6,000 for the top-12 vector chunks.',
+              'Answer: RoboArm X2 and VisionKit [press-0412]. Vector-only RAG listed none: they were only in the catalogue.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['globex', 'rank'], label: 'facts' },
+              { lit: 'rank' },
+              { say: 1 },
+              { send: ['rank', 'llm'], label: '~900 tokens', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'user'], label: 'RoboArm X2, VisionKit', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a precise count',
+            lines: ['"How many suppliers in Germany?" is a precise lookup.'],
+            task: {
+              type: 'choose',
+              question: 'What is the best route?',
+              options: [
+                { text: 'Text2Cypher, run with a read-only user, timeouts, an enforced LIMIT and EXPLAIN first' },
+                {
+                  text: 'Text2Cypher with full write access and no limits',
+                  why: 'Generated queries can be wrong or unsafe: guardrails are required.',
+                },
+                {
+                  text: 'Vector-seeded expansion',
+                  why: 'Expansion suits open questions needing connected context; counts and filters suit a query.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Text2Cypher for counts and filters, with guardrails; vector-seeded expansion for open questions; plain vector RAG when no seed is found.',
+            then: [{ send: ['llm', 'hub'], label: 'read-only Cypher', curve: true }, { badge: 'llm', text: 'LIMIT enforced', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** vector search finds the *right neighbourhood* in your documents; graph traversal then *walks the streets* from there to collect connected facts the question needs but the text chunks don't state together.
 
 **Hybrid retrieval recipe (local search)**

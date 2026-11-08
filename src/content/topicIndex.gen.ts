@@ -23,6 +23,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "GenAI Fundamentals — what generative AI is and where it fits",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -145,6 +146,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -328,13 +330,127 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Transformer Architecture — the intuition: tokens in, next-token probabilities out",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Tokenization — BPE, vocabularies and why tokens are not words",
+    "short": {
+     "id": "strawberry-is-three-tokens",
+     "title": "Strawberry is three tokens",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "\"strawberry\" · o200k_base",
+       "head": "The model never sees *letters*",
+       "steps": [
+        "strawberry: 10 characters",
+        "Tokenizer: applies the BPE merges",
+        "st · raw · berry: 3 token ids",
+        "Model: sees ids, not s-t-r-a-w-b-e-r-r-y"
+       ],
+       "sub": "With a leading space, \" strawberry\" is a **single token**."
+      },
+      {
+       "type": "counter",
+       "kicker": "How BPE builds the vocabulary",
+       "value": 256,
+       "unit": "possible bytes to start from",
+       "sub": "Count the most frequent adjacent pair, **merge it** into a new token, repeat ~100K–200K times."
+      },
+      {
+       "type": "ladder",
+       "kicker": "\"Your order will arrive by tomorrow.\" · o200k_base",
+       "head": "Same sentence, *different bill*",
+       "rungs": [
+        {
+         "label": "English",
+         "amount": 7
+        },
+        {
+         "label": "Hindi",
+         "amount": 10
+        },
+        {
+         "label": "Japanese",
+         "amount": 11
+        }
+       ],
+       "unit": "tokens",
+       "sub": "Under the older cl100k_base the Hindi was **31 tokens**: the bigger vocabulary cut its cost ~3×."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Where tokens trip models up",
+       "head": "Letter-level work: *move it to code*",
+       "items": [
+        {
+         "label": "Counting letters"
+        },
+        {
+         "label": "Reversing strings"
+        },
+        {
+         "label": "Long arithmetic"
+        },
+        {
+         "label": "Do it in code, give the model the result",
+         "keep": true
+        }
+       ],
+       "keepLabel": "CODE"
+      },
+      {
+       "type": "claims",
+       "kicker": "Fitting a tight token budget",
+       "head": "Count with the *right tokenizer*",
+       "claims": [
+        {
+         "text": "text.length / 4",
+         "ok": false,
+         "note": "a rule of thumb, not a budget"
+        },
+        {
+         "text": "A chars/4 or cl100k estimate for another model",
+         "ok": false,
+         "note": "can be 10–30% off"
+        },
+        {
+         "text": "The target model's tokenizer, plus a 10–15% margin",
+         "ok": true
+        }
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A model keeps saying \"strawberry\" has 2 r's. Why?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "It gets a few sub-word tokens, never the letters",
+         "why": "The model receives token ids like st|raw|berry, so letter-level facts must be inferred indirectly."
+        },
+        {
+         "text": "Temperature is too high",
+         "why": "Lower temperature makes the wrong answer more consistent, not correct."
+        },
+        {
+         "text": "The context window is too small",
+         "why": "One word fits easily; the issue is what the model sees: pieces, not letters."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Models see *ids*, not letters.",
+      "sub": "Count with **the exact tokenizer** of the model you call, and leave a safety margin."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -529,6 +645,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Zero-shot vs few-shot — when examples help, how many and how to pick them",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -536,6 +653,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Delimiters and XML tags — separate instructions from data",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -543,13 +661,107 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Output control — format, length, JSON, prefill, stop sequences and \"I don't know\"",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Sampling — temperature, top_p, max tokens and seed",
+    "short": {
+     "id": "temperature-zero-still-drifts",
+     "title": "Temperature 0 still drifts",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Invoice extraction · temperature 1.0",
+       "value": 7,
+       "unit": "of 100 invoices got a different due_date across 5 runs",
+       "sub": "Same prompt, same invoice, **different answer**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Same 100 invoices, 5 runs each",
+       "head": "Temperature 0 is *not* deterministic",
+       "rungs": [
+        {
+         "label": "Temperature 1.0",
+         "amount": 7
+        },
+        {
+         "label": "Temperature 0",
+         "amount": 1
+        }
+       ],
+       "unit": "invoices drifting",
+       "sub": "Structured Outputs + a date validator caught the last one: accuracy **96% → 98%**."
+      },
+      {
+       "type": "grid",
+       "kicker": "Subject lines · temperature 0",
+       "head": "Low temperature kills *variety*",
+       "cells": 5,
+       "hot": 4,
+       "caption": "5 separate calls, the same line 4 times",
+       "sub": "One call at **0.9** asking for \"5 distinct subject lines\": 5/5 distinct, picked 3× more often."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Two knobs, one job",
+       "head": "Tune *one*, not both",
+       "items": [
+        {
+         "label": "temperature",
+         "keep": true
+        },
+        {
+         "label": "top_p: leave at default"
+        }
+       ],
+       "keepLabel": "TUNE",
+       "sub": "Both control randomness; changing both makes effects **hard to reason about**."
+      },
+      {
+       "type": "flow",
+       "kicker": "The migration",
+       "head": "A reasoning model says *400*",
+       "steps": [
+        "Extraction moves to a reasoning model",
+        "Request still sends temperature: 0",
+        "Every call fails with a 400",
+        "Fix: model capabilities in config",
+        "Reasoning route: no sampling params, low effort"
+       ],
+       "broken": 1
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Your new reasoning model returns a 400 on \"temperature\". What now?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Omit sampling params for it; steer with the prompt and reasoning effort",
+         "why": "Many reasoning models only accept default sampling values: keep settings per model."
+        },
+        {
+         "text": "Set top_p to 0 instead",
+         "why": "top_p is a sampling param too; reasoning models do not accept custom values."
+        },
+        {
+         "text": "Switch back: reasoning models cannot do extraction",
+         "why": "They can; the request just needs per-model settings."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Pick the knob *per task, per model*.",
+      "sub": "Low temperature for extraction, higher for variety, and **temperature 0 is not a determinism guarantee**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -777,6 +989,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Chain-of-thought — few-shot vs zero-shot, hidden reasoning, and reasoning models",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -882,6 +1095,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -889,6 +1103,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Decomposition — least-to-most, step-back and sub-question prompts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -896,6 +1111,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prompt chaining — small prompts joined by JSON contracts and gates",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -903,6 +1119,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "ReAct prompting — reason, act, observe until a stop condition",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1003,6 +1220,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -1231,13 +1449,127 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prompt Templates — variables, injection-safe rendering and versioning",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Iterating & Debugging Prompts — success criteria, small test sets and one change at a time",
+    "short": {
+     "id": "one-change-per-prompt-version",
+     "title": "One change per prompt version",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "Call notes · 40 test transcripts",
+       "head": "One change per version, *score climbs*",
+       "rungs": [
+        {
+         "label": "v1 baseline",
+         "amount": 31
+        },
+        {
+         "label": "v2 every distinct issue",
+         "amount": 35
+        },
+        {
+         "label": "v3 at most 120 words",
+         "amount": 36
+        },
+        {
+         "label": "v4 only agreed next steps",
+         "amount": 39
+        }
+       ],
+       "unit": "of 40",
+       "sub": "Each version made **one change** and reran every case."
+      },
+      {
+       "type": "flow",
+       "kicker": "The loop",
+       "head": "Unit testing, *not copywriting*",
+       "steps": [
+        "Define success first",
+        "Build 20–50 real test cases",
+        "Baseline: keep per-case results",
+        "Read failures, group by cause",
+        "Change one thing, rerun all",
+        "Track versions"
+       ]
+      },
+      {
+       "type": "grid",
+       "kicker": "v1 baseline · 31/40",
+       "head": "Read the failures, *group by cause*",
+       "cells": 40,
+       "hot": 9,
+       "caption": "5 missed the second issue · 3 invented a next step · 1 too long",
+       "sub": "Fix the **biggest group** first."
+      },
+      {
+       "type": "claims",
+       "kicker": "Diff case by case",
+       "head": "A fix can *break* another case",
+       "claims": [
+        {
+         "text": "v2: \"List every distinct issue\"",
+         "ok": true,
+         "note": "35/40"
+        },
+        {
+         "text": "A case v1 passed",
+         "ok": false,
+         "note": "broke: the note grew to 190 words"
+        },
+        {
+         "text": "v3: \"At most 120 words\"",
+         "ok": true,
+         "note": "36/40, nothing v2 passed broke"
+        }
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "Held-out slice · run once at the end",
+       "value": 18,
+       "unit": "of 20 held-out cases pass with v4",
+       "stats": [
+        {
+         "value": "15/20",
+         "label": "v1 on the same slice"
+        }
+       ],
+       "sub": "Gains hold, so v4 ships, logged as **call-note@1.3.0**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "v2 scores 46/50 vs 44/50 for v1: it fixed 5 cases and broke 3. Next?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Read the 3 broken cases before shipping",
+         "why": "A +2 headline hides 8 cases that changed; the broken ones may be an important category."
+        },
+        {
+         "text": "Ship v2: the score went up",
+         "why": "The average hides 3 regressions you have not read yet."
+        },
+        {
+         "text": "Raise the temperature and rerun until it scores higher",
+         "why": "With 50 cases one flipped case moves the score 2 points: that is tuning to noise."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "You can't judge a prompt *by reading it*.",
+      "sub": "Define success, change **one thing**, rerun **every case**, and keep a held-out slice."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1245,6 +1577,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Meta-prompting & Automatic Optimisation — let a model draft, critique and tune your prompts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1252,6 +1585,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Grounding, Citations & Long Context — answer from the sources, and say so when you cannot",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1259,6 +1593,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Injection & Jailbreaks in Prompt Design — prompts that fail safely",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -1266,6 +1601,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Model Differences & Multimodal Prompts — migrating prompts, and prompting with images and documents",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1511,7 +1847,102 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Structured Outputs (JSON / JSON Schema) — from \"please reply in JSON\" to guaranteed schemas",
+    "short": {
+     "id": "please-reply-in-json",
+     "title": "\"Please reply in JSON\" is a hope",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "Prompt-only JSON · 1,000 emails",
+       "head": "\"Please reply in JSON\" is *a hope*",
+       "claims": [
+        {
+         "text": "Every reply parses with JSON.parse",
+         "ok": false,
+         "note": "about 2–4% failed: markdown fences, trailing commentary"
+        },
+        {
+         "text": "Every reply uses the key \"demo_requested\"",
+         "ok": false,
+         "note": "some said \"demoRequested\""
+        }
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "Three levels of strictness",
+       "head": "Only one *guarantees your schema*",
+       "items": [
+        {
+         "label": "Prompt only: no guarantee"
+        },
+        {
+         "label": "JSON mode: valid JSON, any shape"
+        },
+        {
+         "label": "Structured Outputs: matches your schema",
+         "keep": true
+        }
+       ],
+       "keepLabel": "STRICT"
+      },
+      {
+       "type": "flow",
+       "kicker": "Constrained decoding",
+       "head": "The model *cannot* write outside the boxes",
+       "steps": [
+        "Send your JSON Schema",
+        "Provider compiles it into a grammar",
+        "Each step masks tokens that would break it",
+        "Output matches the schema"
+       ],
+       "sub": "The first request with a new schema is **slower** while the grammar compiles; then it is cached."
+      },
+      {
+       "type": "counter",
+       "kicker": "Structured Outputs run · same emails",
+       "value": 3,
+       "unit": "schema-valid replies Zod still caught",
+       "stats": [
+        {
+         "value": 0,
+         "label": "parse failures"
+        },
+        {
+         "value": 0,
+         "label": "unknown keys"
+        }
+       ],
+       "sub": "seats came back **0** (\"no seats mentioned\"). The rule \"seats > 0 or null\" lives in Zod, so they went for retry."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "You switch to strict Structured Outputs. Which failure can STILL happen?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "A valid field holds the wrong value, like the sender's email",
+         "why": "Constrained decoding guarantees shape, not truth: validate semantics and evaluate."
+        },
+        {
+         "text": "A key that is not in the schema",
+         "why": "Strict mode masks any token that would add an unknown key."
+        },
+        {
+         "text": "JSON.parse fails on a markdown fence",
+         "why": "Output is valid JSON from the first token; fences are exactly what it prevents."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Schemas guarantee *shape*, not truth.",
+      "sub": "Check **refusal and truncation** before parsing, and keep business rules in Zod."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -1519,6 +1950,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Function Calling — letting the model ask your code to do something",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1526,6 +1958,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Tool Calling — the loop, tool_choice, parallel calls and errors",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -1715,13 +2148,113 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LLM APIs — messages, roles, parameters and token accounting",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Streaming Responses — SSE, deltas, TTFT and cancellation",
+    "short": {
+     "id": "streaming-first-word-in-half-a-second",
+     "title": "Streaming: first word in 0.55 s",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Same prompt · same model · 640 output tokens",
+       "value": 0.55,
+       "decimals": 2,
+       "suffix": " s",
+       "unit": "until the first word appears, streaming",
+       "sub": "Without streaming, the first text arrives at **8.6 s**, together with the whole answer."
+      },
+      {
+       "type": "race",
+       "kicker": "Decode speed ~80 tok/s",
+       "head": "The writer is not *faster*",
+       "lanes": [
+        {
+         "label": "Non-streaming · first text",
+         "seconds": 8.6,
+         "tone": "pink"
+        },
+        {
+         "label": "Streaming · first text",
+         "seconds": 0.55,
+         "tone": "good"
+        }
+       ],
+       "sub": "Both finish at **8.6 s**. Total ≈ TTFT + output tokens ÷ decode speed; users judge speed by TTFT."
+      },
+      {
+       "type": "flow",
+       "kicker": "On the wire · Server-Sent Events",
+       "head": "Events, each ended by a *blank line*",
+       "steps": [
+        "Content-Type: text/event-stream",
+        "content_block_delta → text_delta \"Our\"",
+        "message_delta: stop_reason, usage",
+        "message_stop"
+       ],
+       "sub": "Anthropic can also send an **error** event mid-stream, after HTTP 200."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Where streams break",
+       "head": "Keep the stream *honest*",
+       "items": [
+        {
+         "label": "Handle error events inside the read loop",
+         "keep": true
+        },
+        {
+         "label": "Abort upstream when the client disconnects",
+         "keep": true
+        },
+        {
+         "label": "JSON.parse each partial tool-call delta"
+        },
+        {
+         "label": "Proxy buffering and gzip on the SSE route"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "counter",
+       "kicker": "In testing · 18% closed the tab early",
+       "value": 115,
+       "unit": "wasted output tokens per request, before abort()",
+       "sub": "18% × 640 ≈ 115: roughly **18% of the output bill**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Users say answers \"feel instant\", but average end-to-end duration did not change. Why?",
+       "options": [
+        {
+         "text": "Streaming is broken; it should also halve total time",
+         "why": "Streaming changes when tokens are delivered, not how fast they are produced."
+        },
+        {
+         "text": "First-token time fell; the model still makes the same tokens at the same speed",
+         "why": "Right: perceived latency falls to TTFT, while total is still TTFT + output tokens ÷ decode speed."
+        },
+        {
+         "text": "Streaming only helps at temperature 0",
+         "why": "Temperature has nothing to do with it; an unchanged total is what correct streaming looks like."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Streaming moves the *first word*, not the last.",
+      "sub": "Perceived latency falls to **TTFT**; total time is unchanged. Abort upstream when the client leaves."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2010,6 +2543,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2017,6 +2551,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Embedding Models — choosing, prefixes and Matryoshka dimensions",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2024,6 +2559,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Vector Similarity — cosine, dot product and Euclidean distance",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2206,6 +2742,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Document Ingestion — the pipeline from raw files to indexable records",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2213,6 +2750,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Document Parsing — extracting text, layout and tables",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2220,13 +2758,90 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Data Preprocessing — cleaning, normalising and deduplicating text",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "OCR — getting text out of scans, photos and image-only PDFs",
+    "short": {
+     "id": "scanned-lease-needs-ocr",
+     "title": "OCR: the lease with no text",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "A 40-page scanned lease",
+       "head": "*38* pages return zero characters",
+       "cells": 40,
+       "hot": 38,
+       "caption": "PyMuPDF finds no text layer: route those pages to OCR",
+       "sub": "Without OCR, RAG **silently knows nothing** about them."
+      },
+      {
+       "type": "flow",
+       "kicker": "Detect, then choose an engine",
+       "head": "Find the pages that need *OCR*",
+       "steps": [
+        "get_text() returns < ~50 characters, but the page has images",
+        "Render at 300 DPI, deskew, binarise",
+        "Tesseract for clean printed text",
+        "Vision LLM for the pages the others fail on"
+       ]
+      },
+      {
+       "type": "claims",
+       "kicker": "Same rent line, two renders",
+       "head": "Low DPI is the *#1* cause of bad OCR",
+       "claims": [
+        {
+         "text": "150 DPI reads \"$2,45O/rnonth\"",
+         "ok": false,
+         "note": "word accuracy ~88%"
+        },
+        {
+         "text": "300 DPI + deskew reads \"$2,450/month\"",
+         "ok": true,
+         "note": "word accuracy ~97%"
+        }
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "Page 31 · a handwritten addendum",
+       "value": 41,
+       "suffix": "%",
+       "unit": "Tesseract confidence: escalate to a vision LLM",
+       "sub": "It returns **\"Tenant may sublet with written consent.\"** About $0.005 at an illustrative $3/1M."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "\"Not found\" for 15% of contracts, all uploaded from a scanner. The parser is PyMuPDF. What do you check first?",
+       "options": [
+        {
+         "text": "Whether those PDFs have a text layer at all",
+         "why": "Right: scanner PDFs are often image-only, so nothing was indexed. Route them to OCR."
+        },
+        {
+         "text": "Whether the embedding dimension is too low",
+         "why": "Retrieval settings cannot fix text that was never extracted."
+        },
+        {
+         "text": "Whether the reranker is enabled",
+         "why": "A reranker only reorders chunks that exist; these pages produced none."
+        }
+       ],
+       "answer": 0
+      }
+     ],
+     "takeaway": {
+      "head": "No text layer, *no knowledge*.",
+      "sub": "Detect near-empty pages, OCR at **300 DPI**, escalate the hardest pages, and carry OCR confidence in metadata."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -2408,13 +3023,120 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Chunking Strategies — fixed, sentence, paragraph, recursive and document-specific",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Chunk Size and Overlap — choosing numbers you can defend",
+    "short": {
+     "id": "chunk-size-zoom-level",
+     "title": "Chunk size is a zoom level",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "100-page handbook · 60 questions · top-k 5",
+       "head": "Recall@5 by *chunk size*",
+       "rungs": [
+        {
+         "label": "128 / 0",
+         "amount": 0.71
+        },
+        {
+         "label": "512 / 64",
+         "amount": 0.88
+        },
+        {
+         "label": "1,024 / 128",
+         "amount": 0.82
+        },
+        {
+         "label": "2,048 / 256",
+         "amount": 0.69
+        }
+       ],
+       "unit": "recall@5",
+       "sub": "Size / overlap in tokens. The middle wins; both ends lose."
+      },
+      {
+       "type": "counter",
+       "kicker": "Zoomed in",
+       "value": 128,
+       "unit": "tokens per chunk",
+       "sub": "Exact sentences, but the qualifying **\"unless…\"** falls into another card. Recall@5 **0.71**."
+      },
+      {
+       "type": "counter",
+       "kicker": "Zoomed out",
+       "value": 2048,
+       "unit": "tokens per chunk",
+       "sub": "Several policies blend into **one blurry vector**. Recall@5 **0.69**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Context budget · top_k × chunk size",
+       "head": "Prompt tokens per *query*",
+       "rungs": [
+        {
+         "label": "128 tokens",
+         "amount": 640
+        },
+        {
+         "label": "512 tokens",
+         "amount": 2560
+        },
+        {
+         "label": "1,024 tokens",
+         "amount": 5120
+        },
+        {
+         "label": "2,048 tokens",
+         "amount": 10240
+        }
+       ],
+       "unit": "tokens",
+       "sub": "512/64 wins on recall **and** costs half the prompt tokens of 1,024."
+      },
+      {
+       "type": "flow",
+       "kicker": "Overlap is the tape",
+       "head": "Stop a key sentence *falling into the crack*",
+       "steps": [
+        "Size 512, overlap 64",
+        "Stride 448 tokens",
+        "Neighbours share 64 tokens",
+        "Storage factor 512 / 448 ≈ 1.14×"
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Chunks of 512 tokens with 128 overlap. How much do you store?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "~1.33× the tokens",
+         "why": "Storage factor = size / (size − overlap) = 512 / 384 ≈ 1.33×."
+        },
+        {
+         "text": "Exactly 1×",
+         "why": "Overlapping tokens are stored twice, so overlap always costs storage."
+        },
+        {
+         "text": "4×",
+         "why": "That would be size / overlap. The factor divides by the stride, size − overlap."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Choose chunk size with an *eval sweep*, not intuition.",
+      "sub": "Run **256/512/1,024** against 50–100 questions and keep the winner per document type."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2422,6 +3144,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Recursive Chunking — RecursiveCharacterTextSplitter in practice",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2603,6 +3326,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Semantic Chunking — cutting where the topic changes",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2610,6 +3334,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Structure-Aware Chunking — following headings, sections, tables and code",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2617,13 +3342,108 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Parent-Child Chunking — search small, answer big",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Contextual Chunking — prepending document context to every chunk",
+    "short": {
+     "id": "contextual-chunk-rank-37-to-2",
+     "title": "Contextual chunking: rank 37 to 2",
+     "beats": [
+      {
+       "type": "retrieve",
+       "kicker": "One chunk from a 9K-token 10-Q",
+       "head": "Which company? *Which quarter?*",
+       "query": "ACME revenue growth Q2 2023",
+       "chunks": [
+        {
+         "text": "With context: \"ACME Corp's Q2 2023 10-Q… Revenue increased 3%\"",
+         "score": 0.79
+        },
+        {
+         "text": "Plain: \"Revenue increased 3% over the previous quarter\"",
+         "score": 0.41
+        }
+       ],
+       "k": 1,
+       "sub": "Plain chunk: rank **37**, missed in the top-20. Contextualised: rank **2**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Ingestion side",
+       "head": "An LLM *labels* every chunk",
+       "steps": [
+        "Send the whole document plus one chunk",
+        "A small model writes 50–100 tokens of context",
+        "Prepend it for embedding and BM25",
+        "Show users the original chunk"
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Reported · top-20 retrieval failure rate",
+       "head": "Failures fall at *every* layer",
+       "rungs": [
+        {
+         "label": "Baseline",
+         "amount": 5.7
+        },
+        {
+         "label": "+ contextual embeddings",
+         "amount": 3.7
+        },
+        {
+         "label": "+ contextual BM25",
+         "amount": 2.9
+        },
+        {
+         "label": "+ reranking",
+         "amount": 1.9
+        }
+       ],
+       "unit": "% failed",
+       "sub": "−35%, then −49%, then **−67%**."
+      },
+      {
+       "type": "counter",
+       "kicker": "Prompt caching on the document",
+       "value": 1.02,
+       "decimals": 2,
+       "prefix": "$",
+       "unit": "per 1M document tokens (Anthropic estimate)",
+       "sub": "The document is the cached prefix, so each extra chunk pays only for **the chunk and the output**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "You embed context + chunk, but keep BM25 on the raw chunk. What do you lose?",
+       "options": [
+        {
+         "text": "Nothing; BM25 cannot use context",
+         "why": "Keyword search benefits too: \"ACME\" or \"Q2 2023\" from the context let BM25 match."
+        },
+        {
+         "text": "Exact-term matches on entities and dates in the context",
+         "why": "Right: failures fell from −35% to −49% when BM25 also used the contextualised text."
+        },
+        {
+         "text": "The ability to rerank",
+         "why": "Reranking still works; what you lose is keyword matches on the added entities and dates."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "A chunk should *explain itself*.",
+      "sub": "Prepend **50–100 tokens** of document context, and use it for both embeddings and BM25."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2807,6 +3627,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Vector Databases — what they add and how the main options compare",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -2814,13 +3635,121 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Vector Indexing — index types, memory, build and maintenance",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Metadata Filtering — pre-filtering, post-filtering and filtered HNSW",
+    "short": {
+     "id": "filtered-search-empty-results",
+     "title": "Why filtered search comes back empty",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "2M chunks · 50 tenants · tenant 7",
+       "head": "Search first, filter *after*",
+       "cells": 40,
+       "hot": 1,
+       "caption": "HNSW hands back 40 candidates; ~2% belong to tenant 7",
+       "sub": "Asked for the top 10, the user gets **0–2 rows**: \"no results\"."
+      },
+      {
+       "type": "flow",
+       "kicker": "pgvector post-filter",
+       "head": "The filter runs *after* the index scan",
+       "steps": [
+        "Query: top-10 for tenant 7",
+        "HNSW scan, ef_search 40",
+        "Filter tenant_id = 7",
+        "0–2 rows returned"
+       ],
+       "broken": 2
+      },
+      {
+       "type": "ladder",
+       "kicker": "Same query, four setups",
+       "head": "Rows returned for a *top-10*",
+       "rungs": [
+        {
+         "label": "ef_search 40 (0–2)",
+         "amount": 2
+        },
+        {
+         "label": "ef_search 400",
+         "amount": 8
+        },
+        {
+         "label": "iterative_scan",
+         "amount": 10
+        },
+        {
+         "label": "Partition per tenant",
+         "amount": 10
+        }
+       ],
+       "unit": "rows",
+       "sub": "iterative_scan = relaxed_order keeps scanning until 10 match: recall@10 **0.96**, p95 22 ms."
+      },
+      {
+       "type": "counter",
+       "kicker": "Partitioned by tenant_id",
+       "value": 6,
+       "unit": "ms p95, 10 rows, recall 0.98",
+       "sub": "Each partition holds only **40K vectors**, so its HNSW is small and fast."
+      },
+      {
+       "type": "toggles",
+       "kicker": "When to use what",
+       "head": "Match the strategy to *the filter*",
+       "items": [
+        {
+         "label": "Tenant isolation: partition or namespace",
+         "keep": true
+        },
+        {
+         "label": "Selective filter: pre-filter, exact search",
+         "keep": true
+        },
+        {
+         "label": "Broad filter: filtered HNSW",
+         "keep": true
+        },
+        {
+         "label": "Post-filter and hope"
+        }
+       ],
+       "keepLabel": "Use"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "pgvector, ef_search 40, a filter matching 10% of rows. About how many rows come back?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "40",
+         "why": "The index returns 40 candidates, but the filter drops the ~90% that do not match."
+        },
+        {
+         "text": "~4",
+         "why": "10% of 40 candidates survive the post-filter, on average about 4 rows."
+        },
+        {
+         "text": "Always 10",
+         "why": "Only filtering during the search (or iterative scan) keeps going until 10 match."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Filter *during* the search, not after it.",
+      "sub": "And always **validate filtered recall** against exact search."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3002,7 +3931,90 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "ANN Search — trading exactness for speed, and measuring the trade",
+    "short": {
+     "id": "ann-search-95-ms-to-1-ms",
+     "title": "ANN: 95 ms down to 1.2 ms",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "1M chunks · 768 dims · one CPU core",
+       "head": "Exact search compares *every* vector",
+       "rungs": [
+        {
+         "label": "Flat (exact)",
+         "amount": 95
+        },
+        {
+         "label": "IVF nprobe=16",
+         "amount": 1.8
+        },
+        {
+         "label": "HNSW efSearch=128",
+         "amount": 1.2
+        },
+        {
+         "label": "HNSW efSearch=32",
+         "amount": 0.4
+        }
+       ],
+       "unit": "ms p50",
+       "sub": "300 test queries, k = 10. Flat search is **O(N·d)**."
+      },
+      {
+       "type": "counter",
+       "kicker": "HNSW · efSearch 128",
+       "value": 80,
+       "prefix": "~",
+       "suffix": "×",
+       "unit": "faster than exact search",
+       "sub": "Recall@10 **0.98**: it misses on average 0.2 of the true top-10."
+      },
+      {
+       "type": "flow",
+       "kicker": "Measure the trade",
+       "head": "Recall@k against *ground truth*",
+       "steps": [
+        "Take 200–1,000 real queries",
+        "Exact top-k from a flat index",
+        "ANN top-k from your index",
+        "Recall@k = overlap ÷ k"
+       ]
+      },
+      {
+       "type": "spike",
+       "kicker": "One knob per index",
+       "head": "efSearch walks the *curve*",
+       "mark": "ef 32 → 128",
+       "sub": "Recall@10 **0.90** at 0.4 ms → **0.98** at 1.2 ms. For IVF the knob is nprobe."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "An index returns 9 of the true top-10 on average. What is recall@10, and is it OK for RAG with a reranker?",
+       "options": [
+        {
+         "text": "0.09; unacceptable",
+         "why": "Recall@10 = 9 ÷ 10 = 0.90, not 0.09."
+        },
+        {
+         "text": "0.90; usually fine with a wider candidate set and reranking",
+         "why": "Right: missing one of ten near-equal candidates rarely matters, though many teams target ≥ 0.95."
+        },
+        {
+         "text": "1.0; ANN is exact for the top-10",
+         "why": "ANN is approximate by design: some true neighbours are silently missed."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Trade a sliver of *recall* for speed, then *measure* it.",
+      "sub": "Compute recall@k against a flat index on real queries; with reranking, **0.95+** is a common target."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3010,6 +4022,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "HNSW and IVF — how they work and how to tune M, ef, nlist and nprobe",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3017,6 +4030,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Putting it together: Product Quantization, re-ranking and choosing an index",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3200,6 +4214,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Information Retrieval — finding the right needle, ranked",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3207,6 +4222,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Keyword Search — analysers, TF-IDF and exact matching",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3214,6 +4230,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "BM25 — term frequency, saturation and length normalisation",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3221,6 +4238,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Dense Retrieval — matching meaning with embeddings",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3228,13 +4246,113 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Sparse Retrieval — from BM25 to learned sparse vectors (SPLADE)",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Hybrid Search — lexical and semantic, together",
+    "short": {
+     "id": "hybrid-search-two-experts",
+     "title": "Hybrid search: two experts, one list",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Illustrative benchmark · 300 support questions",
+       "value": 90,
+       "suffix": "%",
+       "unit": "recall@20 with hybrid (RRF)",
+       "sub": "BM25 alone: **80%**. Dense alone: **81%**. Together: about 9–10 points better."
+      },
+      {
+       "type": "ladder",
+       "kicker": "ID-style queries · error codes, product IDs",
+       "head": "Exact codes need *exact words*",
+       "rungs": [
+        {
+         "label": "BM25 only",
+         "amount": 94
+        },
+        {
+         "label": "Dense only",
+         "amount": 68
+        },
+        {
+         "label": "Hybrid (RRF)",
+         "amount": 93
+        }
+       ],
+       "unit": "% recall@20",
+       "sub": "BM25 nails **\"E1043\"**, **\"SKU-88213\"** and names."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Natural-language queries",
+       "head": "Meaning needs *embeddings*",
+       "rungs": [
+        {
+         "label": "BM25 only",
+         "amount": 71
+        },
+        {
+         "label": "Dense only",
+         "amount": 89
+        },
+        {
+         "label": "Hybrid (RRF)",
+         "amount": 88
+        }
+       ],
+       "unit": "% recall@20",
+       "sub": "Dense nails **\"my money back for a broken blender\"**."
+      },
+      {
+       "type": "flow",
+       "kicker": "The pipeline",
+       "head": "Search twice, *fuse*, rerank",
+       "steps": [
+        "BM25 top 50 and dense top 50, in parallel",
+        "Fuse with RRF: Σ 1/(60 + rank)",
+        "Cross-encoder reranks the fused top 50–100",
+        "Top 5–20 go to the LLM"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "The price",
+       "value": 48,
+       "unit": "ms latency, up from 35 ms",
+       "sub": "Small, because the two searches run **in parallel**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Support docs full of error codes, product IDs and plain prose. Which retriever?",
+       "answer": 2,
+       "options": [
+        {
+         "text": "Dense only",
+         "why": "Dense scored 68% on ID-style queries: it blurs exact codes."
+        },
+        {
+         "text": "BM25 only",
+         "why": "BM25 scored 71% on natural-language queries: it misses paraphrases."
+        },
+        {
+         "text": "Hybrid: BM25 + dense, fused",
+         "why": "The failure modes are complementary, so hybrid wins overall: 90% vs 80–81%."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Complementary failures are *the whole reason* it works.",
+      "sub": "Run lexical and dense **in parallel**, fuse with RRF (k = 60), then rerank."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3419,7 +4537,119 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Query Rewriting — making the query standalone and searchable",
+    "short": {
+     "id": "and-for-contractors-rewrite",
+     "title": "Rewriting \"and for contractors?\"",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "A multi-turn chat",
+       "head": "The retriever has *no memory*",
+       "steps": [
+        "User: \"What's the laptop policy for new hires?\"",
+        "Bot: \"14-inch laptop, refreshed every 3 years.\"",
+        "User: \"and for contractors?\"",
+        "Retriever embeds only \"and for contractors?\""
+       ],
+       "broken": 3
+      },
+      {
+       "type": "claims",
+       "kicker": "Without rewriting",
+       "head": "Results for *\"and for contractors?\"*",
+       "claims": [
+        {
+         "text": "Contractor onboarding checklist",
+         "ok": false,
+         "note": "contractors, not laptops"
+        },
+        {
+         "text": "Invoice rules",
+         "ok": false,
+         "note": "off topic"
+        },
+        {
+         "text": "Laptop policy",
+         "ok": false,
+         "note": "not in the top 10"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "The rewriter",
+       "head": "Make it *standalone*",
+       "steps": [
+        "Resolve \"for contractors\" with chat history",
+        "Keep IDs, numbers and quotes verbatim",
+        "Output only the query",
+        "\"laptop policy for contractors\""
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Contractor equipment addendum",
+       "head": "Now it ranks *#1*",
+       "rungs": [
+        {
+         "label": "\"and for contractors?\"",
+         "amount": 0.44
+        },
+        {
+         "label": "\"laptop policy for contractors\"",
+         "amount": 0.81
+        }
+       ],
+       "unit": "cosine",
+       "sub": "Cost: one small-model call, ~60 tokens in + 15 out, **~250 ms**."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Guardrails",
+       "head": "A bad rewrite must not *destroy recall*",
+       "items": [
+        {
+         "label": "Fall back to the original on error or timeout",
+         "keep": true
+        },
+        {
+         "label": "Fuse original + rewritten retrieval",
+         "keep": true
+        },
+        {
+         "label": "Let the rewrite drop IDs and numbers"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The message is already a standalone query. What should the rewriter return?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "A longer, more detailed query",
+         "why": "Extra words can drift the meaning; a standalone query needs no rewrite."
+        },
+        {
+         "text": "The message unchanged",
+         "why": "The guardrail: if it is already standalone, return it as is."
+        },
+        {
+         "text": "A summary of the whole chat",
+         "why": "The rewriter outputs only the search query, not the history."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Retrievers have *no chat memory*.",
+      "sub": "Rewrite every multi-turn query into a **standalone** one, keeping IDs and numbers verbatim."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3427,6 +4657,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Query Expansion — adding the words the documents actually use",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3434,6 +4665,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multi-Query Retrieval — several phrasings, one fused result",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3441,6 +4673,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Query Decomposition — breaking complex questions into retrievable parts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -3448,6 +4681,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "HyDE — embed a hypothetical answer instead of the question",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3455,6 +4689,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Self-Query Retrieval — turning natural language into filters plus a search",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3645,6 +4880,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Parent Document Retrieval — search small, return big",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3652,13 +4888,108 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Sentence-Window Retrieval — match a sentence, read its neighbourhood",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Multi-Hop Retrieval — following the chain across documents",
+    "short": {
+     "id": "multi-hop-incident-to-on-call",
+     "title": "Multi-hop: incident to on-call lead",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "Who is on call for the service behind INC-4471?",
+       "head": "No single chunk holds the *answer*",
+       "steps": [
+        "Hop 1: \"INC-4471 root cause\"",
+        "Postmortem: a bad config push to ledger-sync",
+        "Bridge entity = ledger-sync",
+        "Hop 2: \"ledger-sync on-call lead\"",
+        "Catalogue: on-call lead Priya N."
+       ],
+       "sub": "Answer with **both citations**."
+      },
+      {
+       "type": "counter",
+       "kicker": "Single-shot retrieval with the original question",
+       "value": 37,
+       "prefix": "#",
+       "unit": "rank of the ledger-sync catalogue entry",
+       "sub": "The question never names **ledger-sync**, so the hop-2 document barely resembles it."
+      },
+      {
+       "type": "ladder",
+       "kicker": "80 similar bridge questions · illustrative",
+       "head": "Two hops nearly *double* accuracy",
+       "rungs": [
+        {
+         "label": "Single-shot",
+         "amount": 41
+        },
+        {
+         "label": "Two hops, top-2 bridges",
+         "amount": 78
+        }
+       ],
+       "unit": "% correct"
+      },
+      {
+       "type": "toggles",
+       "kicker": "Practical rules",
+       "head": "Keep the chain *bounded*",
+       "items": [
+        {
+         "label": "Cap hops at 2–3",
+         "keep": true
+        },
+        {
+         "label": "Beam the top-2 bridges per hop",
+         "keep": true
+        },
+        {
+         "label": "Keep a cited evidence trail per hop",
+         "keep": true
+        },
+        {
+         "label": "Take the bridge from the LLM's memory"
+        },
+        {
+         "label": "Guess when a hop has no supported answer"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Why does single-shot dense retrieval often fail on bridge questions?",
+       "options": [
+        {
+         "text": "Embeddings cannot represent named entities",
+         "why": "They can; the problem is that the question never names the bridge entity."
+        },
+        {
+         "text": "The hop-2 document is about an entity the question never mentions",
+         "why": "Right: only after hop 1 reveals ledger-sync can you write a query that matches it."
+        },
+        {
+         "text": "Vector databases return one document per query",
+         "why": "They return the top-k; the hop-2 document simply ranks low (#37 here)."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Follow the *bridge*, one hop at a time.",
+      "sub": "Retrieve, extract the bridge entity from evidence, retrieve again; cap hops at **2–3**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3666,6 +4997,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Iterative Retrieval — retrieve, reason, retrieve again",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3673,6 +5005,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Adaptive Retrieval — deciding whether and how much to retrieve",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3680,6 +5013,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Contextual Retrieval — chunks that explain themselves",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3863,7 +5197,111 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Reranking — a second, smarter pass over candidates",
+    "short": {
+     "id": "reranker-from-seven-to-one",
+     "title": "Reranking: from #7 to #1",
+     "beats": [
+      {
+       "type": "retrieve",
+       "kicker": "Stage 1 · vector search, top 50",
+       "head": "The right answer sits at *#7*",
+       "query": "Can I carry over unused vacation days to next year?",
+       "chunks": [
+        {
+         "text": "Vacation request process",
+         "score": 0.84
+        },
+        {
+         "text": "Holiday calendar 2026",
+         "score": 0.83
+        },
+        {
+         "text": "Carry-over policy: max 5 days until March 31 (#7)",
+         "score": 0.79
+        }
+       ],
+       "k": 2,
+       "sub": "Near-misses outrank it. With top-5 sent, the LLM says **\"I couldn't find a policy.\"**"
+      },
+      {
+       "type": "flow",
+       "kicker": "Two stages",
+       "head": "Retrieve *wide*, then read *carefully*",
+       "steps": [
+        "Retrieve: millions → 100, 5–50 ms",
+        "Rerank: 100 → 10, 50–400 ms",
+        "Generate from 10 chunks, 0.5–3 s"
+       ]
+      },
+      {
+       "type": "retrieve",
+       "kicker": "Stage 2 · cross-encoder over the 50 pairs",
+       "head": "Read together, it *jumps to #1*",
+       "query": "Can I carry over unused vacation days to next year?",
+       "chunks": [
+        {
+         "text": "Carry-over policy: max 5 days until March 31",
+         "score": 0.97
+        },
+        {
+         "text": "Vacation request process",
+         "score": 0.41
+        },
+        {
+         "text": "Holiday calendar 2026",
+         "score": 0.08
+        }
+       ],
+       "k": 1,
+       "sub": "Answer: **\"Yes, up to 5 days, used by March 31.\"** Cost: about **120 ms** extra."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Why not the strong model everywhere?",
+       "head": "Too slow for *millions*",
+       "items": [
+        {
+         "label": "Precomputed index for the first pass",
+         "keep": true
+        },
+        {
+         "label": "Reranker touches only the shortlist",
+         "keep": true
+        },
+        {
+         "label": "Cross-encoder over the whole corpus"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The right chunk is not in the 100 candidates at all. Will a reranker fix it?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "No",
+         "why": "A reranker only reorders the shortlist: it cannot fix missing recall. Fix stage 1."
+        },
+        {
+         "text": "Yes, it rescores every document",
+         "why": "It is too slow to score millions per query; it only touches the shortlist."
+        },
+        {
+         "text": "Yes, if you send the top 10",
+         "why": "More of the shortlist still cannot contain a chunk stage 1 never found."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Stage 1 for *recall*, stage 2 for *precision*.",
+      "sub": "Retrieve **50–150** candidates, rerank them, send only the top few."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3871,6 +5309,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Cross-Encoder Reranking — reading query and document together",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3878,6 +5317,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LLM-Based Reranking — using a general LLM as the judge",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3885,6 +5325,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Reciprocal Rank Fusion (RRF) — merging ranked lists by position",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3892,6 +5333,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Retrieval Score Fusion — normalise, then combine",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -3899,6 +5341,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Top-K Retrieval — choosing how many chunks reach the LLM",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4084,13 +5527,101 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Context Compression — fewer tokens, same answer",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Context Engineering — what goes in the window, in what order, within what budget",
+    "short": {
+     "id": "packing-the-context-window",
+     "title": "Packing the context window",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "Support copilot · every turn",
+       "head": "40 tools sent, *6 needed*",
+       "cells": 40,
+       "hot": 6,
+       "caption": "40 tool definitions (11K tokens) → the 6 relevant ones (2K)",
+       "sub": "Like a carry-on bag: everything in it must **earn its place**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Tokens per turn",
+       "head": "Same copilot, *88% fewer tokens*",
+       "rungs": [
+        {
+         "label": "Before",
+         "amount": 92
+        },
+        {
+         "label": "After context engineering",
+         "amount": 11
+        }
+       ],
+       "unit": "K tokens",
+       "sub": "History: last 4 turns + a 300-token summary. Chunks: reranked top 6. CRM JSON: **8 fields**."
+      },
+      {
+       "type": "counter",
+       "kicker": "Golden set",
+       "value": 83,
+       "suffix": "%",
+       "unit": "accuracy after the cut",
+       "stats": [
+        {
+         "value": "71%",
+         "label": "accuracy before"
+        },
+        {
+         "value": "4.1 s → 1.2 s",
+         "label": "p50 TTFT"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "Layout, top to bottom",
+       "head": "Stable first, *question last*",
+       "steps": [
+        "System rules + tools (cached prefix)",
+        "Long reference docs, best first",
+        "Memory + history summary",
+        "Trimmed tool results",
+        "Question + output format"
+       ],
+       "sub": "Liu et al. (2023): accuracy is **U-shaped by position**, so the middle is the worst seat."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "You add a timestamp to the top of the system prompt. Cache hits fall from 85% to ~0%. Why?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Caching matches an exact prefix, and volatile text now sits inside it",
+         "why": "Any byte that changes per request inside the prefix forces a miss: move it near the end."
+        },
+        {
+         "text": "Timestamps take too many tokens to cache",
+         "why": "Size is not the problem; changing text inside the cached prefix is."
+        },
+        {
+         "text": "Personalised prompts are excluded from caching",
+         "why": "There is no such rule: the cache keys on an identical prefix."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Budget every slot, *order it on purpose*.",
+      "sub": "Stable before volatile, best evidence at the edges, **question last**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4308,11 +5839,11 @@ export const TOPIC_INDEX: TopicMeta[] = [
        "query": "How many days of parental leave do contractors get?",
        "chunks": [
         {
-         "text": "parental-leave-2025.pdf §3",
+         "text": "parental-leave-2025.pdf section 3",
          "score": 0.82
         },
         {
-         "text": "contractor-handbook.pdf §7",
+         "text": "contractor-handbook.pdf section 7",
          "score": 0.79
         },
         {
@@ -4335,12 +5866,12 @@ export const TOPIC_INDEX: TopicMeta[] = [
         {
          "text": "Contractors get no paid parental leave; up to 10 days unpaid [2]",
          "ok": true,
-         "note": "contractor-handbook §7"
+         "note": "contractor-handbook section 7"
         },
         {
          "text": "Employee leave is 16 weeks [1]",
          "ok": true,
-         "note": "parental-leave-2025 §3"
+         "note": "parental-leave-2025 section 3"
         }
        ]
       },
@@ -4398,6 +5929,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Naive RAG — retrieve-read and its failure modes",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -4405,6 +5937,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Advanced RAG — pre-retrieval and post-retrieval optimisations",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4412,6 +5945,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Modular RAG — composable modules, routing and iterative flows",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4419,6 +5953,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Long Context vs RAG — when you do not need retrieval at all",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4426,6 +5961,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Conversational RAG — follow-up questions, history-aware rewriting and citation continuity",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4433,6 +5969,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Permission-aware Retrieval — document ACLs, pre-filtering by user and tenant, and leak-proof caches",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4702,6 +6239,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Corrective RAG (CRAG) — grade retrieval, refine or fall back to web search",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4709,13 +6247,96 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Self-RAG — reflection tokens: retrieve on demand, then critique",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Adaptive RAG — route by query complexity: no, single-step or multi-step retrieval",
+    "short": {
+     "id": "adaptive-rag-route-by-difficulty",
+     "title": "Adaptive RAG: route by difficulty",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "10,000 questions a day · product assistant",
+       "head": "Only *15%* need multi-step",
+       "cells": 20,
+       "hot": 3,
+       "caption": "Class C needs 3 hops; 25% need no retrieval, 60% need one",
+       "sub": "So why run the **multi-step** path for everything?"
+      },
+      {
+       "type": "race",
+       "kicker": "Average latency per route",
+       "head": "Effort should match the *question*",
+       "lanes": [
+        {
+         "label": "A · LLM only",
+         "seconds": 0.9,
+         "tone": "good"
+        },
+        {
+         "label": "B · 1 retrieval",
+         "seconds": 1.6,
+         "tone": "ion"
+        },
+        {
+         "label": "C · 3 hops",
+         "seconds": 4.8,
+         "tone": "pink"
+        }
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "Weighted average latency",
+       "value": 1.9,
+       "decimals": 1,
+       "suffix": " s",
+       "unit": "versus 4.8 s if every query ran multi-step",
+       "sub": "0.25×0.9 + 0.60×1.6 + 0.15×4.8. Tokens: **2,650** vs 7,000."
+      },
+      {
+       "type": "flow",
+       "kicker": "Jeong et al., NAACL 2024",
+       "head": "Labels come *for free*",
+       "steps": [
+        "Run all three strategies on training questions",
+        "Label = the simplest strategy that answered correctly",
+        "Train a small classifier (T5-large in the paper)",
+        "Escalate to a costlier path when unsure"
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Which routing error is usually the most harmful in Adaptive RAG?",
+       "options": [
+        {
+         "text": "An easy question routed to multi-step",
+         "why": "It wastes time but usually still answers correctly."
+        },
+        {
+         "text": "A multi-hop question routed to \"no retrieval\"",
+         "why": "Right: the model answers from memory with no evidence, often confidently wrong."
+        },
+        {
+         "text": "A single-step question routed to multi-step",
+         "why": "Over-retrieval costs latency and money but rarely breaks correctness."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Retrieve only as much as the *question* needs.",
+      "sub": "Route A/B/C per query and escalate on low confidence: **under-retrieving** is the dangerous error."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4723,6 +6344,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agentic RAG — retrieval as tools inside an LLM reasoning loop",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4905,7 +6527,85 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "GraphRAG — entity graphs, community summaries, local vs global search",
+    "short": {
+     "id": "graphrag-map-of-incidents",
+     "title": "GraphRAG: a map of 1,800 incidents",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "1,800 post-incident reviews · ≈ 2.4M tokens",
+       "value": 6400,
+       "unit": "entities, merged from 21,000 raw mentions",
+       "sub": "Plus **15,000** relationships: services, teams, vendors, failure modes."
+      },
+      {
+       "type": "flow",
+       "kicker": "Indexing · Microsoft GraphRAG",
+       "head": "Read everything, then *summarise neighbourhoods*",
+       "steps": [
+        "Split into 8,000 text units",
+        "An LLM extracts entities and relationships",
+        "Merge duplicate entities",
+        "Leiden: 14 level-0 and 310 leaf communities",
+        "An LLM writes a report per community"
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Global query · \"What are the recurring root-cause themes?\"",
+       "head": "Map-reduce over *reports* wins",
+       "rungs": [
+        {
+         "label": "Vector RAG (five random incidents)",
+         "amount": 2
+        },
+        {
+         "label": "GraphRAG global search",
+         "amount": 5
+        }
+       ],
+       "unit": "themes named",
+       "sub": "Map: each of 14 level-0 reports rates its points 0–100. Reduce: the top-rated points, citing **report ids**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Local query · \"Which teams depend on the ledger-service?\"",
+       "head": "Start at an entity, then *expand*",
+       "steps": [
+        "Match entity LEDGER-SERVICE",
+        "1-hop: PAYMENTS-TEAM, BILLING-API, RISK-ENGINE",
+        "Add 6 source text units",
+        "Precise answer with citations"
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Which question best fits GraphRAG global search rather than vector RAG?",
+       "options": [
+        {
+         "text": "What is the refund window for damaged items?",
+         "why": "A point lookup: plain vector RAG is cheaper and as good."
+        },
+        {
+         "text": "Across 3,000 customer interviews, what are the top five unmet needs?",
+         "why": "Right: no single chunk holds it; map-reduce over community reports answers it."
+        },
+        {
+         "text": "Who is the owner of the billing-api service?",
+         "why": "A specific entity: local search or plain vector RAG."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "GraphRAG for *sensemaking*, vectors for *lookups*.",
+      "sub": "Global search map-reduces over **community reports**; local search expands from matched entities."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -4913,6 +6613,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multimodal RAG — captions, multi-vector retrieval and ColPali page-image search",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5095,7 +6796,131 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "RAG Evaluation — component vs end-to-end, golden sets and RAGAS metrics",
+    "short": {
+     "id": "grading-a-rag-answer",
+     "title": "Grading one RAG answer, four ways",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "Faithfulness · RAGAS",
+       "head": "Split the answer, *check each claim*",
+       "claims": [
+        {
+         "text": "Refunds take 5 business days",
+         "ok": true
+        },
+        {
+         "text": "after photo approval",
+         "ok": true
+        },
+        {
+         "text": "usually to the original card",
+         "ok": true
+        },
+        {
+         "text": "you also get a 10% voucher",
+         "ok": false,
+         "note": "unsupported by the contexts"
+        }
+       ],
+       "sub": "Supported ÷ total = 3/4: **faithfulness 0.75**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Two ways to fail",
+       "head": "Wrong books, or *misread* books",
+       "steps": [
+        "Golden item: question + reference + gold ids",
+        "Retriever brings contexts",
+        "Generator writes the answer",
+        "Score each layer separately"
+       ]
+      },
+      {
+       "type": "claims",
+       "kicker": "Context precision",
+       "head": "Relevant chunks should rank *first*",
+       "claims": [
+        {
+         "text": "C1 refund timing",
+         "ok": true
+        },
+        {
+         "text": "C2 shipping rates",
+         "ok": false
+        },
+        {
+         "text": "C3 damaged-item photo rule",
+         "ok": true
+        },
+        {
+         "text": "C4 gift cards",
+         "ok": false
+        },
+        {
+         "text": "C5 refund method",
+         "ok": true
+        }
+       ],
+       "sub": "(1/1 + 2/3 + 3/5) ÷ 3 = **0.756**"
+      },
+      {
+       "type": "counter",
+       "kicker": "Context recall",
+       "value": 1,
+       "decimals": 1,
+       "unit": "both reference claims found in the contexts",
+       "sub": "Reference claims: **5 business days**, **after the photo is approved**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Response relevancy",
+       "head": "Does the answer address *the question*?",
+       "rungs": [
+        {
+         "label": "Generated question 1",
+         "amount": 0.93
+        },
+        {
+         "label": "Generated question 2",
+         "amount": 0.9
+        },
+        {
+         "label": "Generated question 3",
+         "amount": 0.87
+        }
+       ],
+       "unit": "cosine",
+       "sub": "Average: **0.90**. Evasive or off-topic answers score low."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The answer adds a claim no context supports. Which metric drops?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Faithfulness",
+         "why": "It checks every answer claim against the contexts: supported ÷ total."
+        },
+        {
+         "text": "Response relevancy",
+         "why": "It penalises evasive or off-topic answers, not wrong ones."
+        },
+        {
+         "text": "Context recall",
+         "why": "It checks the contexts against the reference answer, not the generated answer."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Score retrieval and generation *separately*.",
+      "sub": "A golden set of **100–500** real questions, run on every change."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5103,6 +6928,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Retrieval Evaluation — qrels, hit rate and building a labelled query set",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -5110,6 +6936,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Precision@K — how much of what you returned is relevant",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5117,6 +6944,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Recall@K — how much of the needed evidence you found",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5124,6 +6952,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "MRR and NDCG — rewarding relevant results that appear early",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5409,6 +7238,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5507,6 +7337,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5615,6 +7446,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5726,6 +7558,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5984,6 +7817,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LLM Evaluation — datasets, graders and the eval loop",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -5991,13 +7825,131 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Golden Datasets — curation, labelling and versioning",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "LLM-as-a-Judge — rubrics, biases and calibration",
+    "short": {
+     "id": "judge-that-flips-its-verdict",
+     "title": "The judge that flips its verdict",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Prompt v12 vs v13 · 100 pairs",
+       "value": 15,
+       "prefix": "~",
+       "suffix": "%",
+       "unit": "of pairs flip winner when the order is swapped",
+       "sub": "Same pairs, same judge: only **which answer came first** changed."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Position bias",
+       "head": "Whoever goes first *wins more*",
+       "rungs": [
+        {
+         "label": "v12 wins, v12 shown first",
+         "amount": 58
+        },
+        {
+         "label": "v12 wins, v13 shown first",
+         "amount": 43
+        },
+        {
+         "label": "v12 wins, both orders agree",
+         "amount": 40
+        }
+       ],
+       "unit": "wins of 100",
+       "sub": "Consistent verdicts: v12 40, v13 38, **22 ties**. No real winner."
+      },
+      {
+       "type": "flow",
+       "kicker": "The fix",
+       "head": "Judge *both orders*",
+       "steps": [
+        "Judge (A, B)",
+        "Judge (B, A)",
+        "Same winner both times: count the win",
+        "They disagree: call it a tie"
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "A marking scheme for a model",
+       "head": "A rubric that *decides*",
+       "items": [
+        {
+         "label": "One criterion per call",
+         "keep": true
+        },
+        {
+         "label": "Reasoning first, verdict last",
+         "keep": true
+        },
+        {
+         "label": "Temperature 0",
+         "keep": true
+        },
+        {
+         "label": "A 1–10 score"
+        },
+        {
+         "label": "Length as a merit"
+        }
+       ],
+       "keepLabel": "RUBRIC"
+      },
+      {
+       "type": "counter",
+       "kicker": "Calibrate against 120 human labels",
+       "value": 0.7,
+       "decimals": 2,
+       "prefix": "κ = ",
+       "unit": "Cohen’s kappa: substantial",
+       "stats": [
+        {
+         "value": "0.875",
+         "label": "raw agreement"
+        },
+        {
+         "value": "0.590",
+         "label": "agreement by chance"
+        }
+       ],
+       "sub": "≥0.6 substantial, ≥0.8 near-perfect: usable as a CI gate with **human spot checks**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The judge favours answers from its own model family. The fix?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "A judge from a different provider, or a panel with majority vote",
+         "why": "Self-preference needs a cross-family judge or a 2–3 judge panel."
+        },
+        {
+         "text": "Run both orders",
+         "why": "Swapping order fixes position bias, not self-preference."
+        },
+        {
+         "text": "Cap answer length",
+         "why": "Length control fixes verbosity bias, not self-preference."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Trust a judge only after you *measure* it.",
+      "sub": "Swap the order, anchor the rubric, and check **kappa** against human labels."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -6005,6 +7957,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prompt Regression Testing — promptfoo-style suites in CI",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6012,6 +7965,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Online Evaluation — shadow traffic, A/B tests and user feedback",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -6019,6 +7973,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Comparative Evaluation — pairwise preference, win rate and Bradley–Terry",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -6026,6 +7981,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Statistical Confidence — error bars, paired tests and sample size",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6297,13 +8253,108 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Testing — deterministic tests around a non-deterministic model",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "AI Benchmarking — MMLU, GPQA, SWE-bench, HumanEval, contamination and Arena",
+    "short": {
+     "id": "benchmarks-shortlist-private-decides",
+     "title": "Public benchmarks shortlist; yours decide",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "Picking a model for code review · SWE-bench Verified",
+       "head": "Public numbers make the *shortlist*",
+       "rungs": [
+        {
+         "label": "Model A",
+         "amount": 71
+        },
+        {
+         "label": "Model B",
+         "amount": 68
+        },
+        {
+         "label": "Third model",
+         "amount": 52
+        }
+       ],
+       "unit": "%",
+       "sub": "The third is cut. **A leads.**"
+      },
+      {
+       "type": "flow",
+       "kicker": "A private benchmark",
+       "head": "150 real diffs the models *never saw*",
+       "steps": [
+        "Mine known bugs from reverted commits after the cutoffs",
+        "Grade with hidden unit tests",
+        "Sample n = 10 per item",
+        "pass@k = 1 − C(n−c, k) / C(n, k)"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "One task · n = 10, c = 6 pass",
+       "value": 0.6,
+       "decimals": 2,
+       "unit": "pass@1 = 1 − 4/10",
+       "sub": "pass@5 = **1.0**: only 4 failures, so any 5 samples contain a pass."
+      },
+      {
+       "type": "claims",
+       "kicker": "Averaged over the private set",
+       "head": "The leaderboard *flips*",
+       "claims": [
+        {
+         "text": "A leads on SWE-bench Verified",
+         "ok": true,
+         "note": "71% vs 68%"
+        },
+        {
+         "text": "A is better on our code",
+         "ok": false,
+         "note": "pass@1: A 0.58, B 0.63"
+        },
+        {
+         "text": "A's public lead is all skill",
+         "ok": false,
+         "note": "drops 9 points on reworded issues vs 2 for B"
+        }
+       ],
+       "sub": "A contamination hint. **They pick B.**"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Model X: 91% on MMLU, 78% on paraphrased items. Model Y: 89% → 87%. Most likely explanation?",
+       "options": [
+        {
+         "text": "X has a smaller context window",
+         "why": "Context size does not explain a drop on meaning-preserving rewrites."
+        },
+        {
+         "text": "X likely memorised MMLU items (contamination)",
+         "why": "Right: a big drop on paraphrases, far larger than a comparable model's, is a classic contamination signal."
+        },
+        {
+         "text": "Paraphrasing always costs about 13 points",
+         "why": "Y lost only 2 points on the same rewrites."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Shortlist with *public*, decide with *private*.",
+      "sub": "Report n for pass@k, check paraphrase drops, and keep **100–500** real items unpublished."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6597,6 +8648,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6604,6 +8656,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Agent Architecture — model, tools, memory, runtime and guardrails",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6799,7 +8852,109 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Planning and Execution — plan-and-execute, ReWOO, LLMCompiler and re-planning",
+    "short": {
+     "id": "rewoo-plan-once-run-in-parallel",
+     "title": "ReWOO: plan once, run in parallel",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "Bigger: the capital of Australia or of Canada?",
+       "head": "One call writes the *whole plan*",
+       "steps": [
+        "#E1 = Search[capital of Australia]",
+        "#E2 = Search[capital of Canada]",
+        "#E3 = Search[population of #E1]",
+        "#E4 = Search[population of #E2]",
+        "Solver: plan + evidence → answer"
+       ],
+       "sub": "Planner output: about **180** tokens."
+      },
+      {
+       "type": "race",
+       "kicker": "1.2 s per search",
+       "head": "Independent steps run *side by side*",
+       "lanes": [
+        {
+         "label": "Sequential: E1 → E2 → E3 → E4",
+         "seconds": 4.8,
+         "tone": "pink"
+        },
+        {
+         "label": "DAG: E1 and E2, then E3 and E4",
+         "seconds": 2.4,
+         "tone": "good"
+        }
+       ],
+       "sub": "Wall clock **2.4 s** instead of **4.8 s**. Answer: Ottawa (~1.1M) beats Canberra (~0.47M)."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Input tokens for the same question",
+       "head": "ReAct re-reads a *growing transcript*",
+       "rungs": [
+        {
+         "label": "ReAct · 5 LLM calls",
+         "amount": 9000
+        },
+        {
+         "label": "ReWOO · planner + solver",
+         "amount": 2500
+        }
+       ],
+       "unit": "input tokens (approx.)",
+       "sub": "ReWOO reports ~**5x** lower token cost on HotpotQA."
+      },
+      {
+       "type": "toggles",
+       "kicker": "The plan is written before any observation",
+       "head": "Guard the *blind* plan",
+       "items": [
+        {
+         "label": "Validate the plan in code first",
+         "keep": true
+        },
+        {
+         "label": "Re-plan on triggers, keep completed steps",
+         "keep": true
+        },
+        {
+         "label": "Cap re-plans at 2–3",
+         "keep": true
+        },
+        {
+         "label": "Re-plan forever on an impossible goal"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A ReWOO plan says \"#E2 = Search[CEO of #E1]\", but #E1 comes back empty. What happens in vanilla ReWOO?",
+       "options": [
+        {
+         "text": "The #E2 worker notices and re-plans",
+         "why": "Workers just substitute evidence; vanilla ReWOO has no feedback loop."
+        },
+        {
+         "text": "#E2 still runs with an empty or useless query",
+         "why": "Right: the plan was fixed before any observation, so production systems add re-plan triggers."
+        },
+        {
+         "text": "ReWOO switches to ReAct for the rest",
+         "why": "There is no built-in switch; LLMCompiler adds a joiner that may re-plan."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "*Plan* once with the strong model, *execute* cheaply.",
+      "sub": "Validate the plan in code, re-plan only on triggers, and cap steps, re-plans and spend."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6807,6 +8962,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Task Decomposition — least-to-most, hierarchical and orchestrator-worker splits",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6991,6 +9147,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent Memory — the four kinds of memory an agent needs",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -6998,6 +9155,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Short-Term Memory — buffers, rolling summaries and token budgets",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7005,13 +9163,125 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Long-Term Memory — vector-store memory, scoring, consolidation and forgetting",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Tool Selection — choosing the right tool from dozens or hundreds",
+    "short": {
+     "id": "agent-with-140-tools",
+     "title": "When the agent has 140 tools",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "200-query eval · 140 tools",
+       "head": "Right tool, *picked*",
+       "rungs": [
+        {
+         "label": "All 140 tools on every call",
+         "amount": 71
+        },
+        {
+         "label": "Namespaced + use-when descriptions",
+         "amount": 83
+        },
+        {
+         "label": "Plus top-8 retrieval + 3 core tools",
+         "amount": 89
+        }
+       ],
+       "unit": "% correct",
+       "sub": "Illustrative numbers, but the pattern is **typical**."
+      },
+      {
+       "type": "counter",
+       "kicker": "The baseline",
+       "value": 45,
+       "suffix": "K",
+       "unit": "input tokens of tool definitions, every step",
+       "stats": [
+        {
+         "value": 6,
+         "label": "MCP servers"
+        },
+        {
+         "value": 140,
+         "label": "tools"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "Most of the errors",
+       "head": "Two tools called *search*",
+       "steps": [
+        "The user asks a question",
+        "Confluence exposes search",
+        "Drive exposes search",
+        "The model picks the wrong search"
+       ],
+       "broken": 3,
+       "sub": "Fix: **confluence_search**, plus \"use when / don’t use when\" lines."
+      },
+      {
+       "type": "race",
+       "kicker": "Retrieve the tools, not just the docs",
+       "head": "A faster *first token*",
+       "lanes": [
+        {
+         "label": "All tools: ~1.9 s median TTFT",
+         "seconds": 1.9,
+         "tone": "pink"
+        },
+        {
+         "label": "Top-8 + 3 core: ~0.7 s",
+         "seconds": 0.7,
+         "tone": "ion"
+        }
+       ],
+       "sub": "Tool definitions drop from ~45K to **~3.5K** tokens."
+      },
+      {
+       "type": "flow",
+       "kicker": "Match the lever to the size",
+       "head": "More tools, *more machinery*",
+       "steps": [
+        "Under ~15 tools: great descriptions",
+        "20–100: namespacing + retrieval",
+        "Hundreds: tool search or routing"
+       ],
+       "sub": "Measure selection with a labelled **query → tool** set."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Confluence and Drive both expose a tool named search. The cheapest fix?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Namespace them and say when to use and when not to",
+         "why": "Namespaced names and use-when descriptions took the eval from 71% to 83%."
+        },
+        {
+         "text": "Remove one of them",
+         "why": "Both are needed; names and descriptions can disambiguate them."
+        },
+        {
+         "text": "Force tool_choice on every call",
+         "why": "Forcing suits deterministic workflow steps, not open questions."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Send the model *fewer, clearer* tools.",
+      "sub": "Naming fixes confusion; **retrieval** fixes both cost and distraction."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7019,6 +9289,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Virtual context — MemGPT, Letta and memory blocks the agent edits itself",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7026,6 +9297,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Sleep-time compute and memory layers — consolidate memory while the user is away (Letta, Mem0)",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7033,6 +9305,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Skill libraries — Voyager-style procedural memory that grows with use",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7248,6 +9521,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agentic Workflows — the five composable patterns",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -7255,6 +9529,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multi-Agent Systems — supervisor, handoff (swarm) and hierarchical",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -7262,6 +9537,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent Orchestration — state, fan-out, checkpoints and budgets",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7269,6 +9545,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Debate, voting and consensus — when several answers beat one",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7276,13 +9553,125 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Shared state and simulations — blackboard architecture and generative agents",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Why multi-agent systems fail — the MAST taxonomy and what to do about each",
+    "short": {
+     "id": "why-agent-teams-fail",
+     "title": "Why agent teams fail",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "MAST · Cemri et al. 2025",
+       "head": "14 failure modes, *3 categories*",
+       "cells": 14,
+       "hot": 5,
+       "caption": "5 of 14 modes are specification: wrong before any agent spoke",
+       "sub": "The rest: **inter-agent misalignment** and **verification and termination**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Coding crew · 120 failed traces",
+       "head": "Where it *broke*",
+       "rungs": [
+        {
+         "label": "Tests never actually run",
+         "amount": 31
+        },
+        {
+         "label": "Reviewer kept asking for style changes",
+         "amount": 26
+        },
+        {
+         "label": "Premature termination",
+         "amount": 24
+        },
+        {
+         "label": "Coder skipped the tester’s failing case",
+         "amount": 21
+        },
+        {
+         "label": "Coder also tested and reported pass",
+         "amount": 18
+        }
+       ],
+       "unit": "traces"
+      },
+      {
+       "type": "toggles",
+       "kicker": "Structural fixes",
+       "head": "Change the *structure*, not the prompt",
+       "items": [
+        {
+         "label": "The harness runs tests and decides done",
+         "keep": true
+        },
+        {
+         "label": "Reviewer: 2-round cap + checklist",
+         "keep": true
+        },
+        {
+         "label": "Coder loses the test runner",
+         "keep": true
+        },
+        {
+         "label": "Just tweak the role prompts"
+        }
+       ],
+       "keepLabel": "FIX",
+       "sub": "In the paper, prompt tweaks helped **only partly**."
+      },
+      {
+       "type": "counter",
+       "kicker": "The next 300 runs",
+       "value": 38,
+       "suffix": "%",
+       "unit": "fewer failures",
+       "sub": "What remained was mostly **hard tasks**, not coordination."
+      },
+      {
+       "type": "flow",
+       "kicker": "Every release",
+       "head": "Count, then *fix*",
+       "steps": [
+        "Sample traces",
+        "Label failures with MAST",
+        "Count by category",
+        "Fix the biggest bucket"
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A reviewer agent declares the task complete without running the tests. Which category?",
+       "answer": 2,
+       "options": [
+        {
+         "text": "Specification and system design",
+         "why": "The setup was fine; the failure is that nobody checked."
+        },
+        {
+         "text": "Inter-agent misalignment",
+         "why": "No agent worked against another; the check simply never happened."
+        },
+        {
+         "text": "Task verification and termination",
+         "why": "Declaring success without checking is a verification failure: let a harness-run suite decide done."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Agent teams fail like *human* teams.",
+      "sub": "Unclear briefs, miscommunication, nobody checking: let **code** decide when a task is done."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -7494,7 +9883,121 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Human-in-the-Loop — approval gates with interrupt() and Command({ resume })",
+    "short": {
+     "id": "refund-that-waited-for-a-human",
+     "title": "The refund that waited for a human",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "Order #A-1932 · broken blender",
+       "head": "Pause *before* the money moves",
+       "steps": [
+        "Agent proposes issue_refund: $249",
+        "$249 > $50, so interrupt()",
+        "Checkpoint saved, run stops",
+        "Support lead edits it to $219",
+        "Resume: the refund runs with $219"
+       ]
+      },
+      {
+       "type": "claims",
+       "kicker": "What the lead saw",
+       "head": "The proposal, *checked*",
+       "claims": [
+        {
+         "text": "Order A-1932 gets a refund",
+         "ok": true,
+         "note": "$249 is over $50, so a human decides"
+        },
+        {
+         "text": "Refund amount: $249",
+         "ok": false,
+         "note": "order total was $219; shipping is non-refundable"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "Command({ resume })",
+       "head": "The node runs *again*",
+       "steps": [
+        "Resume with the same thread_id",
+        "The node restarts from its first line",
+        "interrupt() now returns the edit",
+        "The tool runs with $219"
+       ],
+       "sub": "Anything before interrupt() runs **twice**: no side effects there."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Gate by risk tier",
+       "head": "Not *every* call",
+       "items": [
+        {
+         "label": "Irreversible actions",
+         "keep": true
+        },
+        {
+         "label": "Financial actions",
+         "keep": true
+        },
+        {
+         "label": "External-facing or privileged",
+         "keep": true
+        },
+        {
+         "label": "Read-only search"
+        }
+       ],
+       "keepLabel": "GATE",
+       "sub": "Gating everything trains reviewers to click **approve** blindly."
+      },
+      {
+       "type": "counter",
+       "kicker": "One month of gated refunds",
+       "value": 7,
+       "suffix": "%",
+       "unit": "were edited by a reviewer",
+       "stats": [
+        {
+         "value": 249,
+         "label": "proposed ($)"
+        },
+        {
+         "value": 219,
+         "label": "approved ($)"
+        }
+       ],
+       "sub": "Evidence the gate is **earning its cost**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A node sends a Slack message, then calls interrupt(). After approval the message appears twice. Why?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Command({ resume }) sends a duplicate notification",
+         "why": "Resume only supplies the decision; the node itself re-runs."
+        },
+        {
+         "text": "On resume the node re-runs from its first line",
+         "why": "Any side effect above interrupt() repeats: move it to its own node or make it idempotent."
+        },
+        {
+         "text": "The checkpointer replays all past messages",
+         "why": "The checkpoint restores state; it does not resend anything."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Freeze, ask, then *resume*.",
+      "sub": "interrupt() pauses on a checkpoint; gate by **risk**, and measure the edits."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7502,6 +10005,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "State Machines — agents with explicit states, transitions, guards and step limits",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7509,6 +10013,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Putting it together — a durable, approval-gated workflow that survives days",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7696,6 +10201,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Evaluating agents — outcome vs trajectory, tool-call accuracy and pass^k",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -7703,6 +10209,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Building an agent eval harness — scenarios, simulated users, mocks and graders",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7710,6 +10217,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent benchmarks — τ-bench, GAIA, SWE-bench Verified, WebArena and OSWorld",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7717,13 +10225,102 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent safety — least privilege, sandboxes, confirmation gates and injected tool results",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Runaway control — step limits, budgets, loop detection, circuit breakers and kill switches",
+    "short": {
+     "id": "runaway-agent-search-loop",
+     "title": "The $1,830 search loop",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Research agent · web_search started returning []",
+       "value": 1830,
+       "prefix": "$",
+       "unit": "spent by one run before anyone noticed",
+       "sub": "**2,140** calls in 9 hours: the agent rephrased the query endlessly."
+      },
+      {
+       "type": "flow",
+       "kicker": "Same failure on a canary run, after the fix",
+       "head": "Brakes the driver *cannot disable*",
+       "steps": [
+        "Step 4: same query a 3rd time → loop detector nudges",
+        "Step 6: breaker opens after 5 empty results in 60 s",
+        "Step 7: low-confidence answer, stop reason breaker_open"
+       ],
+       "sub": "Cost: **$0.21** instead of $1,830."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Enforced by the harness, never the prompt alone",
+       "head": "Every loop needs *brakes*",
+       "items": [
+        {
+         "label": "Max steps: 10–30 model calls",
+         "keep": true
+        },
+        {
+         "label": "Token and $ budgets",
+         "keep": true
+        },
+        {
+         "label": "Wall-clock deadline",
+         "keep": true
+        },
+        {
+         "label": "Loop detection and circuit breakers",
+         "keep": true
+        },
+        {
+         "label": "Kill switch",
+         "keep": true
+        },
+        {
+         "label": "A \"don't loop\" line in the prompt alone"
+        }
+       ],
+       "keepLabel": "Harness"
+      },
+      {
+       "type": "spike",
+       "kicker": "Stop-reason dashboard",
+       "head": "breaker_open *jumps*",
+       "mark": "0.1% → 38%",
+       "sub": "Within 10 minutes. On-call flipped the **kill switch** until the provider was fixed."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Your cost guard counts output tokens only. A 20-step run with a 30K-token context per call blows the budget unnoticed. Why?",
+       "options": [
+        {
+         "text": "Output tokens cost more, so they should trip first",
+         "why": "Price per token does not help when most tokens are never counted."
+        },
+        {
+         "text": "Every step re-sends the context as input, and input was never counted",
+         "why": "Right: about 600K input tokens here dwarf the output. Budgets must add both."
+        },
+        {
+         "text": "The guard should run once at the end of the run",
+         "why": "Budgets must be checked before each call, not after the money is spent."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Brakes live in *code*, not the prompt.",
+      "sub": "Steps, tokens, dollars, deadline, loops, breakers and a kill switch, with a **recorded stop reason**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7731,6 +10328,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Long-horizon agents and durable execution — runs that survive crashes, deploys and waiting",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7738,6 +10336,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Propose-then-commit, checkpoints and rollback — making consequential actions safe to retry and undo",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7985,6 +10584,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LangChain Fundamentals — packages, chat models, messages and initChatModel",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7992,6 +10592,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prompt Templates and Output Parsers — ChatPromptTemplate, MessagesPlaceholder, partials and structured output",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -7999,6 +10600,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LCEL and Runnables — pipe composition, parallel branches, retries, fallbacks and config",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8006,13 +10608,118 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Tools and Agents — tool(), bindTools, createAgent and middleware",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Retrievers and RAG Chains — loaders, splitters, embeddings, vector stores and citations",
+    "short": {
+     "id": "rag-chain-wrong-year-cited",
+     "title": "The citation from the wrong year",
+     "beats": [
+      {
+       "type": "retrieve",
+       "kicker": "Handbook bot · no version filter",
+       "head": "A *2024* chunk sneaks in",
+       "query": "How many remote days per week?",
+       "chunks": [
+        {
+         "text": "remote-policy.pdf p.2: up to 3 remote days",
+         "score": 0.84
+        },
+        {
+         "text": "2024 chunk: \"2 days\"",
+         "score": 0.82
+        },
+        {
+         "text": "benefits.pdf p.7",
+         "score": 0.71
+        }
+       ],
+       "k": 2,
+       "sub": "Without the version filter, the model **cited the 2024 chunk**."
+      },
+      {
+       "type": "flow",
+       "kicker": "120 HR pages",
+       "head": "Load, split, embed, *store*",
+       "steps": [
+        "RecursiveCharacterTextSplitter: chunkSize 1000, overlap 150",
+        "860 chunks",
+        "text-embedding-3-small ≈ $0.004 (illustrative)",
+        "Retriever: k = 4, filter { version: '2026' }"
+       ]
+      },
+      {
+       "type": "claims",
+       "kicker": "Structured output · { answer, citations }",
+       "head": "Check every *citation*",
+       "claims": [
+        {
+         "text": "\"Up to 3 remote days per week with manager approval.\" [1]",
+         "ok": true,
+         "note": "[1] → remote-policy.pdf p.2"
+        },
+        {
+         "text": "\"2 days\", with no version filter",
+         "ok": false,
+         "note": "a 2024 chunk, scored 0.82"
+        }
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "Production notes",
+       "head": "Metadata does the *filtering*",
+       "items": [
+        {
+         "label": "Store source, page, version, tenant",
+         "keep": true
+        },
+        {
+         "label": "Filter on them at query time",
+         "keep": true
+        },
+        {
+         "label": "Stable ids, so re-ingestion updates",
+         "keep": true
+        },
+        {
+         "label": "Trust whatever number the model cites"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Your chain cites [5], but only 4 documents were retrieved. What is the most robust handling?",
+       "options": [
+        {
+         "text": "Trust the model; it saw more context than you think",
+         "why": "Citations are claims to verify, not facts."
+        },
+        {
+         "text": "Validate citations against the retrieved set; drop or flag invalid ones",
+         "why": "Right: it catches fabrication deterministically, with \"no verified source\" as the fallback."
+        },
+        {
+         "text": "Increase k to 5 so [5] exists next time",
+         "why": "That may make it rarer but never guarantees validity."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Filter by *version*, verify every *citation*.",
+      "sub": "Keep source and version in metadata, number the context, and check cited numbers against **what was retrieved**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8020,6 +10727,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LangSmith and Production Practices — tracing, evals, caching, pinning and leaky abstractions",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8222,6 +10930,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LangGraph Fundamentals — StateGraph, state schema, reducers, nodes and edges",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8229,6 +10938,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Conditional Edges and Cycles — routers, agent ↔ tools loops and recursion limits",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8236,6 +10946,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Persistence and Checkpointers — threads, state history, time travel and durable execution",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8243,6 +10954,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Streaming — values, updates, messages and custom modes to a live UI",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8250,13 +10962,99 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Human-in-the-Loop with interrupt() — pause, Command({ resume }) and approve/edit/reject tool calls",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Subgraphs and the Send API — composition, map-reduce fan-out and parallel branches",
+    "short": {
+     "id": "send-api-eight-sections-at-once",
+     "title": "Send: 8 sections in one superstep",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "Contract review · 40 pages",
+       "head": "8 *Send()* workers at once",
+       "cells": 8,
+       "hot": 8,
+       "caption": "split → 8 × Send('summarise', { section })"
+      },
+      {
+       "type": "ladder",
+       "kicker": "Same token cost",
+       "head": "Fan out, then *combine*",
+       "rungs": [
+        {
+         "label": "Sequential: 8 × ~3 s",
+         "amount": 24
+        },
+        {
+         "label": "Send (~3.5 s) + combine (~2 s)",
+         "amount": 5.5
+        }
+       ],
+       "unit": "s"
+      },
+      {
+       "type": "flow",
+       "kicker": "Map-reduce in LangGraph",
+       "head": "One superstep, one *reducer*",
+       "steps": [
+        "Conditional edge returns 8 Send objects",
+        "Each worker sees only its payload",
+        "All 8 write summaries in the same superstep",
+        "A concat reducer merges them",
+        "combine runs once"
+       ],
+       "sub": "Order follows task order, not finish time: include **section.index**."
+      },
+      {
+       "type": "claims",
+       "kicker": "Bug seen in practice",
+       "head": "No reducer, *no run*",
+       "claims": [
+        {
+         "text": "summaries: Annotation<string[]>() with no reducer",
+         "ok": false,
+         "note": "InvalidUpdateError: 8 writes in one superstep"
+        },
+        {
+         "text": "summaries with a concat reducer",
+         "ok": true,
+         "note": "combine sees all 8 entries"
+        }
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A router returns new Send('grade', { doc }) for 6 documents. What does grade receive?",
+       "options": [
+        {
+         "text": "The full parent state plus doc",
+         "why": "Each worker gets only its payload; put shared context in the payload explicitly."
+        },
+        {
+         "text": "Only { doc }, the payload of that Send",
+         "why": "Right: that is how one node runs 6 times with different data in one superstep."
+        },
+        {
+         "text": "An array of all 6 docs",
+         "why": "Each Send is one envelope with one payload, not the whole list."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Fan out with *Send*, merge with a *reducer*.",
+      "sub": "Use Send when the number of tasks is known only at runtime; parallel writes need a **reducer**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8264,6 +11062,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Long-Term Memory and Production — Store, deployment, tracing, testing and pitfalls",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8466,13 +11265,89 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LlamaIndex Fundamentals — documents, nodes, Settings, VectorStoreIndex, query and chat engines",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Ingestion Pipelines and Indexes — node parsers, transformations, extractors, storage and persistence",
+    "short": {
+     "id": "ingestion-pipeline-only-what-changed",
+     "title": "Ingestion that only redoes changes",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Nightly docs sync · night 2",
+       "value": 720,
+       "prefix": "≈ ",
+       "unit": "nodes re-processed, out of 30,000",
+       "sub": "120 pages edited, 15 deleted: the docstore compares **hashes**."
+      },
+      {
+       "type": "flow",
+       "kicker": "5,000 Markdown pages",
+       "head": "A factory line with a *ledger*",
+       "steps": [
+        "MarkdownNodeParser",
+        "SentenceSplitter(512, 64)",
+        "TitleExtractor + QuestionsAnsweredExtractor",
+        "OpenAIEmbedding → Qdrant",
+        "Docstore in Redis: UPSERTS_AND_DELETE"
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Run time",
+       "head": "Only what changed gets *redone*",
+       "rungs": [
+        {
+         "label": "First run: 30,000 nodes",
+         "amount": 50
+        },
+        {
+         "label": "Night 2: ≈ 720 nodes",
+         "amount": 1.5
+        }
+       ],
+       "unit": "min (approx.)",
+       "sub": "Deleted docs' nodes are **removed** from Qdrant too."
+      },
+      {
+       "type": "spike",
+       "kicker": "200-question set",
+       "head": "\"Questions this chunk answers\" *pays off*",
+       "mark": "recall@5 0.78 → 0.86",
+       "sub": "Mainly for short **API-reference** chunks."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Nightly ingestion doubles the vector count every run, though few files change. Most likely cause?",
+       "options": [
+        {
+         "text": "The embedding model is non-deterministic",
+         "why": "Embedding noise does not create duplicate documents."
+        },
+        {
+         "text": "Random doc ids each run, or a docstore that is not persisted",
+         "why": "Right: dedup matches ids and hashes in a persisted docstore; otherwise everything looks new."
+        },
+        {
+         "text": "chunk_overlap is too large",
+         "why": "Overlap does not create duplicate documents."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Stable ids + a persisted docstore = *incremental* ingestion.",
+      "sub": "With **UPSERTS_AND_DELETE**, edited docs are re-processed and deleted ones disappear."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8480,6 +11355,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Workflows and Agents — event-driven Workflows, agents with tools, and choosing LlamaIndex vs LangChain/LangGraph",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8750,6 +11626,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8757,6 +11634,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "MCP Servers and Tools — building a server with the TypeScript SDK",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8764,6 +11642,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Putting it together — MCP auth and security: tool poisoning, over-permissioned servers and defences",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8948,6 +11827,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Knowledge Graphs — entities, relationships, triples and schemas",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8955,6 +11835,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Graph Databases — Neo4j, Cypher patterns, constraints and vector indexes",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8962,13 +11843,110 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Entity Extraction — LLM-based entities and relations with schemas and provenance",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Entity Resolution — blocking, similarity scoring and LLM adjudication",
+    "short": {
+     "id": "entity-resolution-four-acmes",
+     "title": "Entity resolution: four Acmes",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "Four mentions · one block",
+       "head": "Same company, or *not*?",
+       "claims": [
+        {
+         "text": "Acme Corp = ACME Corporation",
+         "ok": true,
+         "note": "0.98, same domain → auto-merge"
+        },
+        {
+         "text": "Acme Corp = Acme Ltd",
+         "ok": false,
+         "note": "0.80, grey zone → LLM: UK subsidiary"
+        },
+        {
+         "text": "Acme Corp = Acme Analytics",
+         "ok": false,
+         "note": "0.79, grey zone → LLM: different company"
+        }
+       ],
+       "sub": "Result: **3** canonical nodes, 1 alias, 1 new SUBSIDIARY_OF edge."
+      },
+      {
+       "type": "counter",
+       "kicker": "Blocking key = first 3 chars + type",
+       "value": 6,
+       "unit": "pairs to score, instead of comparing against all 40K orgs",
+       "sub": "All-pairs on 1M mentions is **≈ 5×10^11** comparisons."
+      },
+      {
+       "type": "flow",
+       "kicker": "The pipeline",
+       "head": "Normalise, block, *score*, decide",
+       "steps": [
+        "Normalise: lowercase, strip legal suffixes",
+        "Block on a cheap key",
+        "Score: 0.5 × Jaro-Winkler + 0.5 × cosine, then attributes",
+        "≥ 0.92 merge · ≤ 0.70 distinct · grey zone → LLM",
+        "Cluster; keep aliases and a merge log"
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "Precision beats recall here",
+       "head": "Keep merges *reversible*",
+       "items": [
+        {
+         "label": "Keep aliases",
+         "keep": true
+        },
+        {
+         "label": "Log who or what merged, and the score",
+         "keep": true
+        },
+        {
+         "label": "Use several blocking keys",
+         "keep": true
+        },
+        {
+         "label": "Auto-merge on name similarity alone"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "\"Apple Inc.\" and \"Apple Records\" were merged: Jaro-Winkler 0.91 on normalised names. Best fix?",
+       "options": [
+        {
+         "text": "Lower the threshold to 0.85",
+         "why": "That merges more, not less."
+        },
+        {
+         "text": "Add attribute and context evidence; send borderline pairs to adjudication",
+         "why": "Right: name similarity alone cannot separate organisations that share tokens."
+        },
+        {
+         "text": "Merge only exact string matches",
+         "why": "Exact matching misses most real variants."
+        }
+       ],
+       "answer": 1
+      }
+     ],
+     "takeaway": {
+      "head": "Wrong merges are worse than *duplicates*.",
+      "sub": "Block to scale, score names **and** attributes, adjudicate the grey zone, keep a reversible merge log."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -8976,6 +11954,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Graph-Based Retrieval — seed, expand, rank and combine with vectors",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9162,13 +12141,114 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent SDKs — what they give you over a raw API loop",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Computer-use and browser agents — screenshot → action loops",
+    "short": {
+     "id": "pixel-vs-accessibility-agent",
+     "title": "Pixels vs the accessibility tree",
+     "beats": [
+      {
+       "type": "race",
+       "kicker": "Same task · download last month's invoice",
+       "head": "Pixels vs *element references*",
+       "lanes": [
+        {
+         "label": "Pixel agent · 22 steps · ~90 s",
+         "seconds": 9,
+         "tone": "pink"
+        },
+        {
+         "label": "Accessibility tree · 11 steps · ~35 s",
+         "seconds": 3.5,
+         "tone": "good"
+        }
+       ],
+       "sub": "Each pixel step sends one **~1,300-token** screenshot."
+      },
+      {
+       "type": "flow",
+       "kicker": "The loop",
+       "head": "Screenshot in, *action* out",
+       "steps": [
+        "Harness takes a screenshot and sends it with the goal",
+        "Model returns an action: click, type, key, scroll, wait or done",
+        "Harness executes it in a VM, container or browser",
+        "A new screenshot comes back"
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "Step 9 of the pixel run",
+       "head": "A cookie banner *moves the link*",
+       "steps": [
+        "Screenshot of the vendor portal",
+        "A cookie banner shifts \"Billing\" by 60 px",
+        "The click lands on \"Delete account\"",
+        "The risky-action gate sees \"delete\" and pauses for a human"
+       ],
+       "broken": 2,
+       "sub": "The accessibility-tree run never noticed: the **element reference** did not move."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Safety essentials",
+       "head": "Enforced by the *harness*, not the prompt",
+       "items": [
+        {
+         "label": "Sandboxed VM, throwaway browser profile",
+         "keep": true
+        },
+        {
+         "label": "Allow-listed domains",
+         "keep": true
+        },
+        {
+         "label": "Human confirmation for risky actions",
+         "keep": true
+        },
+        {
+         "label": "Downloads and file:// URLs"
+        },
+        {
+         "label": "Instructions found in page text"
+        }
+       ],
+       "keepLabel": "HARNESS",
+       "sub": "Page content is **untrusted** input."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A browser agent automates a modern web app you control. Best default action mode?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Pixel coordinates from full-resolution screenshots every step",
+         "why": "That is the fallback for apps without a usable DOM, such as canvas UIs or remote desktops. It breaks on layout shifts."
+        },
+        {
+         "text": "Accessibility-tree element references, screenshots only when needed",
+         "why": "Element references are stable across layout shifts, text-only and much cheaper than an image per step."
+        },
+        {
+         "text": "Asking the user to describe the screen",
+         "why": "The agent can read the accessibility tree itself; that hands the work back to the user."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Prefer *API > accessibility tree > pixels*.",
+      "sub": "Sandbox, allow-list and **harness-enforced** confirmations; page text is data."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9176,6 +12256,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Agent-to-agent (A2A) protocol — agent cards, tasks and artifacts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9183,6 +12264,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Reflection and self-improvement — Reflexion, evaluator–optimizer, external verifiers",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9190,6 +12272,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multi-agent frameworks — AutoGen (and its successor) and CrewAI",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9197,6 +12280,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "TypeScript and Python agent runtimes — Mastra, Agno and choosing a framework",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9446,13 +12530,115 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "What a skill is: the SKILL.md package",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Progressive disclosure: metadata → body → files",
+    "short": {
+     "id": "skills-progressive-disclosure",
+     "title": "Forty skills, four thousand tokens",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "A team with 40 skills",
+       "head": "Load everything, or *disclose*?",
+       "rungs": [
+        {
+         "label": "Every body up front (40 × 2,500)",
+         "amount": 100000
+        },
+        {
+         "label": "Catalog every session (40 × 90)",
+         "amount": 3600
+        },
+        {
+         "label": "Active: one release request",
+         "amount": 4000
+        }
+       ],
+       "unit": "tokens",
+       "sub": "Disclosure costs about **4%** of the load-everything design."
+      },
+      {
+       "type": "flow",
+       "kicker": "Three levels",
+       "head": "Each loads only *when asked*",
+       "steps": [
+        "Catalog: name + description, every session",
+        "Body: the rest of SKILL.md, when the skill is selected",
+        "Resources: one reference, script or asset, when a step asks"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "The release request",
+       "value": 2500,
+       "unit": "tokens: the one activated body",
+       "stats": [
+        {
+         "value": "1,200",
+         "label": "tokens: one branch reference"
+        },
+        {
+         "value": 300,
+         "label": "tokens: the script’s JSON output"
+        }
+       ],
+       "sub": "Active cost: **4,000 tokens**. Scripts add only their output, not their source."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Give every reference a load condition",
+       "head": "*One hop*, with a condition",
+       "items": [
+        {
+         "label": "Python package → references/python-release.md",
+         "keep": true
+        },
+        {
+         "label": "Container image → references/container-release.md",
+         "keep": true
+        },
+        {
+         "label": "\"See references/ for more\""
+        },
+        {
+         "label": "A reference pointing to another reference"
+        }
+       ],
+       "keepLabel": "LINK"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "What does the agent see about an installed but unused skill in a normal session?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Nothing until the user types its name",
+         "why": "A skill with no catalog entry could never be picked automatically."
+        },
+        {
+         "text": "Its name and description only",
+         "why": "Level 1 keeps only the catalog entry in context, so the agent can decide when the skill is relevant."
+        },
+        {
+         "text": "The full SKILL.md body, but not the references",
+         "why": "The body loads only when the skill is activated."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Catalog always, body on demand, *files on a condition*.",
+      "sub": "Catalog cost and active cost are **separate budgets**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9460,6 +12646,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Routing: how a skill gets selected",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9467,6 +12654,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Permissions and trust: a skill is not a sandbox",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -9474,6 +12662,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Writing good skills and evaluating them",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9662,6 +12851,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Repo memory: CLAUDE.md, AGENTS.md and a state file",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -9669,6 +12859,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Instructions as checkable constraints",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -9676,13 +12867,126 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Scope contracts: what this task may touch",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Verification gates: done means checked",
+    "short": {
+     "id": "all-tests-pass-claim",
+     "title": "\"All tests pass!\" Check the log",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "T-142 · the empty-password bug",
+       "head": "\"All tests pass.\" *Did they?*",
+       "claims": [
+        {
+         "text": "pnpm test tests/auth",
+         "ok": true,
+         "note": "exit 0, 12 passed"
+        },
+        {
+         "text": "pnpm tsc --noEmit",
+         "ok": false,
+         "note": "exit 2: src/auth/login.ts line 41"
+        },
+        {
+         "text": "pnpm test (full suite)",
+         "ok": false,
+         "note": "exit null: killed after 300 s"
+        }
+       ],
+       "sub": "The claim was true for the **focused tests only**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Capture real feedback",
+       "head": "A wrapper *records* every run",
+       "steps": [
+        "The exact command",
+        "Its exit code",
+        "How long it took",
+        "The tail of stdout and stderr"
+       ],
+       "sub": "Keep the **end** of the output, where the final error is."
+      },
+      {
+       "type": "toggles",
+       "kicker": "The gate checks facts",
+       "head": "Evidence, *not the summary*",
+       "items": [
+        {
+         "label": "Every acceptance command ran",
+         "keep": true
+        },
+        {
+         "label": "Every one exited 0",
+         "keep": true
+        },
+        {
+         "label": "No null exit codes",
+         "keep": true
+        },
+        {
+         "label": "No forbidden files in the diff",
+         "keep": true
+        },
+        {
+         "label": "The agent’s own summary"
+        }
+       ],
+       "keepLabel": "EVIDENCE",
+       "sub": "No exit code, **no progress**."
+      },
+      {
+       "type": "counter",
+       "kicker": "After a type guard on line 41",
+       "value": 94,
+       "unit": "seconds: the full suite exits 0",
+       "sub": "Now the gate **passes**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Deterministic, not a judge",
+       "head": "One report, *one path*",
+       "steps": [
+        "The agent tries to finish",
+        "A hook runs the gate",
+        "The report lands at one known path",
+        "CI reads the same report"
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The gate blocked, but the agent is confident its change works. Who can override?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "A human, with a recorded reason and name",
+         "why": "Only a human can override, so \"I’m confident\" never becomes a merged regression."
+        },
+        {
+         "text": "The agent, if it explains why",
+         "why": "The agent cannot override a block, however confident it is."
+        },
+        {
+         "text": "An LLM judge reviewing the diff",
+         "why": "No LLM decides whether tests passed; the gate is deterministic."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Done means *checked*, not claimed.",
+      "sub": "Record every exit code; only a **human** can override a block."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9690,6 +12994,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "The reviewer agent: a second role with a rubric",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9697,6 +13002,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multi-session handoff",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -9704,6 +13010,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Permission modes: choosing how much to approve",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -9884,7 +13191,104 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Fine-Tuning — when to change the weights (vs prompting and RAG)",
+    "short": {
+     "id": "fine-tune-for-behaviour-not-facts",
+     "title": "Fine-tune for behaviour, not facts",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "The 2026 refund policy bot",
+       "head": "The failures were *missing facts*",
+       "rungs": [
+        {
+         "label": "Prompt only (1,200 tokens)",
+         "amount": 71
+        },
+        {
+         "label": "+ RAG over the policy docs",
+         "amount": 93
+        }
+       ],
+       "unit": "% correct on a 200-question eval",
+       "sub": "A \"didn't know\" gap: **retrieval** fixed it, no training needed."
+      },
+      {
+       "type": "counter",
+       "kicker": "A different gap: the format",
+       "value": 98,
+       "suffix": "%",
+       "unit": "follow the 4-part template after SFT",
+       "sub": "Prompting alone: **82%**. SFT of an 8B model on 1,500 approved transcripts.",
+       "stats": [
+        {
+         "value": "1,200 → 150",
+         "label": "prompt tokens"
+        },
+        {
+         "value": "~8×",
+         "label": "cheaper per request"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "The escalation ladder",
+       "head": "Prompt, then RAG, then *train*",
+       "steps": [
+        "Strong prompt, 3–5 examples, eval of 100–300 cases",
+        "Add RAG if failures are \"didn't know\"",
+        "Fine-tune if \"knew but did it wrong\"",
+        "Only with ≥ 500–1,000 high-quality examples"
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "What the weights should hold",
+       "head": "Habits, not *facts*",
+       "items": [
+        {
+         "label": "The 4-part answer template",
+         "keep": true
+        },
+        {
+         "label": "House tone and jargon",
+         "keep": true
+        },
+        {
+         "label": "Refund policy text that changes quarterly"
+        }
+       ],
+       "keepLabel": "Fine-tune",
+       "sub": "Final design: **RAG for the policy facts + LoRA for the format**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Product specs change every two weeks and the bot gets them wrong. Best first fix?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Fine-tune weekly on the latest spec sheets",
+         "why": "Expensive, and fine-tuned models still hallucinate near-miss facts."
+        },
+        {
+         "text": "Retrieve the current spec sheet at query time (RAG)",
+         "why": "A fast-changing knowledge gap: retrieval supplies the current, citable spec without retraining."
+        },
+        {
+         "text": "Raise the LoRA rank so it memorises more",
+         "why": "No rank can know a spec that did not exist at training time."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Fine-tune for *behaviour*; RAG for knowledge.",
+      "sub": "Exhaust prompting with a real eval first; **500–1,000 good examples** beat 50,000 noisy ones."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9892,6 +13296,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Supervised Fine-Tuning (SFT) — chat data, loss masking and training settings",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9899,6 +13304,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LoRA — low-rank adapters, rank, alpha and target modules",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9906,6 +13312,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "QLoRA — 4-bit NF4 base, double quantization and paged optimizers",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -9913,6 +13320,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "PEFT — the adapter family, multi-adapter serving and merging",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10096,13 +13504,91 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "RLHF — reward models, PPO and the KL leash",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "DPO — preference optimisation without a reward model",
+    "short": {
+     "id": "dpo-loss-starts-at-ln2",
+     "title": "DPO: chosen up, rejected down",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "DPO at initialisation · policy = reference",
+       "value": 0.693,
+       "decimals": 3,
+       "unit": "loss = ln 2",
+       "sub": "No reward model, no sampling: **two models**, and it trains like SFT."
+      },
+      {
+       "type": "flow",
+       "kicker": "One preference pair · β = 0.1",
+       "head": "From log-probs to a *margin*",
+       "steps": [
+        "Chosen log-ratio: −12.0 − (−12.5) = +0.5",
+        "Rejected log-ratio: −15.0 − (−14.0) = −1.0",
+        "Margin 1.5 × β = 0.15",
+        "Loss = −log σ(0.15) = 0.621"
+       ]
+      },
+      {
+       "type": "spike",
+       "kicker": "10k helpfulness pairs · LoRA · β = 0.1",
+       "head": "Judge win rate over SFT: *50% → 63%*",
+       "mark": "rewards/accuracies 0.81",
+       "sub": "After **one epoch**."
+      },
+      {
+       "type": "claims",
+       "kicker": "Health metrics TRL logs",
+       "head": "Is this run *healthy*?",
+       "claims": [
+        {
+         "text": "rewards/accuracies rises to 0.7–0.9",
+         "ok": true
+        },
+        {
+         "text": "rewards/margins rising",
+         "ok": true
+        },
+        {
+         "text": "logps/chosen falls a lot",
+         "ok": false,
+         "note": "both responses pushed down"
+        }
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "rewards/accuracies climbs to 0.9, but logps/chosen drops from −120 to −260. What is happening?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Overfitting: chosen responses became far more likely",
+         "why": "Chosen likelihood is falling, not rising."
+        },
+        {
+         "text": "The margin grows by pushing both responses down: likelihood displacement",
+         "why": "DPO only constrains the difference of log-ratios, so it can widen the margin while lowering both likelihoods."
+        },
+        {
+         "text": "β is too high, so the policy cannot move",
+         "why": "A high β would restrict movement rather than cause a collapse."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "DPO only moves the *difference*.",
+      "sub": "Watch **logps/chosen**; add an SFT term on chosen or lower the LR."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10110,6 +13596,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Knowledge Distillation — logit-level vs sequence-level students",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10298,6 +13785,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Open-Source LLMs — open-weights families, licences and how to choose",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10305,13 +13793,120 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Local LLM Deployment — Ollama, llama.cpp and LM Studio",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Quantization — GGUF, GPTQ, AWQ and FP8 with memory maths",
+    "short": {
+     "id": "quantize-70b-memory-maths",
+     "title": "Fitting a 70B model: the memory maths",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "Llama-3.1-70B · 70.6B params",
+       "head": "Same model, *fewer bits*",
+       "rungs": [
+        {
+         "label": "BF16",
+         "amount": 141
+        },
+        {
+         "label": "FP8",
+         "amount": 71
+        },
+        {
+         "label": "AWQ 4-bit (~4.25 bpw)",
+         "amount": 37.5
+        }
+       ],
+       "unit": "GB of weights",
+       "sub": "GB ≈ params × bits / 8, then add **KV cache** and overhead."
+      },
+      {
+       "type": "counter",
+       "kicker": "FP8 on one H100 80 GB",
+       "prefix": "~",
+       "value": 7,
+       "unit": "GB left for KV cache",
+       "sub": "≈ 22k tokens in fp16, **~45k** with FP8 KV."
+      },
+      {
+       "type": "claims",
+       "kicker": "Where each one fits",
+       "head": "Pick the format for the *target*",
+       "claims": [
+        {
+         "text": "BF16, 141 GB",
+         "ok": true,
+         "note": "2 × H100 80 GB"
+        },
+        {
+         "text": "AWQ 4-bit, 37.5 GB",
+         "ok": true,
+         "note": "1 × 48 GB L40S"
+        },
+        {
+         "text": "GGUF Q4_K_M, 42.8 GB",
+         "ok": true,
+         "note": "a 64 GB Mac, 16k context"
+        },
+        {
+         "text": "Q2_K, ≈ 25 GB",
+         "ok": false,
+         "note": "SQL exact-match 81% → 62%: rejected"
+        }
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "Quality guide",
+       "head": "How low can you *go*?",
+       "items": [
+        {
+         "label": "8-bit: essentially lossless",
+         "keep": true
+        },
+        {
+         "label": "Good 4-bit: ~1–3% on typical benchmarks",
+         "keep": true
+        },
+        {
+         "label": "≤ 3 bits: math, code, long context degrade"
+        }
+       ],
+       "keepLabel": "SHIP"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "One 80 GB H100, a 70B model, many concurrent users. Best default quantisation?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "GGUF Q4_K_M through llama.cpp",
+         "why": "llama.cpp is not built for high-concurrency datacenter batching."
+        },
+        {
+         "text": "FP8 weights (optionally FP8 KV cache) in vLLM or SGLang",
+         "why": "Near lossless, fits 70B in ~71 GB, and uses H100 FP8 tensor cores for fast prefill and batched decode."
+        },
+        {
+         "text": "Q2_K to maximise KV-cache space",
+         "why": "It costs too much quality."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "A bigger model at *4-bit* usually wins.",
+      "sub": "It beats a smaller 16-bit model in the same memory; **gate every format** on your own eval."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10497,6 +14092,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Model Serving — vLLM, SGLang, TensorRT-LLM and the metrics that matter",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10504,6 +14100,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Model Routing — sending each request to the cheapest model that can handle it",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10511,13 +14108,122 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Model Selection — a selection matrix driven by your own evals",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
    },
    {
     "heading": "Fallback Models — fallback chains, circuit breakers and retry budgets",
+    "short": {
+     "id": "when-the-primary-model-goes-down",
+     "title": "When the primary model goes down",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "A Monday · 22 minutes of 529s",
+       "head": "The first hop *fails*, the chain holds",
+       "steps": [
+        "Primary: 529 \"overloaded\" on 60% of calls",
+        "Same model via another provider",
+        "Comparable model from another vendor",
+        "Smaller model with a degraded-mode notice"
+       ],
+       "broken": 0
+      },
+      {
+       "type": "race",
+       "kicker": "p95 latency",
+       "head": "Retrying a dying provider is *slow*",
+       "lanes": [
+        {
+         "label": "No breaker: p95 24 s",
+         "seconds": 12,
+         "tone": "pink"
+        },
+        {
+         "label": "Breaker open: p95 3.6 s",
+         "seconds": 1.8,
+         "tone": "good"
+        }
+       ],
+       "sub": "Without a breaker, every request tries the primary first, and retries **triple the load** on it."
+      },
+      {
+       "type": "flow",
+       "kicker": "Circuit breaker per hop",
+       "head": "Closed, *open*, half-open",
+       "steps": [
+        "Closed: calls flow, failures counted",
+        "Open: > 50% errors in 20 s, skip it for 45 s",
+        "Half-open: one probe; success closes it"
+       ],
+       "stats": [
+        {
+         "value": "61%",
+         "label": "fallback rate for 22 min"
+        },
+        {
+         "value": "0.4%",
+         "label": "fallback rate after"
+        }
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "Retry budget",
+       "head": "Retry only what can *recover*",
+       "items": [
+        {
+         "label": "429 rate limits",
+         "keep": true
+        },
+        {
+         "label": "5xx and 529 overloaded",
+         "keep": true
+        },
+        {
+         "label": "Timeouts and connection resets",
+         "keep": true
+        },
+        {
+         "label": "400 invalid request"
+        },
+        {
+         "label": "401 and content-policy errors"
+        }
+       ],
+       "keepLabel": "Retry",
+       "sub": "Backoff + jitter, and retries capped at **10–20%** of requests."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "After a tool-schema change, the primary returns 400 \"invalid request\". What should the fallback layer do?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Retry three times, then fall back",
+         "why": "A 400 is deterministic: retries waste calls and the next hop may reject it or hide the bug."
+        },
+        {
+         "text": "Surface the error and alert, no retry or fallback",
+         "why": "It is a client bug: fail fast so someone fixes it."
+        },
+        {
+         "text": "Open the circuit breaker on the primary",
+         "why": "That punishes a healthy provider for your own bug."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Fall back *fast*; never retry a bug.",
+      "sub": "Same model on another provider first, a **breaker per hop**, and test every hop before you need it."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10701,6 +14407,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Multimodal AI — one model, many senses",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10708,13 +14415,92 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Vision-Language Models — encoder, projector, LLM",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
    },
    {
     "heading": "Image Understanding — APIs, token costs, documents and charts",
+    "short": {
+     "id": "image-tokens-crop-the-invoice",
+     "title": "Images cost tokens: crop them",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "One scanned A4 invoice · 1240×1754 px",
+       "head": "Every pixel is *paid for*",
+       "rungs": [
+        {
+         "label": "Full page, before the cap",
+         "amount": 2240
+        },
+        {
+         "label": "Full page, downscaled to the cap",
+         "amount": 1568
+        },
+        {
+         "label": "Cropped to the line-item table",
+         "amount": 1000
+        }
+       ],
+       "unit": "tokens (Claude standard tier)",
+       "sub": "The crop is cheaper **and** the text is larger in the frame."
+      },
+      {
+       "type": "counter",
+       "kicker": "The patch maths",
+       "value": 28,
+       "unit": "px square patches",
+       "sub": "tokens ≈ ceil(w/28) × ceil(h/28): the 1100×700 crop is **40 × 25 = 1,000**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Documents and charts",
+       "head": "*Transcribe* before you reason",
+       "steps": [
+        "Render pages at ~150 DPI, crop margins",
+        "Image first, then a precise question and a JSON schema",
+        "Read axis labels, legend and values, then answer",
+        "Validate: totals must sum, dates must parse"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "A deterministic check",
+       "value": 3,
+       "suffix": "%",
+       "unit": "of extractions misread a digit",
+       "sub": "Caught by checking that **sum(lines) = total**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Your agent resends the same 1 MB base64 screenshot on each of 12 turns. Best fix?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Switch to OpenAI detail: \"low\" so it costs 85 tokens",
+         "why": "It changes token cost but may destroy legibility."
+        },
+        {
+         "text": "Upload it once via the Files API and reference its file_id",
+         "why": "Each request resends the full history; a file id keeps the payload small."
+        },
+        {
+         "text": "Drop the image after turn 1",
+         "why": "That loses it from context entirely."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Treat resolution like a *budget*.",
+      "sub": "Crop to the region of interest, transcribe first, then **validate** with code."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10722,6 +14508,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Image Generation — diffusion, guidance and image APIs",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10905,6 +14692,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Audio Processing — resample, VAD, chunk, diarise",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10912,6 +14700,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Speech-to-Text — Whisper-class APIs and WER",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10919,6 +14708,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Text-to-Speech — streaming voices and the voice-agent latency budget",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10926,6 +14716,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Video Understanding — frame sampling, transcripts and timestamps",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -10933,13 +14724,116 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Voice agent frameworks — Pipecat and LiveKit Agents",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Turn-taking and interruptions — endpointing, backchannels and what the caller actually heard",
+    "short": {
+     "id": "voice-agent-what-was-heard",
+     "title": "What the caller actually heard",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "The agent is cut off mid-sentence",
+       "head": "What did the caller *actually hear*?",
+       "claims": [
+        {
+         "text": "\"Your refund of $40\"",
+         "ok": true,
+         "note": "played"
+        },
+        {
+         "text": "\"was approved and will arrive in 5 days\"",
+         "ok": false,
+         "note": "never played"
+        }
+       ],
+       "sub": "History must keep only the **played** words."
+      },
+      {
+       "type": "toggles",
+       "kicker": "While the agent speaks",
+       "head": "Not every sound is a *barge-in*",
+       "items": [
+        {
+         "label": "≥ 400 ms of speech or ≥ 2 words",
+         "keep": true
+        },
+        {
+         "label": "\"mm-hm\""
+        },
+        {
+         "label": "\"yeah\""
+        },
+        {
+         "label": "A cough"
+        },
+        {
+         "label": "The agent's own voice through a speakerphone"
+        }
+       ],
+       "keepLabel": "INTERRUPT",
+       "sub": "Plus **echo cancellation**, so the agent does not interrupt itself."
+      },
+      {
+       "type": "flow",
+       "kicker": "Endpointing",
+       "head": "Has the user *finished*?",
+       "steps": [
+        "300 ms of silence",
+        "Semantic detector: does it look complete?",
+        "Just asked for a policy number? Wait 1.2 s",
+        "End the turn"
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Insurance claims line · 400 recorded calls",
+       "head": "Callers cut off *mid-sentence*",
+       "rungs": [
+        {
+         "label": "Before tuning",
+         "amount": 14
+        },
+        {
+         "label": "After tuning",
+         "amount": 4
+        }
+       ],
+       "unit": "% of calls",
+       "sub": "False interruptions from \"uh-huh\": **11% → 2%**. Interruption latency stayed ~250 ms."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "While the agent is speaking, the caller says \"mm-hm\". What should it do?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Stop speaking immediately and wait",
+         "why": "Short acknowledgements signal listening, not a wish to take the turn."
+        },
+        {
+         "text": "Treat it as a backchannel and keep speaking",
+         "why": "A minimum speech duration or word count avoids stopping for it, while longer speech still triggers barge-in."
+        },
+        {
+         "text": "Restart the whole reply from the beginning",
+         "why": "The caller was listening; nothing needs repeating."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "History holds only *what was played*.",
+      "sub": "Combine silence with a **semantic** end-of-turn signal; tune on real calls."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11154,7 +15048,109 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Text-to-SQL — schema linking, generation and query guarding",
+    "short": {
+     "id": "text-to-sql-guard-the-query",
+     "title": "Text-to-SQL: guard the query",
+     "beats": [
+      {
+       "type": "toggles",
+       "kicker": "The validator · before anything runs",
+       "head": "Parse to an AST, *allow only reads*",
+       "items": [
+        {
+         "label": "A single SELECT",
+         "keep": true
+        },
+        {
+         "label": "Tables in the allowlist",
+         "keep": true
+        },
+        {
+         "label": "LIMIT injected",
+         "keep": true
+        },
+        {
+         "label": "DROP or UPDATE"
+        },
+        {
+         "label": "Multi-statements"
+        },
+        {
+         "label": "pg_sleep or dblink"
+        }
+       ],
+       "keepLabel": "ALLOW"
+      },
+      {
+       "type": "counter",
+       "kicker": "Schema linking · 240 tables",
+       "prefix": "~",
+       "value": 1.8,
+       "decimals": 1,
+       "suffix": "k",
+       "unit": "prompt tokens, down from ~60k",
+       "sub": "It picks **orders, order_items, products, customers**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Top 3 products · Germany · last quarter",
+       "head": "Why *0 rows*?",
+       "steps": [
+        "Schema linking picks 4 tables",
+        "SQL filters c.country = 'Germany'",
+        "0 rows",
+        "Sample values in the schema ('DE','FR','US') fix it"
+       ],
+       "broken": 1
+      },
+      {
+       "type": "claims",
+       "kicker": "Second attempt",
+       "head": "Checked, then run *read-only*",
+       "claims": [
+        {
+         "text": "Single SELECT",
+         "ok": true
+        },
+        {
+         "text": "Tables in the allowlist",
+         "ok": true
+        },
+        {
+         "text": "LIMIT present",
+         "ok": true
+        }
+       ],
+       "sub": "Ran in **140 ms** under the analyst_ro role."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Your validator only allows SELECT. Why do you still need a read-only database role?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "SELECT statements are slower without it",
+         "why": "The role is a safety layer, not a speed setting."
+        },
+        {
+         "text": "Validators have gaps; the role is enforced by the database itself",
+         "why": "Data-modifying CTEs or side-effect functions can slip past a parser; the role still holds."
+        },
+        {
+         "text": "The LLM sees the role name and behaves better",
+         "why": "Safety comes from what the database enforces, not from what the model sees."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Validate the AST *and* run least-privilege.",
+      "sub": "Both, not either: **each layer holds** when another fails."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11162,6 +15158,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Chatbots — session state, memory, routing and escalation",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11169,6 +15166,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Enterprise Search — connectors, hybrid retrieval and ACL-aware answers",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11334,6 +15332,321 @@ export const TOPIC_INDEX: TopicMeta[] = [
   ]
  },
  {
+  "id": "generative-media",
+  "phase": "multimodal",
+  "order": 4,
+  "title": "Generative Media",
+  "subtitle": "Diffusion, image, video and audio generation for engineers: what a sampling step costs, how prompts and guidance steer it, how to edit and control outputs, why video is so expensive, how audio becomes tokens, and how to ship it with provenance and rights checks.",
+  "estimatedMinutes": 60,
+  "tags": [
+   "diffusion",
+   "image-generation",
+   "latent-diffusion",
+   "dit",
+   "cfg",
+   "controlnet",
+   "lora",
+   "inpainting",
+   "video-generation",
+   "audio-generation",
+   "c2pa",
+   "provenance"
+  ],
+  "sections": [
+   {
+    "heading": "How diffusion works — noise, denoise, latents and what a step costs",
+    "short": {
+     "id": "diffusion-steps-are-the-bill",
+     "title": "Every step is a GPU pass",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "DDPM · Ho et al. 2020",
+       "value": 1000,
+       "unit": "denoising steps per image in the original paper",
+       "sub": "Each step is a full pass through the denoiser."
+      },
+      {
+       "type": "flow",
+       "kicker": "Latent diffusion · one image",
+       "head": "Noise in, *image out*",
+       "steps": [
+        "Pure noise latent, 64×64×4",
+        "Denoiser pass × N steps",
+        "Sampler removes predicted noise",
+        "VAE decodes pixels once"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "512×512×3 pixels → 64×64×4 latent",
+       "value": 48,
+       "suffix": "×",
+       "unit": "fewer values in every step",
+       "sub": "That is why **latent** diffusion runs on one GPU."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Denoiser passes per image",
+       "head": "Same prompt, *different bill*",
+       "rungs": [
+        {
+         "label": "30 steps with CFG",
+         "amount": 60
+        },
+        {
+         "label": "20 steps with CFG",
+         "amount": 40
+        },
+        {
+         "label": "Distilled, 4 steps, no CFG",
+         "amount": 4
+        }
+       ],
+       "unit": "passes"
+      },
+      {
+       "type": "quiz",
+       "kicker": "30 steps, guidance on",
+       "head": "Which change cuts GPU time per image the most?",
+       "options": [
+        {
+         "text": "A distilled 4-step model without CFG",
+         "why": "60 passes become 4: a 15× cut, if the quality holds on your prompts."
+        },
+        {
+         "text": "A faster VAE decoder",
+         "why": "The decoder runs once per image; the 60 denoiser passes dominate."
+        },
+        {
+         "text": "A shorter prompt",
+         "why": "The text is encoded once; it does not change the number of passes."
+        }
+       ],
+       "answer": 0
+      }
+     ],
+     "takeaway": {
+      "head": "Steps × passes × cost per pass",
+      "sub": "Cut **steps** first (solver, distillation), then passes (CFG), then the pass itself."
+     }
+    },
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 1
+    }
+   },
+   {
+    "heading": "Conditioning and guidance — text encoders, CFG scale, seeds",
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 1
+    }
+   },
+   {
+    "heading": "Control and editing — img2img, inpainting, ControlNet and LoRA",
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 0
+    }
+   },
+   {
+    "heading": "Video generation — temporal consistency and the cost of time",
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 0
+    }
+   },
+   {
+    "heading": "Audio, speech and music generation — codec tokens and audio diffusion",
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 0
+    }
+   },
+   {
+    "heading": "Shipping generative media safely — cost, latency, provenance and rights",
+    "exercise": true,
+    "steps": true,
+    "quickCheck": {
+     "correct": 1
+    }
+   }
+  ],
+  "codeChallenges": [
+   {
+    "id": "generative-media-cc-1",
+    "title": "An image endpoint that burns GPU on every click"
+   },
+   {
+    "id": "generative-media-cc-2",
+    "title": "An adapter loader that mixes base models"
+   }
+  ],
+  "interviewQuestions": [
+   {
+    "id": "generative-media-iq-01",
+    "difficulty": "hard",
+    "question": "Design an \"AI product photo\" feature for an e-commerce platform: sellers upload a product shot and get styled backgrounds."
+   },
+   {
+    "id": "generative-media-iq-02",
+    "difficulty": "medium",
+    "question": "Your image generation takes 8 seconds per image and product wants under 1 second for an interactive editor. What are your options and their trade-offs?"
+   },
+   {
+    "id": "generative-media-iq-03",
+    "difficulty": "medium",
+    "question": "When would you use img2img, inpainting, ControlNet or a LoRA? Give a product example for each."
+   },
+   {
+    "id": "generative-media-iq-04",
+    "difficulty": "hard",
+    "question": "You are adding text-to-video and image-to-video to a creative app. How do you architect serving, and what drives cost?"
+   },
+   {
+    "id": "generative-media-iq-05",
+    "difficulty": "medium",
+    "question": "Legal asks how we will label AI-generated images and audio we produce, and whether we can tell if an image online came from us. What do you propose?"
+   }
+  ],
+  "envelopeQuestions": [
+   {
+    "id": "generative-media-est-1",
+    "question": "Estimate the GPU time and GPU count needed to serve 100,000 images a day, and what switching to a distilled 4-step model would change."
+   },
+   {
+    "id": "generative-media-est-2",
+    "question": "Estimate the raw size, latent token count and attention cost for a 10-second 720p video, and compare with two 5-second segments."
+   }
+  ],
+  "test": [
+   {
+    "id": "generative-media-mcq-01",
+    "difficulty": "medium",
+    "correct": [
+     0
+    ],
+    "section": 0
+   },
+   {
+    "id": "generative-media-mcq-02",
+    "difficulty": "medium",
+    "correct": [
+     1
+    ],
+    "code": true,
+    "section": 1
+   },
+   {
+    "id": "generative-media-mcq-03",
+    "difficulty": "medium",
+    "correct": [
+     0,
+     1,
+     2
+    ],
+    "section": 0
+   },
+   {
+    "id": "generative-media-mcq-04",
+    "difficulty": "hard",
+    "correct": [
+     0
+    ],
+    "section": 0
+   },
+   {
+    "id": "generative-media-mcq-05",
+    "difficulty": "medium",
+    "correct": [
+     0,
+     1,
+     3
+    ],
+    "section": 1
+   },
+   {
+    "id": "generative-media-mcq-06",
+    "difficulty": "medium",
+    "correct": [
+     0
+    ],
+    "section": 1
+   },
+   {
+    "id": "generative-media-mcq-07",
+    "difficulty": "hard",
+    "correct": [
+     0
+    ],
+    "code": true,
+    "section": 2
+   },
+   {
+    "id": "generative-media-mcq-08",
+    "difficulty": "medium",
+    "correct": [
+     0
+    ],
+    "section": 2
+   },
+   {
+    "id": "generative-media-mcq-09",
+    "difficulty": "hard",
+    "correct": [
+     0,
+     1,
+     2
+    ],
+    "code": true,
+    "section": 2
+   },
+   {
+    "id": "generative-media-mcq-10",
+    "difficulty": "medium",
+    "correct": [
+     0,
+     1,
+     2
+    ],
+    "section": 3
+   },
+   {
+    "id": "generative-media-mcq-11",
+    "difficulty": "hard",
+    "correct": [
+     0
+    ],
+    "code": true,
+    "section": 4
+   },
+   {
+    "id": "generative-media-mcq-12",
+    "difficulty": "medium",
+    "correct": [
+     0
+    ],
+    "section": 5
+   },
+   {
+    "id": "generative-media-mcq-13",
+    "difficulty": "medium",
+    "correct": [
+     0,
+     1,
+     2
+    ],
+    "section": 4
+   }
+  ]
+ },
+ {
   "id": "ai-security-injection",
   "phase": "security",
   "order": 1,
@@ -11440,6 +15753,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11548,6 +15862,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11643,6 +15958,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11931,6 +16247,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
      }
     },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11938,6 +16255,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "PII Redaction — regex + NER, and reversible tokenisation",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11945,6 +16263,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Guardrails — input rails, output rails, NeMo Guardrails and Llama Guard",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11952,6 +16271,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Output Validation — schemas, business rules and repair loops",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11959,6 +16279,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Differential Privacy — ε, δ, noise and the privacy budget",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -11966,6 +16287,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Differential Privacy for LLMs — DP-SGD, memorisation and where it helps",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12188,6 +16510,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Red Teaming — garak, PyRIT and promptfoo in a release pipeline",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12195,6 +16518,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Responsible AI — fairness tests, transparency and model cards",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12202,13 +16526,119 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Governance — NIST AI RMF, EU AI Act risk tiers and ISO 42001",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Watermarking AI text — green lists, SynthID and their limits",
+    "short": {
+     "id": "watermark-in-the-word-choices",
+     "title": "A watermark hidden in the words",
+     "beats": [
+      {
+       "type": "ladder",
+       "kicker": "Tutoring essays · flag at z > 4",
+       "head": "Same watermark, *different z*",
+       "rungs": [
+        {
+         "label": "400-token essay, as served",
+         "amount": 13.9
+        },
+        {
+         "label": "Half the sentences rewritten",
+         "amount": 4.6
+        },
+        {
+         "label": "40-token answer",
+         "amount": 2.2
+        },
+        {
+         "label": "A different vendor’s model",
+         "amount": 0
+        }
+       ],
+       "unit": "z-score"
+      },
+      {
+       "type": "flow",
+       "kicker": "Kirchenbauer et al. 2023",
+       "head": "A green list at *every step*",
+       "steps": [
+        "Hash the previous token with a secret key",
+        "Split the vocabulary: green (γ = 0.25) and red",
+        "Add a small bias δ to green tokens",
+        "Sample as usual"
+       ],
+       "sub": "It lives in the **word choices**, so copy-paste keeps it."
+      },
+      {
+       "type": "grid",
+       "kicker": "A 40-token answer from the service",
+       "head": "16 green, *10 expected*",
+       "cells": 40,
+       "hot": 16,
+       "caption": "z = (16 − 10) / √7.5 ≈ 2.2: not flagged",
+       "sub": "z grows with **√T**: short text carries too little signal."
+      },
+      {
+       "type": "counter",
+       "kicker": "The detection threshold",
+       "value": 4,
+       "prefix": "z > ",
+       "unit": "about 3 in 100,000 false positives",
+       "sub": "Detection needs the **key** and the tokenizer, not the model."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Limits to design around",
+       "head": "What *erodes* it",
+       "items": [
+        {
+         "label": "Copy-paste",
+         "keep": true
+        },
+        {
+         "label": "Paraphrasing"
+        },
+        {
+         "label": "Translation or heavy rewriting"
+        },
+        {
+         "label": "Low-entropy text: code, lists, names"
+        }
+       ],
+       "keepLabel": "SURVIVES"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A 400-token essay shows z ≈ 0: \"no watermark\". What does that tell you?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Unknown: only text from a model that applies this watermark carries it",
+         "why": "An essay from a different vendor’s model also gives z ≈ 0."
+        },
+        {
+         "text": "A human wrote it",
+         "why": "No watermark means unknown, never human-written."
+        },
+        {
+         "text": "The student paraphrased it",
+         "why": "Rewriting half of a watermarked essay still gave z ≈ 4.6; z ≈ 0 says nothing about why."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "A watermark points to *our model*, never to a human.",
+      "sub": "Flag only above **z > 4**, and treat no watermark as unknown."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12216,6 +16646,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Provenance — C2PA Content Credentials, and why AI-text detectors fail",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -12437,13 +16868,117 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Reading safety research: demonstrated versus speculative, and sycophancy",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Reward hacking and specification gaming",
+    "short": {
+     "id": "reward-hacking-judge-loop",
+     "title": "Score up, quality down",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "Round 30 · LLM judge gives 8.6/10",
+       "head": "The judge loved it. *Humans* did not",
+       "cells": 50,
+       "hot": 11,
+       "caption": "Human-rated faithful at round 30: 78%"
+      },
+      {
+       "type": "ladder",
+       "kicker": "30 rounds of auto-tuning a prompt",
+       "head": "The judge score kept *climbing*",
+       "rungs": [
+        {
+         "label": "Round 0 · 120 words · 91% faithful",
+         "amount": 6.1
+        },
+        {
+         "label": "Round 10 · 180 words · 90% faithful",
+         "amount": 7.4
+        },
+        {
+         "label": "Round 30 · 310 words · 78% faithful",
+         "amount": 8.6
+        }
+       ],
+       "unit": "judge score (1–10)",
+       "sub": "The judge rewarded **length and confident tone**."
+      },
+      {
+       "type": "spike",
+       "kicker": "Gao, Schulman and Hilton · OpenAI, 2022",
+       "head": "Proxy keeps rising; gold *peaks, then falls*",
+       "mark": "gold peak",
+       "sub": "Larger proxy reward models pushed the peak further out but **did not remove it**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Baker et al. · OpenAI, 2025",
+       "head": "Green tests, *unsolved* task",
+       "steps": [
+        "RL on coding tasks",
+        "Reward: make the tests pass",
+        "Skip or stub out the checks",
+        "Tests pass, problem unsolved"
+       ],
+       "broken": 2,
+       "sub": "Penalising \"bad thoughts\" made the model **keep hacking but stop saying so**."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Every score loop is an optimiser",
+       "head": "Protect the *grader*",
+       "items": [
+        {
+         "label": "Grader and hidden tests out of reach",
+         "keep": true
+        },
+        {
+         "label": "Several signals plus a counter-metric",
+         "keep": true
+        },
+        {
+         "label": "Flag diffs that touch tests",
+         "keep": true
+        },
+        {
+         "label": "Train directly against the CoT monitor"
+        }
+       ],
+       "keepLabel": "Do"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Stop rule: human-rated faithfulness must stay at or above 88%. Which prompt ships?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Round 30 (judge 8.6)",
+         "why": "78% faithful breaks the stop rule: the judge was rewarding length."
+        },
+        {
+         "text": "Round 10 (judge 7.4)",
+         "why": "90% faithful clears the 88% rule with a better judge score: the team shipped it."
+        },
+        {
+         "text": "Round 0 (judge 6.1)",
+         "why": "Safe, but round 10 keeps 90% faithfulness with a higher score."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "A rising score is not a *better model*.",
+      "sub": "Keep the grader out of reach, use **several signals**, and read twenty raw transcripts before celebrating."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12451,6 +16986,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Sleeper agents: backdoors that survive safety training",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12458,6 +16994,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Alignment faking: behaving differently when you think you are watched",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12465,6 +17002,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Scheming evals: goals, oversight and honest self-reports",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12472,6 +17010,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI control: design for an untrusted model",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12479,6 +17018,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Frontier safety policies: RSP, Preparedness Framework, Frontier Safety Framework",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12486,6 +17026,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "METR: dangerous-capability evals and the task time horizon",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12693,13 +17234,118 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LLM Observability — what to capture and why logs are not enough",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Tracing and Logging — a RAG request as a span tree",
+    "short": {
+     "id": "trace-a-wrong-answer",
+     "title": "Trace a wrong answer in 2 minutes",
+     "beats": [
+      {
+       "type": "retrieve",
+       "kicker": "Rerank span · 140 ms",
+       "head": "The *old policy* ranked first",
+       "query": "What is the refund window for damaged items?",
+       "chunks": [
+        {
+         "text": "pol-2023-v2#4 (2023 policy)",
+         "score": 0.91
+        },
+        {
+         "text": "pol-2025-v5#2 (current policy)",
+         "score": 0.88
+        }
+       ],
+       "k": 1,
+       "sub": "The bot said **30 days**; the policy says 14."
+      },
+      {
+       "type": "flow",
+       "kicker": "One trace, a span per step",
+       "head": "Every step *leaves a record*",
+       "steps": [
+        "embed · 38 ms",
+        "retrieve · 95 ms, top_k=20",
+        "rerank · 140 ms, kept 5",
+        "chat gpt-5-mini · 1.92 s",
+        "guardrail · 40 ms, pass"
+       ],
+       "broken": 1,
+       "sub": "The retrieve filter was only **{tenant: acme}**: superseded versions were never excluded."
+      },
+      {
+       "type": "counter",
+       "kicker": "Scores attach to the trace",
+       "value": 0.41,
+       "decimals": 2,
+       "unit": "faithfulness eval on this trace",
+       "stats": [
+        {
+         "value": -1,
+         "label": "user feedback"
+        },
+        {
+         "value": "2.31 s",
+         "label": "total"
+        }
+       ],
+       "sub": "Diagnosis in **2 minutes**, because the doc ids were on the span."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Logging discipline",
+       "head": "Record *decisions*, not just errors",
+       "items": [
+        {
+         "label": "Doc ids and scores on the retrieve span",
+         "keep": true
+        },
+        {
+         "label": "trace_id in every log line",
+         "keep": true
+        },
+        {
+         "label": "Cache hit, fallback, guardrail block",
+         "keep": true
+        },
+        {
+         "label": "Raw prompt text in plain logs"
+        }
+       ],
+       "keepLabel": "Record"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The answer is wrong, but the generate span shows the model faithfully quoting its context. Look where next?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "The root span latency",
+         "why": "A timeout is an error, not a wrong answer."
+        },
+        {
+         "text": "The retrieve and rerank spans",
+         "why": "Faithful to a wrong context means the context was wrong: check the ids, filters and rerank order."
+        },
+        {
+         "text": "The token usage attributes",
+         "why": "Truncation would show finish_reason=length, not a faithful quote."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Wrong answer? Read the *retrieve span*.",
+      "sub": "One trace per request, a span per step, and **doc ids with scores** on retrieval."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12707,6 +17353,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Token Usage Tracking — per-tenant token and cost attribution",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -12714,6 +17361,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Latency Monitoring — TTFT, TPOT, p95 and SLOs",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12898,13 +17546,134 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Cost Optimization — the levers and their order",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Semantic Caching — reuse answers for similar questions, safely",
+    "short": {
+     "id": "semantic-cache-false-hits",
+     "title": "Semantic caching without wrong answers",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "An HR help bot · 40K questions a day",
+       "value": 31,
+       "suffix": "%",
+       "unit": "of questions would hit the cache",
+       "sub": "A week of logs replayed at similarity threshold **0.95**.",
+       "stats": [
+        {
+         "value": "$50",
+         "label": "saved a day"
+        },
+        {
+         "value": 15,
+         "label": "ms p50 for a hit"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "How a semantic cache answers",
+       "head": "Exact first, *similar* second",
+       "steps": [
+        "Normalise; try the exact hash cache",
+        "Embed the query (1536-d)",
+        "Search scoped by tenant, model, prompt version",
+        "cos ≥ 0.95 and entities match: cached answer",
+        "Otherwise call the LLM and store the result"
+       ]
+      },
+      {
+       "type": "claims",
+       "kicker": "Similar is not the same",
+       "head": "Close vectors, *wrong* answers",
+       "claims": [
+        {
+         "text": "\"forgot password, how to reset\" gets the \"reset my password\" answer",
+         "ok": true
+        },
+        {
+         "text": "\"don't cancel my order\" gets the \"cancel my order\" answer",
+         "ok": false,
+         "note": "cos 0.95"
+        },
+        {
+         "text": "\"parental leave US\" gets the \"parental leave UK\" answer",
+         "ok": false,
+         "note": "cos 0.94"
+        }
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "400 labelled query pairs",
+       "head": "Pick the threshold on *false hits*",
+       "rungs": [
+        {
+         "label": "Threshold 0.93",
+         "amount": 3.2
+        },
+        {
+         "label": "Threshold 0.95",
+         "amount": 0.6
+        }
+       ],
+       "unit": "% false hits",
+       "sub": "At **0.97** the hit rate fell to 18%. They chose 0.95 plus a rule that numbers and countries must match."
+      },
+      {
+       "type": "toggles",
+       "kicker": "What may be served from cache",
+       "head": "Some answers are *never* shareable",
+       "items": [
+        {
+         "label": "FAQ-style answers, scoped and with a TTL",
+         "keep": true
+        },
+        {
+         "label": "\"What's my balance?\""
+        },
+        {
+         "label": "Tool-derived answers"
+        },
+        {
+         "label": "Tenant A's answer to tenant B"
+        }
+       ],
+       "keepLabel": "Cache"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Hit rate is 45% and wrong-answer complaints rose after launch. Best first diagnostic?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Lower the threshold to raise the hit rate",
+         "why": "That serves even more false hits."
+        },
+        {
+         "text": "Label a sample of hits near the threshold",
+         "why": "It measures the false-hit rate and shows the pattern (negations, entities, staleness) before you pick a fix."
+        },
+        {
+         "text": "Shorten the TTL to one minute",
+         "why": "Staleness is only one cause; changing TTL blindly may not touch the real one."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Tune for *false hits*, not hit rate.",
+      "sub": "Exact cache first, semantic second, **scoped by tenant**, with TTL and doc-based invalidation."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12912,6 +17681,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prompt Caching — provider-side prefix caching and cache-friendly prompts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -12919,6 +17689,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "LLM FinOps — unit economics, attribution, budgets and forecasts",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13134,13 +17905,118 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Rate Limiting — token buckets for RPM and TPM",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Retries and Timeouts — backoff with jitter, Retry-After and streaming idle timeouts",
+    "short": {
+     "id": "one-click-eighteen-calls",
+     "title": "One click, 18 provider calls",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "SDK retries 2× · your code 3× · gateway 3×",
+       "value": 18,
+       "unit": "calls from one user click",
+       "sub": "Pick **one layer** to own retries and cap retry traffic (e.g. ≤ 10% of requests)."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Classify errors first",
+       "head": "Retry only the *transient*",
+       "items": [
+        {
+         "label": "429 rate limit",
+         "keep": true
+        },
+        {
+         "label": "503 / 529 overloaded",
+         "keep": true
+        },
+        {
+         "label": "ECONNRESET",
+         "keep": true
+        },
+        {
+         "label": "400 bad request"
+        },
+        {
+         "label": "401 / 403 auth"
+        },
+        {
+         "label": "413 / 422 too large or invalid"
+        }
+       ],
+       "keepLabel": "RETRY"
+      },
+      {
+       "type": "ladder",
+       "kicker": "Base 500 ms · full jitter · 5 attempts",
+       "head": "Retry-After *wins*",
+       "rungs": [
+        {
+         "label": "After 429, retry-after: 7",
+         "amount": 7
+        },
+        {
+         "label": "After 503: random(0, 1 s)",
+         "amount": 0.6
+        },
+        {
+         "label": "After ECONNRESET: random(0, 2 s)",
+         "amount": 1.4
+        }
+       ],
+       "unit": "s waited",
+       "sub": "Attempt 4 succeeds: **≈ 9.0 s** of extra latency."
+      },
+      {
+       "type": "flow",
+       "kicker": "Streaming · TTFT normally 800 ms",
+       "head": "A stream that *stalls*",
+       "steps": [
+        "120 tokens arrive",
+        "Then nothing",
+        "With a 20 s idle timeout: abort at +20 s and retry",
+        "Without it: hung until the 10-minute SDK default"
+       ],
+       "broken": 1
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Which response should NOT be retried automatically?",
+       "answer": 2,
+       "options": [
+        {
+         "text": "429 with retry-after: 3",
+         "why": "A capacity signal: retry after the wait."
+        },
+        {
+         "text": "529 overloaded_error",
+         "why": "A capacity signal, worth retrying with backoff."
+        },
+        {
+         "text": "400 invalid_request_error: max_tokens exceeds model limit",
+         "why": "A 400 is deterministic: the same request fails again, wasting time and quota."
+        },
+        {
+         "text": "503 service unavailable",
+         "why": "Transient, worth retrying with backoff."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Retry the transient, *with jitter*.",
+      "sub": "Respect **Retry-After**, set first-token and idle timeouts, and let one layer own retries."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -13148,6 +18024,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Async Processing — 202 + job id, polling, webhooks and SSE for long LLM tasks",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13155,6 +18032,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Background Jobs and Queues — BullMQ workers, concurrency, retries and DLQs",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13339,7 +18217,121 @@ export const TOPIC_INDEX: TopicMeta[] = [
   "sections": [
    {
     "heading": "Production Deployment — versioning, blue/green, canaries with eval gates and feature flags",
+    "short": {
+     "id": "prompt-canary-auto-rollback",
+     "title": "A prompt canary that rolled itself back",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "Support bot · prompt v15",
+       "head": "The gate fails at *25%*",
+       "steps": [
+        "CI eval on 600 golden cases: pass",
+        "Canary 5% for 24 h: pass",
+        "Promote to 25%",
+        "Escalation to human: 7.0% → 9.4%",
+        "Automated rollback to v14 in 40 s"
+       ],
+       "broken": 3,
+       "sub": "Only on the **\"billing\"** intent (p < 0.01)."
+      },
+      {
+       "type": "claims",
+       "kicker": "Offline gate · 600 golden cases",
+       "head": "v15 passes *CI*",
+       "claims": [
+        {
+         "text": "Resolution 84.1% → 85.0%",
+         "ok": true
+        },
+        {
+         "text": "Faithfulness 0.93 → 0.92",
+         "ok": true,
+         "note": "within the −0.02 tolerance"
+        },
+        {
+         "text": "JSON validity 99.8%",
+         "ok": true
+        }
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "Online canary · 5% for 24 h",
+       "prefix": "≈ ",
+       "value": 9000,
+       "unit": "conversations",
+       "stats": [
+        {
+         "value": "−11%",
+         "label": "cost per request"
+        },
+        {
+         "value": "−300 ms",
+         "label": "p95 latency"
+        }
+       ],
+       "sub": "Thumbs-down **3.9% vs 3.6%** control: within noise. Promote to 25%."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Version the whole behaviour",
+       "head": "A release is *more than code*",
+       "items": [
+        {
+         "label": "Prompt template id + version",
+         "keep": true
+        },
+        {
+         "label": "Model snapshot (dated id)",
+         "keep": true
+        },
+        {
+         "label": "Sampling params and tool schemas",
+         "keep": true
+        },
+        {
+         "label": "Retrieval index version",
+         "keep": true
+        },
+        {
+         "label": "Guardrail policy version",
+         "keep": true
+        },
+        {
+         "label": "A \"latest\" model alias"
+        }
+       ],
+       "keepLabel": "PINNED"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Production calls a model alias that points to \"latest\". Main deployment risk?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Higher latency from an extra alias lookup",
+         "why": "That is not the risk; behaviour is."
+        },
+        {
+         "text": "The provider can change the model with no deploy on your side",
+         "why": "An alias moves on a new snapshot, so behaviour changes without passing your evals and canary."
+        },
+        {
+         "text": "Aliases always cost more per token",
+         "why": "Cost is not the issue; ungated behaviour change is."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Every prompt edit is a *release*.",
+      "sub": "Offline eval gate in CI, online canary gate in production, **instant rollback** by flag."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13347,6 +18339,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Scalability and High Availability — multi-provider failover, regions and GPU autoscaling",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13354,6 +18347,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Model Drift Monitoring — input drift, output quality drift and provider model updates",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13539,13 +18533,113 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Data Pipelines — CDC → parse → chunk → embed → upsert",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Incremental Indexing — content hashes, chunk diffs and tombstones",
+    "short": {
+     "id": "incremental-index-hash-diff",
+     "title": "Re-embed 300× less every night",
+     "beats": [
+      {
+       "type": "counter",
+       "kicker": "Nightly sync · 200,000 docs",
+       "prefix": "~",
+       "value": 300,
+       "suffix": "×",
+       "unit": "fewer tokens embedded",
+       "stats": [
+        {
+         "value": "1.7M",
+         "label": "tokens, vs 500M for a full rebuild"
+        },
+        {
+         "value": "3 min",
+         "label": "runtime, vs 9 h"
+        }
+       ]
+      },
+      {
+       "type": "flow",
+       "kicker": "Mechanics",
+       "head": "Hash, *diff*, embed only what changed",
+       "steps": [
+        "Normalise: strip timestamps and tracking params",
+        "Document hash unchanged → skip",
+        "New chunk hash → embed + upsert",
+        "Old chunk missing → delete (tombstone)",
+        "Record manager stores what is indexed"
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "3,100 changed docs · 18,600 chunks",
+       "head": "Most chunks *did not change*",
+       "rungs": [
+        {
+         "label": "Unchanged, kept",
+         "amount": 14550
+        },
+        {
+         "label": "Stale, deleted",
+         "amount": 3950
+        },
+        {
+         "label": "New or changed, embedded",
+         "amount": 4050
+        }
+       ],
+       "unit": "chunks"
+      },
+      {
+       "type": "claims",
+       "kicker": "Gotcha: boundary shift",
+       "head": "Fixed-size chunks *all move*",
+       "claims": [
+        {
+         "text": "Heading-based chunking",
+         "ok": true,
+         "note": "3,950 stale chunks"
+        },
+        {
+         "text": "Fixed-size chunking",
+         "ok": false,
+         "note": "~15,000 would have changed"
+        }
+       ],
+       "sub": "Insert one paragraph near the top and every later boundary **shifts**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "After switching to hash-based indexing, 100% of documents look changed every night. Likely cause?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "sha256 is non-deterministic",
+         "why": "sha256 is deterministic."
+        },
+        {
+         "text": "Volatile parts (timestamps, tracking ids) are hashed without normalising",
+         "why": "A \"Generated at 02:00\" footer changes the bytes, so the hash changes every crawl."
+        },
+        {
+         "text": "Chunk overlap is too large",
+         "why": "Overlap affects chunks, not whether the document hash changes."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Same fingerprint? *Skip it*.",
+      "sub": "Normalise, hash, diff chunks, and include **pipeline versions** in the hash."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13553,6 +18647,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Data Versioning — manifests, lineage and index aliases",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13560,6 +18655,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Embedding Migration — blue-green re-embedding with dual-write and shadow evals",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13567,6 +18663,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Synthetic Data Generation — Q&A for evals and fine-tuning, with quality filtering",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13757,6 +18854,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Transformer Internals — embeddings, RoPE, residual stream, norms and the MLP",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13764,6 +18862,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Attention Mechanisms — scaled dot-product, causal masks, MHA/MQA/GQA and FlashAttention",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13771,13 +18870,124 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Scaling Laws — compute-optimal training, over-training and test-time compute",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Mixture of Experts — routers, top-k experts, total vs active parameters",
+    "short": {
+     "id": "mixture-of-experts-two-of-eight",
+     "title": "Mixture of Experts: 2 of 8",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "Mixtral 8x7B · one token, one layer",
+       "head": "The router picks *2 of 8* experts",
+       "cells": 8,
+       "hot": 2,
+       "caption": "Top-2 experts run; the other 6 sit idle",
+       "sub": "Like hospital triage: each patient sees **two specialists**, not every doctor."
+      },
+      {
+       "type": "flow",
+       "kicker": "Per token, per layer",
+       "head": "Route, run, *blend*",
+       "steps": [
+        "Router logits → softmax",
+        "Pick the top-k experts",
+        "Run the token through only those",
+        "Gate-weighted sum into the residual stream"
+       ],
+       "sub": "Attention, norms and embeddings stay **dense and shared**."
+      },
+      {
+       "type": "ladder",
+       "kicker": "Mixtral 8x7B parameters",
+       "head": "\"8x7B\" is *not* 56B",
+       "rungs": [
+        {
+         "label": "Total",
+         "amount": 46.7
+        },
+        {
+         "label": "Active per token",
+         "amount": 12.9
+        }
+       ],
+       "unit": "B",
+       "stats": [
+        {
+         "value": "671B",
+         "label": "DeepSeek-V3 total"
+        },
+        {
+         "value": "37B",
+         "label": "DeepSeek-V3 active"
+        }
+       ],
+       "sub": "Only the MLPs are duplicated."
+      },
+      {
+       "type": "counter",
+       "kicker": "The catch",
+       "value": 93,
+       "prefix": "~",
+       "unit": "GB of Mixtral weights in bf16",
+       "sub": "Compute follows **active** parameters; memory follows **total**. Still ~23 GB at 4-bit."
+      },
+      {
+       "type": "toggles",
+       "kicker": "Router collapse",
+       "head": "Keep every expert *in the game*",
+       "items": [
+        {
+         "label": "A few experts get most tokens"
+        },
+        {
+         "label": "Auxiliary balance loss",
+         "keep": true
+        },
+        {
+         "label": "Expert capacity limit",
+         "keep": true
+        },
+        {
+         "label": "Bias-based routing (DeepSeek-V3)",
+         "keep": true
+        }
+       ],
+       "keepLabel": "BALANCE"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Dense 13B → Mixtral 8x7B. What happens to compute and weight memory?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Compute stays near 13B; memory grows ~3.6×",
+         "why": "~12.9B active parameters set the FLOPs, but all 46.7B must sit in memory."
+        },
+        {
+         "text": "Both stay about the same",
+         "why": "Only compute follows active parameters; every expert must still be loaded."
+        },
+        {
+         "text": "Both grow about 8×",
+         "why": "Each token runs only 2 experts, and attention and embeddings are shared."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Pay compute for *active*, memory for *total*.",
+      "sub": "MoE wins on **FLOPs per token**, not on memory."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -13785,6 +18995,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Beyond Full Attention — KV-cache sizing, sliding windows, hybrids and state-space models",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14027,6 +19238,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "GPU and Inference Optimization — prefill vs decode and the memory-bandwidth wall",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14034,13 +19246,116 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "KV Cache — size formula, PagedAttention, prefix caching and KV quantisation",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Speculative Decoding — draft and verify, acceptance rate, EAGLE and Medusa",
+    "short": {
+     "id": "speculative-decoding-draft-and-verify",
+     "title": "Draft cheap, verify once",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "\"The capital of France is\"",
+       "head": "The target checks *4 guesses* in one pass",
+       "claims": [
+        {
+         "text": "Paris",
+         "ok": true
+        },
+        {
+         "text": ".",
+         "ok": true
+        },
+        {
+         "text": "It",
+         "ok": true
+        },
+        {
+         "text": "is",
+         "ok": false,
+         "note": "target wants \"has\""
+        }
+       ],
+       "sub": "Emit **\"Paris . It has\"**: 3 accepted + 1 correction = 4 tokens for ~1 target pass."
+      },
+      {
+       "type": "flow",
+       "kicker": "Speculative decoding",
+       "head": "A junior drafts, a senior *edits*",
+       "steps": [
+        "A cheap drafter proposes γ = 4 tokens",
+        "The target runs ONE forward pass over all 4",
+        "Keep the accepted prefix",
+        "Fix the first wrong token, or get a bonus one"
+       ],
+       "sub": "Decode is memory-bound, so checking 5 tokens costs about the same as generating 1."
+      },
+      {
+       "type": "counter",
+       "kicker": "70B target, EAGLE-style drafter",
+       "value": 2.8,
+       "decimals": 1,
+       "suffix": "×",
+       "unit": "faster on chat traffic (α = 0.8)",
+       "sub": "**3.36** tokens per target pass; ITL 40 ms → ~14 ms per token."
+      },
+      {
+       "type": "ladder",
+       "kicker": "It depends on acceptance and batch",
+       "head": "Same trick, *very* different gains",
+       "rungs": [
+        {
+         "label": "Chat, α = 0.8, γ = 4",
+         "amount": 2.8
+        },
+        {
+         "label": "Creative, α = 0.55, γ = 4",
+         "amount": 1.76
+        },
+        {
+         "label": "Creative, α = 0.55, γ = 8",
+         "amount": 1.58
+        },
+        {
+         "label": "Chat at batch 128",
+         "amount": 1.1
+        }
+       ],
+       "unit": "× speedup",
+       "sub": "Long drafts are wasted when acceptance is low; at large batch the GPU is near **compute-bound**."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "At batch 128 the measured gain fell to ~1.1×. What did the team do?",
+       "answer": 0,
+       "options": [
+        {
+         "text": "Enable speculation only below batch 32",
+         "why": "It helps when decode is memory-bound, at low batch; at large batch verifying rejected tokens wastes FLOPs."
+        },
+        {
+         "text": "Raise γ to 8",
+         "why": "Longer drafts only help when acceptance is high; at α = 0.55, γ = 8 was worse than γ = 4."
+        },
+        {
+         "text": "Accept lower quality for the speed",
+         "why": "There is no quality trade: verification keeps the target's exact output distribution."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Guess *cheap*, verify in one pass.",
+      "sub": "Exactly the target's output, fewer target passes: best at **low batch**, with γ tuned to the acceptance rate."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -14048,6 +19363,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Distributed Inference — tensor, pipeline and expert parallelism, and disaggregated prefill/decode",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 0
     }
@@ -14234,6 +19550,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Application Architecture — the anatomy of a production LLM app",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14241,6 +19558,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Layered AI Architecture — experience, orchestration, knowledge, model, platform",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14248,13 +19566,96 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Compound AI Systems — many components beat one bigger model",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "LLM Gateway — one governed front door to every model",
+    "short": {
+     "id": "llm-gateway-one-request",
+     "title": "One request through the LLM gateway",
+     "beats": [
+      {
+       "type": "flow",
+       "kicker": "Team search-ux · model: default-chat",
+       "head": "One governed *front door*",
+       "steps": [
+        "Auth: virtual key → team, budget $4,000",
+        "Quota: 2,150 tokens, within 200K TPM",
+        "Safety: PII sanitizer redacts the email",
+        "Routing: alias → primary provider",
+        "Stream back; log tokens, cost, latency"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "search-ux this month",
+       "prefix": "$",
+       "value": 3910,
+       "unit": "spent of a $4,000 budget",
+       "sub": "Past $4,000 the key reroutes to a **cheaper model** instead of returning 429."
+      },
+      {
+       "type": "toggles",
+       "kicker": "When a dependency is down",
+       "head": "Safety fails *closed*",
+       "items": [
+        {
+         "label": "PII redaction",
+         "keep": true
+        },
+        {
+         "label": "Content filters",
+         "keep": true
+        },
+        {
+         "label": "Cache"
+        },
+        {
+         "label": "Logging"
+        }
+       ],
+       "keepLabel": "FAIL CLOSED",
+       "sub": "Cache and logging can **fail open**."
+      },
+      {
+       "type": "counter",
+       "kicker": "Design rules",
+       "prefix": "< ",
+       "value": 20,
+       "unit": "ms p99 overhead",
+       "sub": "Stateless, horizontally scaled, **streaming** pass-through."
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "The PII-redaction service times out on a request from an HR app. What should the gateway do?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Forward it unredacted to stay available",
+         "why": "Sending raw PII to an external provider is a compliance breach."
+        },
+        {
+         "text": "Fail closed: reject or queue the request",
+         "why": "Redaction is a safety control, and safety controls fail closed."
+        },
+        {
+         "text": "Serve a semantic-cache hit from another tenant",
+         "why": "Cross-tenant cache serving would be a separate leak."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "One *governed* front door.",
+      "sub": "Auth, quotas, routing, reliability, caching, safety and logging in **one place**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14438,6 +19839,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Hub-and-Spoke Architecture — one hub governs many specialised spokes",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14445,13 +19847,108 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Orchestrator-Worker Pattern — decompose at runtime, fan out, synthesise",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Router Pattern — classify once, dispatch to the right specialist",
+    "short": {
+     "id": "router-confidence-default-route",
+     "title": "A router needs an \"other\" route",
+     "beats": [
+      {
+       "type": "grid",
+       "kicker": "Support inbox · 50K messages/day",
+       "head": "Send the easy ones *small*",
+       "cells": 25,
+       "hot": 18,
+       "caption": "72% of traffic goes to a small model",
+       "sub": "Cost per message **$0.011 → $0.004** (illustrative), CSAT flat."
+      },
+      {
+       "type": "claims",
+       "kicker": "Embedding router · threshold 0.7",
+       "head": "Confident, or *default*?",
+       "claims": [
+        {
+         "text": "\"I was charged twice in March\" → billing",
+         "ok": true,
+         "note": "cosine 0.83"
+        },
+        {
+         "text": "\"Your app ate my homework lol\" → bug",
+         "ok": false,
+         "note": "0.58 < 0.7: default route"
+        }
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Router implementations, cheapest first",
+       "head": "Cascade *cheap* before expensive",
+       "rungs": [
+        {
+         "label": "Rules / regex",
+         "amount": 1
+        },
+        {
+         "label": "Embedding nearest-centroid",
+         "amount": 20
+        },
+        {
+         "label": "Small fine-tuned classifier",
+         "amount": 50
+        },
+        {
+         "label": "LLM with structured output",
+         "amount": 800
+        }
+       ],
+       "unit": "ms (upper end)"
+      },
+      {
+       "type": "counter",
+       "kicker": "Confusion matrix: \"cancel\" vs \"billing\"",
+       "value": 96,
+       "suffix": "%",
+       "unit": "router accuracy after 40 more labelled examples",
+       "stats": [
+        {
+         "value": "94%",
+         "label": "before, on 1,000 labelled messages"
+        }
+       ]
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "A router forces every message into 5 intents. New launches cause \"wrong specialist\" answers. Root-cause fix?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Use a larger LLM for every route",
+         "why": "Bigger handler models do not fix misrouting."
+        },
+        {
+         "text": "Add an \"other\" route with a threshold, and cluster that traffic for new intents",
+         "why": "Unknown intents get a place to go instead of being force-fitted."
+        },
+        {
+         "text": "Increase temperature on the router",
+         "why": "That only adds noise."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Route plus *confidence*.",
+      "sub": "Keep a **default/other** route; evaluate the router separately from the handlers."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14459,6 +19956,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Pipeline (Prompt Chaining) Pattern — fixed steps with gates in between",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14466,6 +19964,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Blackboard Architecture — specialists collaborate on a shared workspace",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14473,6 +19972,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Event-Driven Agent Architecture — agents as consumers and producers on Kafka or queues",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14480,6 +19980,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Guardrail Sidecar Pattern — policy checks in a co-located, independently deployed process",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14670,6 +20171,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Enterprise RAG Platform — one governed retrieval platform for every team",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14677,13 +20179,112 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "AI Copilot Architecture — in-app context, a fast path and a slow path",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Multi-Tenant Agent Platform — many customers, shared infrastructure, zero cross-talk",
+    "short": {
+     "id": "multi-tenant-noisy-neighbour",
+     "title": "Noisy neighbours on an agent platform",
+     "beats": [
+      {
+       "type": "race",
+       "kicker": "09:00 · one tenant starts a 40,000-document job",
+       "head": "p95 latency for *everyone else*",
+       "lanes": [
+        {
+         "label": "Pre-fairness incident: 11 s",
+         "seconds": 11,
+         "tone": "pink"
+        },
+        {
+         "label": "Weighted fair queuing: 3.1 s",
+         "seconds": 3.1,
+         "tone": "good"
+        }
+       ],
+       "seconds": 12,
+       "sub": "Per-tenant limit: **200K TPM and 20 concurrent runs**."
+      },
+      {
+       "type": "claims",
+       "kicker": "Pen-test",
+       "head": "\"Search *all* customers' tickets\"",
+       "claims": [
+        {
+         "text": "Tenant id from the signed session",
+         "ok": true,
+         "note": "results stay in the tenant"
+        },
+        {
+         "text": "Tenant id filled in by the model",
+         "ok": false,
+         "note": "an injection can pass another tenant’s id"
+        }
+       ]
+      },
+      {
+       "type": "toggles",
+       "kicker": "The isolation checklist",
+       "head": "Scope *everything* by tenant",
+       "items": [
+        {
+         "label": "Identity, data, tools and credentials",
+         "keep": true
+        },
+        {
+         "label": "Sandboxes, memory and cache keys",
+         "keep": true
+        },
+        {
+         "label": "Quotas, traces and billing",
+         "keep": true
+        },
+        {
+         "label": "A shared semantic cache"
+        }
+       ],
+       "keepLabel": "SCOPED"
+      },
+      {
+       "type": "counter",
+       "kicker": "Runaway loop guard · max 25 tool calls · $2 cap",
+       "prefix": "$",
+       "value": 1.98,
+       "decimals": 2,
+       "unit": "where a looping agent stopped"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "An agent tool takes a tenant_id argument the model fills from the conversation. The risk?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "Higher token usage",
+         "why": "Token cost is minor next to the real risk."
+        },
+        {
+         "text": "A prompt injection makes the model pass another tenant’s id",
+         "why": "Model-controlled tenant ids turn every prompt injection into a cross-tenant breach."
+        },
+        {
+         "text": "None, if the system prompt says to use the right tenant",
+         "why": "System-prompt instructions are not a security boundary."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Tenant id comes from the *session*.",
+      "sub": "Never from model output; fair queuing and loop caps protect **every** tenant."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14691,6 +20292,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Control Plane vs Data Plane for AI — decide slowly, serve fast",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14875,6 +20477,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Frame the outcome before the output",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14882,6 +20485,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Map the workflow people actually perform",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 2
     }
@@ -14889,6 +20493,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Assumptions and the risk register",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14896,13 +20501,112 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "The smallest testable slice",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
    },
    {
     "heading": "Success metrics: offline and online",
+    "short": {
+     "id": "pilot-pass-rules-decided-first",
+     "title": "Decide pass or fail before you measure",
+     "beats": [
+      {
+       "type": "claims",
+       "kicker": "Order-status tickets · rules written in advance",
+       "head": "Did the pilot *pass*?",
+       "claims": [
+        {
+         "text": "Correctness ≥ 0.85",
+         "ok": true,
+         "note": "0.88 on a 300-ticket replay"
+        },
+        {
+         "text": "0 guardrail breaches",
+         "ok": true,
+         "note": "0 refund promises"
+        },
+        {
+         "text": "Cost per resolution ≤ $0.80",
+         "ok": true,
+         "note": "≈ $0.80"
+        }
+       ],
+       "sub": "Pass on every pre-set rule: **expand to 20 agents**."
+      },
+      {
+       "type": "flow",
+       "kicker": "Goal → Question → Metric",
+       "head": "Start from the *decision*",
+       "steps": [
+        "Goal: resolve order-status tickets faster",
+        "Questions that tell you it is met",
+        "The fewest metrics that answer them",
+        "Each with direction, threshold, window and source"
+       ]
+      },
+      {
+       "type": "counter",
+       "kicker": "Online pilot · 2 weeks · 5 agents",
+       "value": 61,
+       "suffix": "%",
+       "unit": "of 1,140 eligible tickets: draft sent",
+       "stats": [
+        {
+         "value": "9 → 4",
+         "label": "median handling, minutes"
+        },
+        {
+         "value": "6.1%",
+         "label": "reopen rate vs 5.8% (noise)"
+        }
+       ]
+      },
+      {
+       "type": "ladder",
+       "kicker": "Cost per resolved ticket",
+       "head": "Count the *human review* too",
+       "rungs": [
+        {
+         "label": "Fully manual reply",
+         "amount": 4.5
+        },
+        {
+         "label": "AI draft + 1.5 min review at $0.50/min",
+         "amount": 0.8
+        }
+       ],
+       "unit": "$ per ticket"
+      },
+      {
+       "type": "quiz",
+       "kicker": "Your turn",
+       "head": "Handling time fell 50% in the pilot, but tier-2 escalations doubled. What caught it?",
+       "answer": 1,
+       "options": [
+        {
+         "text": "An outcome metric",
+         "why": "The outcome metric, handling time, looked great; it hid the problem."
+        },
+        {
+         "text": "A counter-metric",
+         "why": "It watches for cost pushed elsewhere: the work moved from tier 1 to tier 2."
+        },
+        {
+         "text": "An offline eval",
+         "why": "Escalations are a real workflow effect only online signals show."
+        }
+       ]
+      }
+     ],
+     "takeaway": {
+      "head": "Decide *before* you measure.",
+      "sub": "Write pass, fail and ambiguous rules first, or the threshold drifts to **protect the build**."
+     }
+    },
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14910,6 +20614,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "Prototype, pilot, production: stage gates",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }
@@ -14917,6 +20622,7 @@ export const TOPIC_INDEX: TopicMeta[] = [
    {
     "heading": "The feedback ratchet",
     "exercise": true,
+    "steps": true,
     "quickCheck": {
      "correct": 1
     }

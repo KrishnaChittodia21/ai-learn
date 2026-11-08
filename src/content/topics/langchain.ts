@@ -35,6 +35,89 @@ const topic: Topic = {
     // ───────────────────────── 1 ─────────────────────────
     {
       heading: 'LangChain Fundamentals — packages, chat models, messages and initChatModel',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'server', label: 'Your code', sub: 'model.invoke(msgs)', x: 110, y: 150 },
+          { id: 'init', kind: 'tool', label: 'initChatModel', sub: 'provider:model', x: 340, y: 150 },
+          { id: 'openai', kind: 'llm', label: 'OpenAI', sub: 'gpt-5-mini', x: 570, y: 70 },
+          { id: 'anthropic', kind: 'llm', label: 'Anthropic', sub: 'claude-sonnet-5-5', x: 570, y: 230 },
+          { id: 'msg', kind: 'data', label: 'AIMessage', sub: 'text, usage_metadata', x: 790, y: 70 },
+          { id: 'dash', kind: 'metric', label: 'Cost dashboard', sub: 'both vendors', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'One socket for every plug',
+            lines: [
+              'Each provider has its own request, tool-call and streaming format; LangChain gives every model the same socket.',
+              "`initChatModel('openai:gpt-5-mini')` builds a model from a `provider:model` string.",
+              'Every chat model has `invoke`, `stream`, `batch`, `bindTools` and `withStructuredOutput`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'init'], label: 'invoke' },
+              { say: 1 },
+              { send: ['init', 'openai'], label: 'request' },
+              { say: 2 },
+              { send: ['openai', 'msg'], label: 'AIMessage', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Swap the vendor by config',
+            lines: [
+              'A provider incident: ops sets `LLM_MODEL=anthropic:claude-sonnet-5-5` and redeploys.',
+              'The same `model.invoke(messages)` call now hits Anthropic. No code change.',
+            ],
+            script: [
+              { say: 0 },
+              { down: 'openai' },
+              { badge: 'init', text: 'env var changed' },
+              { say: 1 },
+              { send: ['app', 'init'], label: 'invoke' },
+              { send: ['init', 'anthropic'], label: 'request' },
+              { send: ['anthropic', 'msg'], label: 'AIMessage', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where are the tokens?',
+            lines: ['Typed messages: System, Human, AI (with `tool_calls`) and Tool.'],
+            task: {
+              type: 'pick',
+              question: 'Where do the token counts come back, in the same shape for every provider?',
+              answer: 'msg',
+              hints: {
+                app: 'Your code reads the counts; it does not produce them.',
+                init: 'initChatModel builds the model; the response carries the usage.',
+                dash: 'The dashboard consumes usage; it comes from the response message.',
+              },
+            },
+            solved: '`AIMessage.usage_metadata`: 1214 in, 31 out, 1245 total. One shape, so one cost dashboard covers both vendors.',
+            then: [{ send: ['msg', 'dash'], label: 'usage' }, { badge: 'dash', text: '≈ $0.0041', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: SDK or LangChain?',
+            lines: [
+              'Start with the SDK for a single call; reach for LangChain once you write your own adapters and tool loops.',
+            ],
+            task: {
+              type: 'choose',
+              question: 'One provider, one call, and you want new API parameters on day one. Which?',
+              options: [
+                { text: 'The raw SDK' },
+                {
+                  text: 'LangChain',
+                  why: 'LangChain pays off with several providers or fallbacks, many integrations, agents and free tracing.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Raw SDK for one simple call; LangChain for portability, integrations or agents.',
+          },
+        ],
+      },
       body: `**Intuition:** LangChain is a universal travel adapter for LLMs. Each provider has its own plug shape (request format, tool-call format, streaming events); LangChain gives every model the same socket so the rest of your code does not care which one is plugged in.
 
 **The v1 package layout**
@@ -191,6 +274,83 @@ export async function ask(question: string) {
     // ───────────────────────── 2 ─────────────────────────
     {
       heading: 'Prompt Templates and Output Parsers — ChatPromptTemplate, MessagesPlaceholder, partials and structured output',
+      steps: {
+        actors: [
+          { id: 'vars', kind: 'data', label: 'Variables', sub: '{ history, ticket }', x: 110, y: 70 },
+          { id: 'tpl', kind: 'document', label: 'Prompt template', sub: 'ChatPromptTemplate', x: 340, y: 70 },
+          { id: 'msgs', kind: 'document', label: 'Messages', sub: 'system + history', x: 570, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Model', sub: 'withStructuredOutput', x: 790, y: 70 },
+          { id: 'raw', kind: 'data', label: 'raw message', sub: 'includeRaw: true', x: 450, y: 230 },
+          { id: 'out', kind: 'data', label: 'Triage object', sub: 'category, priority', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A form letter with blanks',
+            lines: [
+              '`ChatPromptTemplate.fromMessages` builds messages; `{var}` is filled at `invoke` time.',
+              '`partial()` pre-fills `{product}` and `{today}` once, at startup.',
+              "`MessagesPlaceholder('history')` injects the 2 earlier turns: 4 messages in all.",
+            ],
+            script: [
+              { say: 0 },
+              { send: ['vars', 'tpl'], label: 'ticket' },
+              { say: 1 },
+              { badge: 'tpl', text: 'partial: today' },
+              { say: 2 },
+              { send: ['tpl', 'msgs'], label: '4 messages' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A typed object out',
+            lines: [
+              '`model.withStructuredOutput(Triage)` uses native JSON schema / tool calling.',
+              "It returns `{ category: 'billing', priority: 'high', orderId: '7781' }`, typed and validated.",
+            ],
+            script: [
+              { say: 0 },
+              { send: ['msgs', 'model'], label: 'invoke' },
+              { say: 1 },
+              { send: ['model', 'out'], label: 'Triage', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: stop the parse failures',
+            lines: ['Running `JSON.parse` on free text failed on 3.8% of 10K tickets (code fences, trailing commentary).'],
+            task: {
+              type: 'choose',
+              question: 'What is the default fix when code consumes the answer?',
+              options: [
+                { text: '`withStructuredOutput` with a zod schema' },
+                { text: '`StringOutputParser`', why: 'That returns plain text; your code still has to parse it.' },
+                { text: '`JsonOutputParser`', why: 'That streams loose JSON to a UI; it does not validate a schema.' },
+              ],
+              answer: 0,
+            },
+            solved: 'With structured output and a nullable `orderId`, failures dropped to 0.1%.',
+            then: [{ send: ['model', 'out'], label: 'Triage', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: debug the last 0.1%',
+            lines: ['The remaining failures were truncated outputs.'],
+            task: {
+              type: 'choose',
+              question: 'How do you see the original message when parsing fails?',
+              options: [
+                { text: '`withStructuredOutput(schema, { includeRaw: true })`' },
+                { text: 'Double the braces in the template', why: '`{{ }}` is for literal braces in a template.' },
+                { text: 'Add a `MessagesPlaceholder`', why: 'That injects message arrays into the prompt.' },
+              ],
+              answer: 0,
+            },
+            solved: '`includeRaw: true` returns `{ raw, parsed }`, so you can log the raw message.',
+            then: [{ send: ['model', 'raw'], label: 'raw' }, { badge: 'raw', text: 'truncated', tone: 'miss' }],
+          },
+        ],
+      },
       body: `**Intuition:** a prompt template is a form letter with blanks; an output parser is the clerk who reads the reply and fills a database row. Together they turn "string in, string out" into "typed object in, typed object out".
 
 **Prompt templates (\`@langchain/core/prompts\`)**
@@ -344,6 +504,98 @@ export async function extract(text: string) {
     // ───────────────────────── 3 ─────────────────────────
     {
       heading: 'LCEL and Runnables — pipe composition, parallel branches, retries, fallbacks and config',
+      steps: {
+        actors: [
+          { id: 'input', kind: 'data', label: 'Ticket T-91', sub: '{ id, text }', x: 110, y: 150 },
+          { id: 'assign', kind: 'tool', label: 'Passthrough', sub: '.assign({ … })', x: 340, y: 150 },
+          { id: 'triage', kind: 'llm', label: 'triageChain', sub: 'branch', x: 570, y: 70 },
+          { id: 'lang', kind: 'tool', label: 'detectLang', sub: 'branch', x: 570, y: 230 },
+          { id: 'out', kind: 'data', label: 'Output', sub: '+ triage, lang', x: 790, y: 70 },
+          { id: 'backup', kind: 'llm', label: 'Fallback chain', sub: 'other provider', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Keep the input, add keys',
+            lines: [
+              'Every block is a **Runnable** with `invoke`, `batch` and `stream`, so they snap together with `.pipe()`.',
+              '`RunnablePassthrough.assign` keeps the input object…',
+              '…and adds keys computed by branches running in parallel.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['input', 'assign'], label: 'T-91' },
+              { say: 1 },
+              { badge: 'assign', text: 'keeps id, text' },
+              { say: 2 },
+              { send: ['assign', 'triage'], label: 'text' },
+              { send: ['assign', 'lang'], label: 'text' },
+              { send: ['triage', 'out'], label: 'triage', tone: 'ok' },
+              { send: ['lang', 'out'], label: "lang: 'fr'", tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: retry or fallback?',
+            lines: ['`.withRetry` re-runs the same runnable; `.withFallbacks` tries a different one.'],
+            task: {
+              type: 'choose',
+              question: 'The primary provider is down for 6 minutes. What keeps tickets flowing?',
+              options: [
+                { text: '`.withFallbacks([sameChainOnOtherProvider])`' },
+                {
+                  text: '`.withRetry({ stopAfterAttempt: 3 })`',
+                  why: 'Retrying the same provider during an outage fails again; retry suits transient errors.',
+                },
+                { text: '`.withConfig({ runName, tags })`', why: 'Config labels traces; it does not handle errors.' },
+              ],
+              answer: 0,
+            },
+            solved: '37 tickets went to the backup; retry absorbed 11 transient 529 errors.',
+            then: [
+              { down: 'triage' },
+              { send: ['assign', 'backup'], label: 'fallback', curve: true },
+              { send: ['backup', 'out'], label: 'triage', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Batch with a limit',
+            lines: [
+              '`.batch(tickets, { maxConcurrency: 8 })` over 400 tickets.',
+              'At ~2.5 s each: 400 / 8 × 2.5 ≈ 125 s instead of ~17 minutes.',
+              'And it stays under a 600 RPM limit.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['input', 'assign'], label: 'batch', count: 3 },
+              { badge: 'assign', text: '8 at a time' },
+              { say: 1 },
+              { badge: 'out', text: '≈ 125 s', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when LCEL is not enough',
+            lines: ['LCEL suits short, mostly linear pipelines and fan-out/fan-in.'],
+            task: {
+              type: 'choose',
+              question: 'Your flow needs loops, branching with state, persistence and approvals. Use?',
+              options: [
+                { text: 'LangGraph' },
+                { text: 'A longer `.pipe()` chain', why: 'Pipes are linear; loops, state and approvals need a graph.' },
+                {
+                  text: 'More `RunnableParallel` branches',
+                  why: 'Parallel branches fan out and in; they do not loop or pause.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Loops, stateful branching, persistence or approvals → move to LangGraph.',
+          },
+        ],
+      },
       body: `**Intuition:** every LangChain building block is a LEGO brick with the same studs: a **Runnable**. Prompts, models, parsers, retrievers and your own functions all expose \`invoke\`, \`batch\` and \`stream\`, so they snap together with \`.pipe()\` (the LangChain Expression Language, LCEL).
 
 **Composition primitives (\`@langchain/core/runnables\`)**
@@ -496,6 +748,94 @@ export const chain = RunnablePassthrough.assign({
     // ───────────────────────── 4 ─────────────────────────
     {
       heading: 'Tools and Agents — tool(), bindTools, createAgent and middleware',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'refund order 7781', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'createAgent', sub: 'model ↔ tools loop', x: 340, y: 70 },
+          { id: 'get', kind: 'tool', label: 'get_order', sub: 'read-only', x: 570, y: 70 },
+          { id: 'staff', kind: 'user', label: 'Back office', sub: 'approves', x: 110, y: 230 },
+          { id: 'hitl', kind: 'guard', label: 'HITL middleware', sub: 'interruptOn', x: 400, y: 230 },
+          { id: 'refund', kind: 'tool', label: 'issue_refund', sub: 'money moves', x: 750, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Functions with labels, in a loop',
+            lines: [
+              'A tool = a function + name, description and zod schema the model can read.',
+              'The agent loops: the model asks for a call, sees the result and decides what next.',
+              "Step 1: `get_order({ id: '7781' })` → `{ total: 49.90, charges: 2 }`.",
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'get' },
+              { say: 1 },
+              { send: ['user', 'agent'], label: 'charged twice' },
+              { say: 2 },
+              { send: ['agent', 'get'], label: 'get_order' },
+              { send: ['get', 'agent'], label: '49.90 × 2', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: money moves',
+            lines: ["Step 2: the model calls `issue_refund({ orderId: '7781', amount: 49.90 })`."],
+            task: {
+              type: 'pick',
+              question: 'Which part pauses the call for approval?',
+              answer: 'hitl',
+              hints: {
+                agent: 'The loop would simply run the tool; middleware pauses it.',
+                refund: 'The tool should run only after a decision.',
+                get: 'get_order is read-only and already done.',
+              },
+            },
+            solved: '`humanInTheLoopMiddleware` interrupts; `result.__interrupt__` shows the pending call.',
+            then: [
+              { send: ['agent', 'hitl'], label: 'issue_refund' },
+              { badge: 'hitl', text: 'interrupt', tone: 'miss' },
+              { send: ['hitl', 'staff'], label: 'pending call' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: resume it',
+            lines: ['HITL needs a checkpointer and the same `thread_id` to resume.'],
+            task: {
+              type: 'order',
+              question: 'Put the approval in order.',
+              items: [
+                'The interrupt shows the pending call',
+                'The back office approves',
+                'Resume with `Command({ resume })` on the same thread',
+                'The tool runs and the model answers',
+              ],
+              hint: 'Nothing runs until someone decides, and resuming needs the same thread.',
+            },
+            solved: 'Approved and resumed: "Refunded €49.90, 3–5 business days."',
+            then: [
+              { send: ['staff', 'hitl'], label: 'approve', tone: 'ok' },
+              { send: ['hitl', 'refund'], label: 'run', tone: 'ok' },
+              { send: ['refund', 'agent'], label: 'done', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Budgets as middleware',
+            lines: [
+              '`toolCallLimitMiddleware({ runLimit: 6 })` stops a confused loop at 6 calls instead of ~25 model calls.',
+              'After 40 turns, `summarizationMiddleware` replaced ~9K tokens of history with a ~400-token summary.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'get'], label: 'call', count: 3 },
+              { badge: 'agent', text: 'limit: 6 calls', tone: 'miss' },
+              { say: 1 },
+              { badge: 'agent', text: '9K → 400 tokens', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a tool is a function with a label the model can read; an agent is a loop where the model reads the labels, asks for a function call, sees the result and decides what to do next, until it can answer.
 
 **Tools.** \`tool(fn, { name, description, schema })\` (exported by \`langchain\` and \`@langchain/core/tools\`) pairs a function with a zod schema. The schema becomes the JSON schema the model sees and validates the arguments before your function runs.
@@ -685,6 +1025,196 @@ export async function runOnce(question: string) {
     // ───────────────────────── 5 ─────────────────────────
     {
       heading: 'Retrievers and RAG Chains — loaders, splitters, embeddings, vector stores and citations',
+      short: {
+        id: 'rag-chain-wrong-year-cited',
+        title: 'The citation from the wrong year',
+        beats: [
+          {
+            type: 'retrieve',
+            kicker: 'Handbook bot · no version filter',
+            head: 'A *2024* chunk sneaks in',
+            query: 'How many remote days per week?',
+            chunks: [
+              {
+                text: 'remote-policy.pdf p.2: up to 3 remote days',
+                score: 0.84,
+              },
+              {
+                text: '2024 chunk: "2 days"',
+                score: 0.82,
+              },
+              {
+                text: 'benefits.pdf p.7',
+                score: 0.71,
+              },
+            ],
+            k: 2,
+            sub: 'Without the version filter, the model **cited the 2024 chunk**.',
+          },
+          {
+            type: 'flow',
+            kicker: '120 HR pages',
+            head: 'Load, split, embed, *store*',
+            steps: [
+              'RecursiveCharacterTextSplitter: chunkSize 1000, overlap 150',
+              '860 chunks',
+              'text-embedding-3-small ≈ $0.004 (illustrative)',
+              'Retriever: k = 4, filter { version: \'2026\' }',
+            ],
+          },
+          {
+            type: 'claims',
+            kicker: 'Structured output · { answer, citations }',
+            head: 'Check every *citation*',
+            claims: [
+              {
+                text: '"Up to 3 remote days per week with manager approval." [1]',
+                ok: true,
+                note: '[1] → remote-policy.pdf p.2',
+              },
+              {
+                text: '"2 days", with no version filter',
+                ok: false,
+                note: 'a 2024 chunk, scored 0.82',
+              },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Production notes',
+            head: 'Metadata does the *filtering*',
+            items: [
+              {
+                label: 'Store source, page, version, tenant',
+                keep: true,
+              },
+              {
+                label: 'Filter on them at query time',
+                keep: true,
+              },
+              {
+                label: 'Stable ids, so re-ingestion updates',
+                keep: true,
+              },
+              {
+                label: 'Trust whatever number the model cites',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Your chain cites [5], but only 4 documents were retrieved. What is the most robust handling?',
+            options: [
+              {
+                text: 'Trust the model; it saw more context than you think',
+                why: 'Citations are claims to verify, not facts.',
+              },
+              {
+                text: 'Validate citations against the retrieved set; drop or flag invalid ones',
+                why: 'Right: it catches fabrication deterministically, with "no verified source" as the fallback.',
+              },
+              {
+                text: 'Increase k to 5 so [5] exists next time',
+                why: 'That may make it rarer but never guarantees validity.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Filter by *version*, verify every *citation*.',
+          sub: 'Keep source and version in metadata, number the context, and check cited numbers against **what was retrieved**.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'HR pages', sub: '120 pages', x: 110, y: 70 },
+          { id: 'split', kind: 'chunker', label: 'Splitter', sub: 'chunkSize 1000', x: 340, y: 70 },
+          { id: 'embed', kind: 'embedder', label: 'Embeddings', sub: '~215K tokens', x: 570, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Vector store', sub: '860 chunks', x: 790, y: 70 },
+          { id: 'val', kind: 'guard', label: 'Validator', sub: 'cited [n] in range', x: 110, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: '{ answer, citations }', x: 400, y: 230 },
+          { id: 'retr', kind: 'retriever', label: 'Retriever', sub: 'k = 4, version 2026', x: 750, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An assembly line',
+            lines: [
+              '**Load** raw files, **split** into passages, **embed** each, **store** the vectors.',
+              '120 HR pages → 860 chunks (chunkSize 1000, chunkOverlap 150).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'split'], label: 'Document[]' },
+              { send: ['split', 'embed'], label: 'chunks' },
+              { send: ['embed', 'store'], label: 'vectors' },
+              { say: 1 },
+              { badge: 'store', text: '860 chunks', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Retrieve, then answer with citations',
+            lines: [
+              'Question: "How many remote days per week?"',
+              "The retriever (k = 4, filter `{ version: '2026' }`) returns sources numbered [1]–[4].",
+              'The model answers *only* from them: `{ answer, citations: [1] }`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['store', 'retr'], label: 'search' },
+              { say: 1 },
+              { badge: 'retr', text: '[1] 0.84' },
+              { send: ['retr', 'llm'], label: '[1]–[4]' },
+              { say: 2 },
+              { send: ['llm', 'val'], label: 'citations: [1]' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: check the citation',
+            lines: ['For verifiable citations, check every cited number exists in the retrieved set.'],
+            task: {
+              type: 'pick',
+              question: 'Which part checks the citation?',
+              answer: 'val',
+              hints: {
+                llm: 'The model claims a citation; something else must check it.',
+                retr: 'The retriever finds passages; it never sees the answer.',
+                store: 'The store holds vectors; it does not read answers.',
+              },
+            },
+            solved: '[1] is in range and maps to remote-policy.pdf p.2.',
+            then: [{ send: ['llm', 'val'], label: '[1]' }, { badge: 'val', text: 'p.2 ✓', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: drop the filter',
+            lines: ['Store `source`, `page`, `version` and tenant ids in metadata.'],
+            task: {
+              type: 'choose',
+              question: 'What happened without the `version` filter?',
+              options: [
+                { text: 'A 2024 chunk saying "2 days" scored 0.82 and was cited instead' },
+                {
+                  text: 'Nothing: the right chunk still won',
+                  why: 'An older version scored close enough to be cited.',
+                },
+                {
+                  text: 'The retriever returned no chunks',
+                  why: 'The filter narrows results; without it, older versions compete.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Keep version and tenant in metadata and filter on them at query time.',
+            then: [{ badge: 'retr', text: '2024: 0.82', tone: 'err' }],
+          },
+        ],
+      },
       body: `**Intuition:** RAG with LangChain is an assembly line: **load** raw files, **split** them into passages, **embed** each passage as a vector, **store** the vectors, then at question time **retrieve** the closest passages and let the model answer *only* from them, with citations.
 
 **The building blocks**
@@ -849,6 +1379,106 @@ export async function ingest(store: PGVectorStore, docs: Document[]) {
     // ───────────────────────── 6 ─────────────────────────
     {
       heading: 'LangSmith and Production Practices — tracing, evals, caching, pinning and leaky abstractions',
+      steps: {
+        actors: [
+          { id: 'pr', kind: 'server', label: 'Pull request', sub: 'prompt + package', x: 110, y: 70 },
+          { id: 'ci', kind: 'guard', label: 'CI: evaluate()', sub: 'correctness, cites', x: 340, y: 70 },
+          { id: 'dataset', kind: 'data', label: 'Dataset', sub: '150 examples', x: 570, y: 70 },
+          { id: 'chain', kind: 'agent', label: 'RAG chain', sub: 'traced runnables', x: 110, y: 230 },
+          { id: 'ls', kind: 'metric', label: 'LangSmith', sub: 'nested spans', x: 450, y: 230 },
+          { id: 'cache', kind: 'cache', label: 'Redis cache', sub: 'FAQ classifier', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A flight recorder',
+            lines: [
+              '`LANGSMITH_TRACING=true` traces every runnable as nested spans.',
+              'Each span has inputs, outputs, tokens and latency.',
+              'p50 1.9 s, p95 6.4 s: 71% of p95 time is the model call, 18% retrieval.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['chain', 'ls'], label: 'spans', count: 3 },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'ls', text: 'p95 6.4 s' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Evals catch a silent regression',
+            lines: [
+              'One PR upgrades the provider package and changes a prompt.',
+              'CI runs `evaluate` over a 150-example dataset.',
+              '`correctness` 0.91 → 0.84; `cites_valid` 0.98 → 0.93.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pr', 'ci'], label: 'changes' },
+              { say: 1 },
+              { send: ['dataset', 'ci'], label: 'examples' },
+              { say: 2 },
+              { badge: 'ci', text: '0.91 → 0.84', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: find the cause',
+            lines: ['A black box made of other black boxes is hard to debug without traces.'],
+            task: {
+              type: 'choose',
+              question: 'How did the team find what broke?',
+              options: [
+                { text: 'The trace diff: "cite [n]" had moved below the context' },
+                {
+                  text: 'Revert the whole PR and give up on the upgrade',
+                  why: 'The trace pinpointed one prompt line; reverting it restored 0.90 / 0.98.',
+                },
+                { text: 'Ship it and watch user complaints', why: 'Evals in CI exist to catch this before shipping.' },
+              ],
+              answer: 0,
+            },
+            solved: 'On long contexts (> 6K tokens) the model stopped citing; reverting that line fixed it.',
+            then: [{ send: ['ls', 'ci'], label: 'trace diff' }, { badge: 'ci', text: '0.90 / 0.98', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what to cache',
+            lines: ['A cache on the model returns the stored answer for an exact repeat.'],
+            task: {
+              type: 'choose',
+              question: 'Which calls should you cache?',
+              options: [
+                { text: 'Exact repeats of deterministic calls, like a temperature-0 classifier' },
+                { text: 'Every model call', why: 'Cache only deterministic calls.' },
+                {
+                  text: 'Only the slowest calls, whatever their temperature',
+                  why: 'Speed is not the test; a non-deterministic call should not be pinned to one answer.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'The FAQ classifier cache hits 34% of calls, saving ~$410/month (illustrative).',
+            then: [{ send: ['chain', 'cache'], label: 'FAQ', curve: true }, { badge: 'cache', text: '34% hits', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When the abstraction leaks',
+            lines: [
+              'Default prompts you never read, hidden provider features, deep stack traces, changes on upgrade.',
+              'Mitigate: trace everything, read the rendered prompt, own your prompts, pin versions, use the raw SDK where needed.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'chain', text: 'hidden prompt', tone: 'miss' },
+              { say: 1 },
+              { send: ['chain', 'ls'], label: 'trace' },
+              { badge: 'pr', text: 'pinned versions', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a LangChain app without tracing is a black box made of other black boxes. LangSmith is the flight recorder: every runnable, model call and tool call becomes a nested span with inputs, outputs, tokens and latency.
 
 **Tracing.** Set \`LANGSMITH_TRACING=true\`, \`LANGSMITH_API_KEY\` and \`LANGSMITH_PROJECT\`; every LangChain runnable is traced automatically. Non-LangChain code joins the same trace with \`traceable(fn, { name })\` from \`langsmith/traceable\`, and raw OpenAI clients with \`wrapOpenAI\`. Attach \`tags\` / \`metadata\` (user id, prompt version) through run config so you can filter traces.

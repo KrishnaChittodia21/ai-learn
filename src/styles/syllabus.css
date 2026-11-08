@@ -252,91 +252,6 @@
 }
 
 /* ---------- level panels ---------- */
-.syl-overview {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  align-items: start;
-}
-.syl-panel {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: var(--s-5) var(--s-3) var(--s-4);
-  box-shadow: var(--glass-shadow);
-}
-.syl-panel-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-3);
-  padding: 0 14px 14px;
-}
-.syl-panel-num {
-  font-family: var(--display);
-  font-style: italic;
-  font-weight: 700;
-  font-size: 2.125rem;
-  line-height: 1;
-  color: var(--lv);
-  text-shadow: 0 0 20px var(--lv-glow);
-}
-.syl-panel-head h2 {
-  margin: 0;
-  font-size: 1.375rem;
-  font-weight: 600;
-}
-.syl-panel-count {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--muted);
-}
-.syl-prows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.syl-prow {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 44px;
-  column-gap: 14px;
-  row-gap: 8px;
-  align-items: center;
-  padding: 14px 16px;
-  border-radius: 18px;
-  border: 1px solid transparent;
-  color: var(--text);
-  text-decoration: none;
-  transition:
-    background var(--dur),
-    border-color var(--dur),
-    transform var(--dur-slow) var(--ease-out);
-}
-.syl-prow:hover {
-  background: var(--tint);
-  border-color: var(--border);
-  transform: translateX(4px);
-  color: var(--text);
-}
-.syl-prow-num {
-  grid-row: 1 / span 2;
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
-  color: var(--muted);
-}
-.syl-prow-title {
-  font-weight: 600;
-  line-height: 1.3;
-}
-.syl-prow-count {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--muted);
-  text-align: right;
-}
 .syl-meter {
   grid-column: 2;
   grid-row: 2;
@@ -354,58 +269,9 @@
   transform-origin: left;
   animation: na-grow 1.4s var(--ease-out) both;
 }
-.syl-prow.s-passed .syl-prow-num,
-.syl-prow.s-passed .syl-prow-count {
-  color: var(--c-ion);
-}
-.syl-prow.s-passed .syl-meter > span {
-  box-shadow: var(--glow-ion);
-}
-.syl-prow.s-now .syl-prow-num {
-  color: var(--c-pulsar);
-}
-.syl-prow.s-now .syl-meter > span {
-  background: linear-gradient(90deg, var(--act-2), var(--act-3));
-  box-shadow: 0 0 10px var(--glow-pulsar-c);
-}
 /* the first phase still open is "you are here" */
-.syl-prow.cur {
-  background: linear-gradient(100deg, color-mix(in srgb, var(--c-pulsar) 16%, transparent), color-mix(in srgb, var(--c-nebula) 8%, transparent));
-  border-color: color-mix(in srgb, var(--c-pulsar) 35%, transparent);
-}
 
 /* ---------- totals ---------- */
-.syl-totals {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--s-2);
-  margin: var(--s-5) 0 0;
-}
-.syl-totals > div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--s-2);
-  padding: 10px var(--s-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--tint);
-}
-.syl-totals dt {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  min-width: 0;
-}
-.syl-totals dd {
-  margin: 0;
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: var(--fs-lg);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ---------- filters ---------- */
 .syl-tools {
@@ -413,6 +279,20 @@
 }
 .syl-head + .syl-tools {
   margin-top: var(--s-5);
+}
+/* search sits in the filter row, chip height, before the chips; it takes the row's spare width */
+.syl-filters .syl-search-wrap {
+  flex: 1 1 260px;
+  min-width: min(100%, 220px);
+  max-width: 460px;
+}
+.syl-filters .syl-search {
+  height: 36px;
+  padding: 0 var(--s-4);
+  gap: var(--s-2);
+}
+.syl-filters .syl-search input {
+  font-size: var(--fs-sm);
 }
 .syl-filters {
   display: flex;
@@ -443,89 +323,9 @@
   color: var(--muted);
 }
 
-/* ---------- jump strip: a floating glass pill under the masthead ---------- */
-.syl-jump {
-  position: sticky;
-  top: calc(var(--masthead) + 6px);
-  z-index: 15;
-  margin-top: var(--s-4);
-  padding: 4px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  border: 1px solid var(--glass-border);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
-  box-shadow: var(--glass-shadow);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.syl-jump::-webkit-scrollbar {
-  display: none;
-}
-.syl-jump ol {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.syl-jump button {
-  position: relative;
-  min-width: 38px;
-  height: 34px;
-  padding: 0 var(--s-2);
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: none;
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background var(--dur),
-    color var(--dur);
-}
-.syl-jump button:hover {
-  background: var(--tint-2);
-  color: var(--text);
-}
-.syl-jump button.j-passed {
-  color: var(--c-ion);
-}
-.syl-jump button.j-now {
-  color: var(--c-pulsar);
-}
-.syl-jump button.j-passed::after,
-.syl-jump button.j-now::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 6px currentColor;
-}
-.syl-jump button.dim {
-  color: var(--muted);
-  opacity: 0.4;
-}
-.syl-jump .syl-jump-tools {
-  margin-left: var(--s-2);
-  padding: 0 var(--s-3);
-  font-family: var(--display);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  background: var(--tint);
-}
 
 /* ---------- level ---------- */
-.syl-level,
-.syl-tools-group {
+.syl-level {
   margin-top: var(--s-7);
 }
 .syl-level-head {
@@ -574,9 +374,6 @@
 }
 .syl-phase.s-now {
   border-color: color-mix(in srgb, var(--c-pulsar) 30%, transparent);
-}
-.syl-tools-group {
-  scroll-margin-top: calc(var(--masthead) + 64px);
 }
 .syl-phase-h {
   margin: 0;
@@ -918,47 +715,6 @@
 }
 
 /* ---------- practice & tools ---------- */
-.syl-toollist {
-  list-style: none;
-  margin: var(--s-3) 0 0;
-  padding: var(--s-2) var(--s-3);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-}
-.syl-toollist li {
-  display: grid;
-  grid-template-columns: minmax(0, 16em) minmax(0, 1fr) auto;
-  gap: var(--s-4);
-  align-items: baseline;
-  padding: var(--s-3);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--fs-sm);
-}
-.syl-toollist li:last-child {
-  border-bottom: 0;
-}
-.syl-tool-title {
-  font-family: var(--display);
-  font-weight: 600;
-  font-size: var(--fs-md);
-}
-a.syl-tool-title {
-  text-decoration: none;
-}
-.syl-tool-desc {
-  color: var(--text-2);
-}
-.syl-tool-state {
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  color: var(--muted);
-  white-space: nowrap;
-  text-align: right;
-}
-.syl-tool-state.flag {
-  color: var(--c-pulsar);
-}
 
 /* ---------- motion ---------- */
 @keyframes syl-breathe {
@@ -981,16 +737,6 @@ a.syl-tool-title {
   .syl-table .c-open {
     width: 14em;
   }
-  .syl-overview {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .syl-overview .lv-3 {
-    grid-column: 1 / -1;
-  }
-  .syl-overview .lv-3 .syl-prows {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
 }
 @media (max-width: 1000px) {
   .syl-galaxy {
@@ -1011,15 +757,6 @@ a.syl-tool-title {
   }
 }
 @media (max-width: 860px) {
-  .syl-totals {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .syl-overview {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .syl-overview .lv-3 .syl-prows {
-    display: block;
-  }
   /* table → stacked rows: number + title, then a meta line, then links */
   .syl-table thead {
     position: absolute;
@@ -1089,14 +826,6 @@ a.syl-tool-title {
   .syl-sections {
     columns: 1;
   }
-  .syl-toollist li {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 2px var(--s-3);
-  }
-  .syl-tool-desc {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }
 @media (max-width: 560px) {
   .syllabus {
@@ -1136,12 +865,6 @@ a.syl-tool-title {
   .syl-core-lbl {
     font-size: 8px;
   }
-  .syl-panel {
-    padding: var(--s-4) var(--s-1) var(--s-2);
-  }
-  .syl-prow {
-    padding: 12px;
-  }
   .syl-numeral {
     font-size: 2rem;
   }
@@ -1168,9 +891,6 @@ a.syl-tool-title {
   }
   .syl-phase-title {
     font-size: var(--fs-md);
-  }
-  .syl-totals > div {
-    padding: 8px var(--s-3);
   }
   .syl-filters-end {
     margin-left: 0;

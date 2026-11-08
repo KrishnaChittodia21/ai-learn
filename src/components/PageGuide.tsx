@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChartSpline, Check, CirclePlay, Compass, FileCheck, MousePointerClick, Settings, Sparkles, Star, X, type LucideIcon } from 'lucide-react';
+import { Activity, BookA, BookOpen, Braces, ChartSpline, Check, CircleDot, CirclePlay, Compass, Crosshair, FileCheck, Medal, MousePointerClick, Route, Settings, Sparkles, Star, Target, Trophy, X, type LucideIcon } from 'lucide-react';
 import { TOPICS } from '../content';
 import { closePageGuide, guideBusy, openTour, startWalk, useGuide } from '../lib/guide';
 import { GUIDES, GUIDE_ORDER, guideIdFor, shouldOffer, type GuideId } from '../lib/pageGuides';
@@ -11,7 +11,7 @@ import { getUiPrefs, markGuideSeen, useUiPrefs } from '../lib/uiPrefs';
 import { useFocusTrap } from '../lib/useFocusTrap';
 import { showToast } from '../lib/toast';
 
-const ICON: Record<GuideId, LucideIcon> = { today: Sparkles, topic: BookOpen, exam: FileCheck, saved: Star, shorts: CirclePlay, plan: ChartSpline, settings: Settings };
+const ICON: Record<GuideId, LucideIcon> = { today: Sparkles, track: Activity, topic: BookOpen, exam: FileCheck, saved: Star, shorts: CirclePlay, plan: ChartSpline, settings: Settings, syllabus: CircleDot, weak: Target, practice: Crosshair, challenges: Trophy, achievements: Medal, paths: Route, drills: Braces, glossary: BookA };
 
 /** The topic to show Topic / Exam guides on when you are elsewhere: the last one studied, else the first. */
 function topicHref(exam: boolean) {

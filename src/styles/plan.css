@@ -1,4 +1,4 @@
-/* Plan your journey (M6): the learning curve page and the Today card.
+/* Plan your journey (M6): the learning curve page.
    Design: ai-learn-designs/plan-journey/option-1-learning-curve.html */
 .pj-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 22px; }
 .pj-head h1 { margin: 8px 0 6px; font-family: var(--display); font-size: clamp(2rem, 1.2rem + 2.4vw, 3rem); line-height: 1.02; letter-spacing: -0.04em; font-weight: 700; }
@@ -162,26 +162,6 @@
 }
 .lc-tip b { color: var(--text); font-family: var(--display); }
 .lc-tip small { font: 500 0.6875rem var(--mono); color: var(--muted); }
-
-/* Today card */
-.td-plan { border-radius: var(--radius-lg); padding: 18px; margin-top: var(--s-5); }
-.td-plan-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.td-plan-chip { padding: 4px 10px; border-radius: 99px; font: 600 0.75rem var(--sans); background: var(--info-soft); color: var(--c-ion); white-space: nowrap; }
-.td-plan-chip.warn { background: var(--bad-soft); color: var(--c-pulsar); }
-.td-plan-chip.quiet { background: var(--tint-2); color: var(--text-2); }
-.td-plan-h { margin: 8px 0 10px; font: 600 1.1875rem/1.25 var(--display); letter-spacing: -0.01em; }
-.td-plan-h small { font: 500 0.875rem var(--sans); color: var(--muted); }
-.td-plan-mini { margin: 4px 0 12px; min-height: 70px; }
-.td-plan-mini svg { display: block; width: 100%; overflow: visible; }
-.mk-you { fill: none; stroke: var(--c-ion); stroke-width: 2.2; stroke-linejoin: round; }
-.mk-pac { fill: none; stroke: var(--c-nebula); stroke-width: 1.5; stroke-dasharray: 4 4; }
-.mk-proj { fill: none; stroke: var(--c-ion); stroke-width: 1.8; stroke-dasharray: 0.5 4.5; stroke-linecap: round; }
-.mk-eta { fill: none; stroke: var(--c-ion); stroke-width: 1.5; }
-.td-plan-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.8125rem; color: var(--text-2); flex-wrap: wrap; }
-.td-plan-empty { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text); }
-.td-plan-empty span { display: grid; gap: 2px; flex: 1; }
-.td-plan-empty small { color: var(--muted); font-size: 0.8125rem; }
-.td-plan-ic { color: var(--c-ion); flex: none; }
 
 @media (max-width: 1000px) {
   .pj-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'hero' 'warn' 'side' 'table'; }

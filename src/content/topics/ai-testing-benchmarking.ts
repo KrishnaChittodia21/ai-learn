@@ -36,6 +36,102 @@ const topic: Topic = {
   sections: [
     {
       heading: 'AI Testing — deterministic tests around a non-deterministic model',
+      steps: {
+        actors: [
+          { id: 'test', kind: 'tool', label: 'Unit test', sub: 'runs in ms, $0', x: 110, y: 70 },
+          { id: 'code', kind: 'server', label: 'Your code', sub: 'build · parse · retry', x: 340, y: 70 },
+          { id: 'fake', kind: 'llm', label: 'Fake client', sub: 'canned responses', x: 570, y: 70 },
+          { id: 'snap', kind: 'document', label: 'Snapshot', sub: 'the request body', x: 340, y: 230 },
+          { id: 'real', kind: 'llm', label: 'Real model', sub: 'nightly eval suite', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Test the umbrella, not the weather',
+            lines: [
+              'Most bugs live in **your code** around the model: prompts, parsing, tool dispatch, retries.',
+              'Inject the client, so a test can swap in a **fake** that returns canned responses.',
+              'Valid JSON, malformed JSON, a 429, an unknown tool name: all in milliseconds, $0.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['test', 'code'], label: 'input' },
+              { lit: 'code' },
+              { say: 1 },
+              { send: ['code', 'fake'], label: 'request' },
+              { say: 2 },
+              { send: ['fake', 'code'], label: 'malformed JSON', tone: 'err' },
+              { badge: 'code', text: 'handled', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what to snapshot',
+            lines: ['Snapshots show any change in code review.'],
+            task: {
+              type: 'choose',
+              question: 'Which should you snapshot?',
+              options: [
+                { text: 'The assembled prompt / request body' },
+                { text: 'The model answer', why: 'Model output changes run to run, so the snapshot would fail at random.' },
+                { text: 'Both', why: 'Only the prompt is stable: it changes only when you change it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Snapshot the prompt, never the answer.',
+            then: [{ send: ['code', 'snap'], label: 'request body' }, { badge: 'snap', text: 'diff in review', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What the cheap layers caught',
+            lines: [
+              'A property test fed 500 random emails to the prompt builder.',
+              'A 20K-char email blew the 3,000-token budget: truncation ran **after** interpolation.',
+              'A snapshot diff showed `system: undefined` after a refactor.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['test', 'code'], label: '500 emails', count: 3 },
+              { say: 1 },
+              { badge: 'code', text: 'over budget', tone: 'err' },
+              { say: 2 },
+              { send: ['code', 'snap'], label: 'request' },
+              { badge: 'snap', text: 'system: undefined', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the test pyramid',
+            lines: ['Most tests at the bottom, fewest and slowest at the top.'],
+            task: {
+              type: 'order',
+              question: 'Order the LLM test pyramid from the most tests to the fewest.',
+              items: ['Unit', 'Property', 'Snapshot', 'Contract', 'Eval suite (nightly)'],
+              hint: 'Fake-client layers in ms come first; real-API contracts and the scored dataset run come last.',
+            },
+            solved: 'Unit → property → snapshot → contract → nightly eval suite.',
+            then: [{ send: ['test', 'code'], label: 'unit' }, { send: ['code', 'real'], label: 'nightly', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Live tests are not deterministic',
+            lines: [
+              '`temperature: 0` does not make outputs reproducible.',
+              'Assert **properties**, sample k times and require a pass rate.',
+              'Nightly: 200 emails × 3 samples, 97.3% schema-valid, gating at ≥ 95%.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['code', 'real'], label: 'temp 0', curve: true },
+              { badge: 'real', text: 'jitter', tone: 'miss' },
+              { say: 1 },
+              { send: ['code', 'real'], label: 'k samples', count: 3, curve: true },
+              { say: 2 },
+              { badge: 'real', text: '97.3% ≥ 95%', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** you don't test the weather; you test that your umbrella opens. The model is the weather. Most bugs in LLM apps live in *your* code around it: prompt assembly, parsing, tool dispatch, retries, truncation, redaction. All of that can be tested deterministically by **mocking the model**.
 
 **The LLM test pyramid**
@@ -212,6 +308,197 @@ it('prompt respects budget and keeps the question', () => {
     },
     {
       heading: 'AI Benchmarking — MMLU, GPQA, SWE-bench, HumanEval, contamination and Arena',
+      short: {
+        id: 'benchmarks-shortlist-private-decides',
+        title: 'Public benchmarks shortlist; yours decide',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'Picking a model for code review · SWE-bench Verified',
+            head: 'Public numbers make the *shortlist*',
+            rungs: [
+              {
+                label: 'Model A',
+                amount: 71,
+              },
+              {
+                label: 'Model B',
+                amount: 68,
+              },
+              {
+                label: 'Third model',
+                amount: 52,
+              },
+            ],
+            unit: '%',
+            sub: 'The third is cut. **A leads.**',
+          },
+          {
+            type: 'flow',
+            kicker: 'A private benchmark',
+            head: '150 real diffs the models *never saw*',
+            steps: [
+              'Mine known bugs from reverted commits after the cutoffs',
+              'Grade with hidden unit tests',
+              'Sample n = 10 per item',
+              'pass@k = 1 − C(n−c, k) / C(n, k)',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'One task · n = 10, c = 6 pass',
+            value: 0.6,
+            decimals: 2,
+            unit: 'pass@1 = 1 − 4/10',
+            sub: 'pass@5 = **1.0**: only 4 failures, so any 5 samples contain a pass.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Averaged over the private set',
+            head: 'The leaderboard *flips*',
+            claims: [
+              {
+                text: 'A leads on SWE-bench Verified',
+                ok: true,
+                note: '71% vs 68%',
+              },
+              {
+                text: 'A is better on our code',
+                ok: false,
+                note: 'pass@1: A 0.58, B 0.63',
+              },
+              {
+                text: 'A\'s public lead is all skill',
+                ok: false,
+                note: 'drops 9 points on reworded issues vs 2 for B',
+              },
+            ],
+            sub: 'A contamination hint. **They pick B.**',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Model X: 91% on MMLU, 78% on paraphrased items. Model Y: 89% → 87%. Most likely explanation?',
+            options: [
+              {
+                text: 'X has a smaller context window',
+                why: 'Context size does not explain a drop on meaning-preserving rewrites.',
+              },
+              {
+                text: 'X likely memorised MMLU items (contamination)',
+                why: 'Right: a big drop on paraphrases, far larger than a comparable model\'s, is a classic contamination signal.',
+              },
+              {
+                text: 'Paraphrasing always costs about 13 points',
+                why: 'Y lost only 2 points on the same rewrites.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Shortlist with *public*, decide with *private*.',
+          sub: 'Report n for pass@k, check paraphrase drops, and keep **100–500** real items unpublished.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'models', kind: 'llm', label: 'Candidate models', sub: 'A, B and C', x: 110, y: 70 },
+          { id: 'public', kind: 'metric', label: 'Public bench', sub: 'SWE-bench Verified', x: 340, y: 70 },
+          { id: 'private', kind: 'data', label: 'Private bench', sub: '150 real PR diffs', x: 570, y: 70 },
+          { id: 'tests', kind: 'judge', label: 'Hidden tests', sub: 'unit tests grade', x: 800, y: 70 },
+          { id: 'para', kind: 'guard', label: 'Paraphrase check', sub: 'contamination hint', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A standardised exam',
+            lines: [
+              'Great for comparing models that sat the same paper.',
+              'Useless if they saw the paper beforehand: **contamination**.',
+              'Or if everyone now scores 95%: **saturation**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['models', 'public'], label: 'same exam', count: 3 },
+              { say: 1 },
+              { badge: 'public', text: 'seen before?', tone: 'err', ms: 1100 },
+              { say: 2 },
+              { badge: 'public', text: 'all ~90%', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: shortlist, then decide',
+            lines: ['Public benchmarks and your own benchmark have different jobs.'],
+            task: {
+              type: 'pick',
+              question: 'Which part should make the final model choice?',
+              answer: 'private',
+              hints: {
+                public: 'Public benchmarks shortlist 3–4 models; they can be saturated or contaminated.',
+                para: 'The paraphrase check is a contamination hint, not the decision.',
+                tests: 'Hidden tests grade the items; the benchmark as a whole decides.',
+              },
+            },
+            solved: 'Shortlist with public benchmarks, decide with a private one: real traffic, never published, versioned.',
+            then: [{ send: ['models', 'private'], label: 'A, B', curve: true }, { send: ['private', 'tests'], label: 'patches' }],
+          },
+          {
+            kind: 'watch',
+            title: 'pass@k on one task',
+            lines: [
+              'Sample n = 10 solutions per item; model A passes c = 6.',
+              'pass@1 = 1 − C(4,1)/C(10,1) = **0.60**.',
+              'pass@5 = 1.0: only 4 failures, so any 5 contain a pass.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['private', 'tests'], label: '10 samples', count: 3 },
+              { badge: 'tests', text: 'c = 6' },
+              { say: 1 },
+              { badge: 'tests', text: 'pass@1 0.60', ms: 1100 },
+              { say: 2 },
+              { badge: 'tests', text: 'pass@5 1.0', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The headline was not the answer',
+            lines: [
+              'SWE-bench shortlisted A and B; the 52% model was cut.',
+              'On the private benchmark: A pass@1 = 0.58, B = 0.63.',
+              'Reworded issues: A drops 9 points, B drops 2. A contamination hint.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['models', 'public'], label: '71 · 68 · 52' },
+              { say: 1 },
+              { send: ['tests', 'private'], label: 'A 0.58 · B 0.63', tone: 'ok' },
+              { say: 2 },
+              { send: ['public', 'para'], label: 'reworded' },
+              { badge: 'para', text: 'A −9 · B −2', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: reading Arena ratings',
+            lines: ['Arena ratings are Bradley–Terry fits over pairwise votes, with confidence intervals.'],
+            task: {
+              type: 'choose',
+              question: 'Two models have different ratings, but their confidence intervals overlap. What do you conclude?',
+              options: [
+                { text: 'A statistical tie' },
+                { text: 'The higher one wins about 64% of the time', why: 'A 100-point gap means about 64%; overlapping CIs mean the gap is not established at all.' },
+                { text: 'The higher one is better', why: 'Overlapping CIs mean the data cannot separate them.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Overlapping CIs = tie; a 100-point gap ≈ 64% win rate.',
+            then: [{ badge: 'public', text: 'tie', tone: 'miss' }],
+          },
+        ],
+      },
       body: `**Intuition:** a benchmark is a standardised exam. It is great for comparing students who sat the same paper, useless if they saw the paper beforehand (**contamination**) or if everyone now scores 95% (**saturation**).
 
 | Benchmark | What it measures | Size / format | Status (2026) |

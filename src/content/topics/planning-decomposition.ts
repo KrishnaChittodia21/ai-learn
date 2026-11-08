@@ -34,6 +34,212 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Planning and Execution — plan-and-execute, ReWOO, LLMCompiler and re-planning',
+      short: {
+        id: 'rewoo-plan-once-run-in-parallel',
+        title: 'ReWOO: plan once, run in parallel',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'Bigger: the capital of Australia or of Canada?',
+            head: 'One call writes the *whole plan*',
+            steps: [
+              '#E1 = Search[capital of Australia]',
+              '#E2 = Search[capital of Canada]',
+              '#E3 = Search[population of #E1]',
+              '#E4 = Search[population of #E2]',
+              'Solver: plan + evidence → answer',
+            ],
+            sub: 'Planner output: about **180** tokens.',
+          },
+          {
+            type: 'race',
+            kicker: '1.2 s per search',
+            head: 'Independent steps run *side by side*',
+            lanes: [
+              {
+                label: 'Sequential: E1 → E2 → E3 → E4',
+                seconds: 4.8,
+                tone: 'pink',
+              },
+              {
+                label: 'DAG: E1 and E2, then E3 and E4',
+                seconds: 2.4,
+                tone: 'good',
+              },
+            ],
+            sub: 'Wall clock **2.4 s** instead of **4.8 s**. Answer: Ottawa (~1.1M) beats Canberra (~0.47M).',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Input tokens for the same question',
+            head: 'ReAct re-reads a *growing transcript*',
+            rungs: [
+              {
+                label: 'ReAct · 5 LLM calls',
+                amount: 9000,
+              },
+              {
+                label: 'ReWOO · planner + solver',
+                amount: 2500,
+              },
+            ],
+            unit: 'input tokens (approx.)',
+            sub: 'ReWOO reports ~**5x** lower token cost on HotpotQA.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'The plan is written before any observation',
+            head: 'Guard the *blind* plan',
+            items: [
+              {
+                label: 'Validate the plan in code first',
+                keep: true,
+              },
+              {
+                label: 'Re-plan on triggers, keep completed steps',
+                keep: true,
+              },
+              {
+                label: 'Cap re-plans at 2–3',
+                keep: true,
+              },
+              {
+                label: 'Re-plan forever on an impossible goal',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A ReWOO plan says "#E2 = Search[CEO of #E1]", but #E1 comes back empty. What happens in vanilla ReWOO?',
+            options: [
+              {
+                text: 'The #E2 worker notices and re-plans',
+                why: 'Workers just substitute evidence; vanilla ReWOO has no feedback loop.',
+              },
+              {
+                text: '#E2 still runs with an empty or useless query',
+                why: 'Right: the plan was fixed before any observation, so production systems add re-plan triggers.',
+              },
+              {
+                text: 'ReWOO switches to ReAct for the rest',
+                why: 'There is no built-in switch; LLMCompiler adds a joiner that may re-plan.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: '*Plan* once with the strong model, *execute* cheaply.',
+          sub: 'Validate the plan in code, re-plan only on triggers, and cap steps, re-plans and spend.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Goal', sub: 'bigger capital?', x: 110, y: 70 },
+          { id: 'planner', kind: 'llm', label: 'Planner', sub: 'strong model, once', x: 340, y: 70 },
+          { id: 'validator', kind: 'guard', label: 'Validator', sub: 'code, not an LLM', x: 570, y: 70 },
+          { id: 'executor', kind: 'agent', label: 'Executor', sub: 'runs the steps', x: 800, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'Search', sub: '#E1 … #E4', x: 800, y: 230 },
+          { id: 'solver', kind: 'llm', label: 'Solver', sub: 'plan + evidence', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Draw the route, then walk it',
+            lines: [
+              'The **planner** turns the goal into steps: tool, arguments, dependencies.',
+              'A **validator** in code rejects unknown tools, dangling deps, cycles, too many steps.',
+              'The **executor** runs the steps and records results.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'planner'], label: 'goal' },
+              { lit: 'planner' },
+              { say: 1 },
+              { send: ['planner', 'validator'], label: 'plan' },
+              { badge: 'validator', text: 'valid', tone: 'ok' },
+              { say: 2 },
+              { send: ['validator', 'executor'], label: 'steps' },
+              { send: ['executor', 'tools'], label: 'run' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'ReWOO: a blind plan with variables',
+            lines: [
+              '`#E3 = Search[population of #E1]`: workers substitute earlier results.',
+              'E1 and E2 run in parallel; E3 waits for E1, E4 for E2.',
+              'With 1.2 s per search: **2.4 s** instead of 4.8 s sequential.',
+              'The solver answers from plan + evidence: Ottawa is larger.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'planner', text: '#E1 … #E4', ms: 1000 },
+              { say: 1 },
+              { send: ['executor', 'tools'], label: 'E1 · E2', count: 2 },
+              { send: ['executor', 'tools'], label: 'E3 · E4', count: 2 },
+              { say: 2 },
+              { badge: 'executor', text: '2.4 s', tone: 'ok' },
+              { say: 3 },
+              { send: ['tools', 'solver'], label: 'evidence', curve: true },
+              { badge: 'solver', text: 'Ottawa', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who checks the plan?',
+            lines: ['A plan can name a tool that does not exist or loop back on itself.'],
+            task: {
+              type: 'pick',
+              question: 'Which part should reject a plan with a cycle before a single step runs?',
+              answer: 'validator',
+              hints: {
+                planner: 'The planner wrote the plan; checking it is a job for code.',
+                executor: 'By the time the executor runs, a bad plan has already started.',
+                solver: 'The solver only sees the plan at the very end.',
+              },
+            },
+            solved: 'Validate the plan with code before you run a single step.',
+            then: [{ send: ['planner', 'validator'], label: 'plan' }, { badge: 'validator', text: 'cycle: reject', tone: 'err' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to re-plan',
+            lines: ['The re-planner sees completed steps and rewrites only the remaining ones.'],
+            task: {
+              type: 'choose',
+              question: 'When should the re-planner be called?',
+              options: [
+                { text: 'Only on a trigger: a failed step, an empty or contradicting result, a budget threshold, a changed goal' },
+                { text: 'After every step', why: 'Thinking again every step is ReAct; plan-and-execute re-plans only on triggers.' },
+                { text: 'Never: the plan is fixed', why: 'That is ReWOO, whose plan is blind; plan-and-execute adapts via the re-planner.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Re-plan on triggers, keep completed results, rewrite only the remaining steps.',
+            then: [{ send: ['tools', 'executor'], label: 'empty', tone: 'err' }, { send: ['executor', 'planner'], label: 're-plan', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'When to plan first',
+            lines: [
+              'Predictable structure: lower cost, parallelism and an auditable plan.',
+              'ReWOO used ~2.5K input tokens; ReAct re-read a growing transcript, ~9K.',
+              'Stay with ReAct when each step depends on what you just saw.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['planner', 'validator'], label: 'plan' },
+              { say: 1 },
+              { badge: 'solver', text: '~2.5K tokens', tone: 'ok' },
+              { say: 2 },
+              { lit: 'executor' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a ReAct agent is a hiker deciding each footstep while looking at the ground; a plan-and-execute agent first draws the route on a map, then walks it, and only re-draws when the trail is washed out. (Basic ReAct: see *Agent Fundamentals*.)
 
 **Mechanics.** Separate *thinking about what to do* from *doing it*:
@@ -245,6 +451,106 @@ export function validatePlan(plan: Step[], allowedTools: Set<string>, maxSteps: 
     },
     {
       heading: 'Task Decomposition — least-to-most, hierarchical and orchestrator-worker splits',
+      steps: {
+        actors: [
+          { id: 'orch', kind: 'agent', label: 'Orchestrator', sub: 'emits t1 … t6', x: 110, y: 150 },
+          { id: 'w1', kind: 'tool', label: 'Worker t1', sub: 'rival A pricing', x: 340, y: 70 },
+          { id: 'w2', kind: 'tool', label: 'Worker t2', sub: 'rival B pricing', x: 340, y: 230 },
+          { id: 'check', kind: 'guard', label: 'Validator', sub: 'zod schema', x: 570, y: 150 },
+          { id: 'table', kind: 'data', label: 't4 table', sub: 'deps t1, t2, t3', x: 800, y: 70 },
+          { id: 'brief', kind: 'document', label: 't6 brief', sub: 'table + risks', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Break the epic into tickets',
+            lines: [
+              'The orchestrator decides subtasks at runtime.',
+              't1–t3 research the 3 rivals with no deps, so they run in parallel.',
+              't4 waits for all three; then risks (t5) and the brief (t6).',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'orch' },
+              { say: 1 },
+              { send: ['orch', 'w1'], label: 't1' },
+              { send: ['orch', 'w2'], label: 't2' },
+              { say: 2 },
+              { send: ['w1', 'check'], label: 'JSON' },
+              { send: ['check', 'table'], label: 't4', tone: 'ok' },
+              { send: ['table', 'brief'], label: 't5 → t6' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a good subtask',
+            lines: ['Each ticket needs a clear "done" check.'],
+            task: {
+              type: 'choose',
+              question: 'Which is NOT one of the four marks of a good subtask?',
+              options: [
+                { text: 'It is as small as possible' },
+                { text: 'One responsibility', why: 'This is one of the four: one responsibility.' },
+                { text: 'A checkable output', why: 'This is one of the four: a schema, test or citation.' },
+                { text: 'A budget', why: 'This is one of the four: tokens, tool calls, time.' },
+              ],
+              answer: 0,
+            },
+            solved: 'One responsibility, explicit inputs, a checkable output and a budget; too fine adds overhead.',
+            then: [{ send: ['w1', 'check'], label: 'schema' }, { badge: 'check', text: 'done', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Retry locally',
+            lines: [
+              't2 returns no sources, so the validator rejects it.',
+              'Only t2 is retried, not the whole brief.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['w2', 'check'], label: 'sources: []', tone: 'err' },
+              { badge: 'check', text: 'reject t2', tone: 'err' },
+              { say: 1 },
+              { send: ['orch', 'w2'], label: 'retry t2' },
+              { send: ['w2', 'check'], label: 'JSON', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what sets the latency?',
+            lines: ['t1–t3 take ~8 s each in parallel, then t4 3 s, t5 4 s, t6 6 s.'],
+            task: {
+              type: 'choose',
+              question: 'Why is the wall clock ~21 s and not ~45 s?',
+              options: [
+                { text: 'Latency follows the critical path of the dependency graph' },
+                { text: 'Fewer subtasks ran', why: 'All 6 subtasks still ran; the independent ones ran at the same time.' },
+                { text: 'The workers used a faster model', why: 'Nothing changed per subtask; the parallel branch did the saving.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Latency follows the critical path, not the subtask count.',
+            then: [{ send: ['orch', 'w1'], label: 't1' }, { send: ['orch', 'w2'], label: 't2' }, { badge: 'brief', text: '~21 s', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Granularity is the trade-off',
+            lines: [
+              'Too coarse: one worker hides failure inside a long answer.',
+              'Too fine: orchestration overhead, and coherence is lost.',
+              'Aim for 3–10 subtasks per level, at most 2–3 levels.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'w1', text: 'hidden failure', tone: 'err', ms: 1000 },
+              { say: 1 },
+              { send: ['orch', 'w1'], label: 'context', count: 3 },
+              { say: 2 },
+              { badge: 'orch', text: '3–10 per level', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** decomposition is what a good tech lead does with an epic: break it into tickets small enough that each has a clear "done" check, note which tickets block which, and hand independent tickets to different people at once.
 
 **Mechanics.** Four strategies, from simplest to most dynamic:

@@ -34,6 +34,124 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Vector Databases — what they add and how the main options compare',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'user', label: 'RAG app', sub: '3M chunks · 40 QPS', x: 110, y: 150 },
+          { id: 'ann', kind: 'vector-db', label: 'ANN index', sub: 'HNSW · IVF · DiskANN', x: 340, y: 70 },
+          { id: 'crud', kind: 'tool', label: 'Upserts by id', sub: 'tombstone deletes', x: 340, y: 230 },
+          { id: 'filter', kind: 'guard', label: 'Metadata filter', sub: 'tenant · ACL · date', x: 570, y: 150 },
+          { id: 'ops', kind: 'server', label: 'Persistence', sub: 'replicas · backups', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'From a pile to a library',
+            lines: [
+              'Embeddings in a list in memory are a pile of index cards on your desk.',
+              'A vector database is a library: cards shelved for fast lookup, added while people read.',
+              'Every card has a catalogue entry you can filter by, and the library survives a power cut.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'app' },
+              { say: 1 },
+              { send: ['app', 'ann'], label: 'top-k' },
+              { send: ['app', 'crud'], label: 'upsert' },
+              { say: 2 },
+              { lit: 'filter' },
+              { lit: 'ops' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What a vector DB adds',
+            lines: [
+              'An **ANN index** for millisecond top-k search over millions of vectors.',
+              '**Upserts by id** while serving queries; deletes via tombstones + compaction.',
+              '**Metadata filters**, plus persistence, replication, sharding and backups.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'ann'], label: 'query', tone: 'ok' },
+              { say: 1 },
+              { send: ['app', 'crud'], label: 'upsert id 42' },
+              { badge: 'crud', text: 'tombstone' },
+              { say: 2 },
+              { send: ['ann', 'filter'], label: 'tenant = 7' },
+              { send: ['filter', 'ops'] },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one tenant only',
+            lines: ['A query must only see chunks for its own tenant and ACL.'],
+            task: {
+              type: 'pick',
+              question: 'Which capability restricts search to one tenant\'s chunks?',
+              answer: 'filter',
+              hints: {
+                ann: 'The ANN index finds similar vectors; it does not know who may see them.',
+                crud: 'Upserts add and replace records; they do not restrict queries.',
+                ops: 'Persistence keeps data safe, not scoped.',
+              },
+            },
+            solved: 'Metadata (payload) filters on tenant, date, ACL and source scope every query.',
+            then: [{ send: ['ann', 'filter'], label: 'tenant + ACL', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Size it first',
+            lines: [
+              'Raw vector memory = N × dims × 4 bytes, before index overhead.',
+              '3M chunks × 1,536 dims ≈ 18 GB (≈ 9 GB as halfvec).',
+              'pgvector HNSW: p95 ≈ 15–30 ms at recall@10 ≈ 0.95.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'ann' },
+              { say: 1 },
+              { badge: 'ann', text: '≈ 18 GB' },
+              { say: 2 },
+              { send: ['app', 'ann'], label: 'top-10', tone: 'ok' },
+              { badge: 'app', text: 'p95 15–30 ms', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the database',
+            lines: ['A SaaS knowledge base: 3M chunks, tenant + ACL filters, already on Postgres.'],
+            task: {
+              type: 'choose',
+              question: 'Which option fits best for now?',
+              options: [
+                { text: 'pgvector: one database, transactions, ACL as a plain SQL JOIN' },
+                { text: 'Milvus', why: 'Milvus is the sweet spot for billions of vectors or GPU indexing.' },
+                { text: 'Pinecone', why: 'Pinecone suits teams with no ops capacity; this team already runs Postgres.' },
+              ],
+              answer: 0,
+            },
+            solved: 'pgvector now, with a written trigger to revisit at ~10M vectors or if filtered recall drops.',
+            then: [{ send: ['app', 'ann'], label: 'SQL', tone: 'ok' }, { badge: 'ops', text: 'one system', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Benchmark your own filters',
+            lines: [
+              'Heavy filtering or multitenancy → Qdrant; no ops team → Pinecone; billions → Milvus.',
+              'Marketing benchmarks rarely include your filters.',
+              'Benchmark on your data, with your filters and recall targets.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'filter' },
+              { say: 1 },
+              { badge: 'filter', text: 'your filters?', tone: 'miss' },
+              { say: 2 },
+              { send: ['app', 'filter'], curve: true, tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a list of embeddings in memory is a pile of index cards on your desk. A vector database is a library: cards are shelved for fast lookup, you can add or withdraw cards while people are reading, every card has a catalogue entry (metadata) you can filter by, and the library survives a power cut.
 
 **Mechanics — what a vector DB provides:**
@@ -187,6 +305,119 @@ console.log(chooseVectorStore({ vectors: 3e6, onPostgres: true, heavyFiltering: 
     // ---------------------------------------------------------------- 2
     {
       heading: 'Vector Indexing — index types, memory, build and maintenance',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query vector', sub: '1,536 dims', x: 110, y: 150 },
+          { id: 'flat', kind: 'vector-db', label: 'Flat', sub: 'compare with all N', x: 340, y: 70 },
+          { id: 'ivf', kind: 'vector-db', label: 'IVF', sub: 'k-means clusters', x: 340, y: 230 },
+          { id: 'hnsw', kind: 'vector-db', label: 'HNSW', sub: 'proximity graph', x: 570, y: 70 },
+          { id: 'pq', kind: 'vector-db', label: 'Quantized', sub: '10–60× smaller', x: 570, y: 230 },
+          { id: 'disk', kind: 'vector-db', label: 'DiskANN', sub: 'graph on SSD', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A shortcut past N comparisons',
+            lines: [
+              'An index is a shortcut so you do not compare the query with every vector.',
+              'Each shortcut trades memory, build time, update cost and recall.',
+              'Flat compares with all N: exact, O(N·d), often fast enough below ~100K vectors.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { say: 1 },
+              { lit: 'hnsw' },
+              { lit: 'ivf' },
+              { say: 2 },
+              { send: ['q', 'flat'], label: 'all N', count: 3 },
+              { badge: 'flat', text: 'exact' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The catalogue',
+            lines: [
+              '**IVF** searches a few k-means clusters; it needs training and drifts.',
+              '**HNSW** walks a multi-layer graph: the best trade-off, high memory.',
+              '**Quantized** indexes compress vectors; **DiskANN** keeps the graph on SSD.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'ivf'], label: 'few clusters' },
+              { say: 1 },
+              { send: ['q', 'hnsw'], label: 'graph walk', tone: 'ok' },
+              { say: 2 },
+              { send: ['q', 'pq'], label: 'compressed' },
+              { send: ['q', 'disk'], curve: true, label: 'SSD' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: interactive search',
+            lines: ['Users wait on every query.'],
+            task: {
+              type: 'pick',
+              question: 'Which index type is the usual pick for interactive workloads?',
+              answer: 'hnsw',
+              hints: {
+                flat: 'Exact but O(N·d): fine below ~100K vectors.',
+                ivf: 'Good if nprobe is tuned, but it needs training and drifts.',
+                pq: 'Compression is for memory-bound cases; recall drops without rescoring.',
+                disk: 'DiskANN is for very large data where RAM ≪ data.',
+              },
+            },
+            solved: 'HNSW gives the best recall/latency trade-off, at the cost of memory for graph links.',
+            then: [{ send: ['q', 'hnsw'], tone: 'ok' }, { badge: 'hnsw', text: 'interactive', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Bulk load, then build',
+            lines: [
+              '`COPY` the rows first, `CREATE INDEX` after.',
+              'With 24 GB `maintenance_work_mem` and 8 workers: ≈ 40 min. With the default 64 MB the graph spills to disk: many hours.',
+              'Deletes and updates leave tombstones; `VACUUM` or compaction reclaims them.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'hnsw' },
+              { say: 1 },
+              { badge: 'hnsw', text: '≈ 40 min', tone: 'ok' },
+              { say: 2 },
+              { badge: 'hnsw', text: 'tombstones', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the wrong opclass',
+            lines: ['Queries use `ORDER BY embedding <=> $1` (cosine).'],
+            task: {
+              type: 'choose',
+              question: 'The HNSW index was built with `vector_l2_ops` by mistake. What happens?',
+              options: [
+                { text: 'It silently falls back to a sequential scan: 2.5 s latency' },
+                { text: 'The query fails with an error', why: 'There is no error; the planner just cannot use the index.' },
+                { text: 'Results come back ranked by L2 instead', why: 'The index is not used at all; EXPLAIN shows Seq Scan.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Index the operator you query with: vector_cosine_ops for <=>, and check EXPLAIN.',
+            then: [{ send: ['q', 'flat'], label: 'Seq Scan', tone: 'err', count: 3 }],
+          },
+          {
+            kind: 'watch',
+            title: 'Compress to save memory',
+            lines: ['5M × 1,536-d vectors ≈ 30.7 GB raw, plus ≈ 1.3 GB of HNSW links.', 'As `halfvec(1536)`: ≈ 17 GB total, recall@10 drops < 0.5 points.'],
+            script: [
+              { say: 0 },
+              { badge: 'hnsw', text: '≈ 32 GB' },
+              { say: 1 },
+              { send: ['hnsw', 'pq'], label: 'halfvec' },
+              { badge: 'pq', text: '≈ 17 GB', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an index is a shortcut so you don't compare the query with every vector. Different shortcuts trade memory, build time, update cost and recall.
 
 **Mechanics — the index catalogue:**
@@ -336,6 +567,212 @@ console.log(indexMemory({ n: 5e6, dims: 1536, m: 16, bytesPerDim: 2 })); // { 15
     // ---------------------------------------------------------------- 3
     {
       heading: 'Metadata Filtering — pre-filtering, post-filtering and filtered HNSW',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'top-10 for tenant 7', x: 110, y: 150 },
+          { id: 'ann', kind: 'vector-db', label: 'HNSW scan', sub: 'ef_search 40', x: 340, y: 70 },
+          { id: 'filter', kind: 'guard', label: 'Filter', sub: 'tenant_id = 7', x: 570, y: 70 },
+          { id: 'part', kind: 'vector-db', label: 'Tenant partition', sub: '40K vectors', x: 340, y: 230 },
+          { id: 'out', kind: 'data', label: 'Results', sub: 'wanted: 10 rows', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Order matters',
+            lines: [
+              '"Top 10 similar chunks **for tenant 7**": a search plus a filter.',
+              'In the wrong order you get too few results, or you scan everything.',
+              '2M chunks, 50 tenants: tenant 7 is ~2% of rows.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { say: 1 },
+              { send: ['q', 'ann'] },
+              { send: ['ann', 'filter'] },
+              { say: 2 },
+              { badge: 'filter', text: '~2% match' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Post-filter starves the results',
+            lines: [
+              'pgvector applies the filter *after* the index scan.',
+              'ef_search 40 returns 40 candidates; only ~2% are tenant 7.',
+              'Result: **0–2 rows**. Users see "no results".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'ann'], label: 'top-40' },
+              { say: 1 },
+              { send: ['ann', 'filter'], label: '40 candidates' },
+              { say: 2 },
+              { send: ['filter', 'out'], label: '0–2 rows', tone: 'err' },
+              { badge: 'out', text: 'no results', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: get all 10 rows',
+            lines: ['You need 10 matching rows without scanning all 2M.'],
+            task: {
+              type: 'choose',
+              question: 'Which pgvector setting keeps scanning until 10 matches are found?',
+              options: [
+                { text: '`hnsw.iterative_scan = relaxed_order`' },
+                { text: 'Raise `ef_search` to 400', why: 'That gives ~8 rows: still under 10.' },
+                { text: 'Drop the tenant filter', why: 'That returns other tenants\' chunks.' },
+              ],
+              answer: 0,
+            },
+            solved: 'iterative_scan keeps scanning: 10 rows, recall@10 0.96, p95 22 ms.',
+            then: [{ send: ['ann', 'filter'], label: 'keep scanning', count: 3 }, { send: ['filter', 'out'], label: '10 rows', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Isolate tenants',
+            lines: [
+              'Partitioned by tenant_id: each HNSW holds only 40K vectors → 10 rows, recall 0.98, p95 6 ms.',
+              'Qdrant filterable HNSW with a tenant payload index: recall 0.97, p95 ~8 ms.',
+              'Always verify filtered recall against exact search.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'part'], label: 'tenant 7 only' },
+              { send: ['part', 'out'], label: '10 rows', tone: 'ok' },
+              { badge: 'out', text: 'p95 6 ms', tone: 'ok' },
+              { say: 1 },
+              { lit: 'filter' },
+              { say: 2 },
+              { badge: 'out', text: 'vs exact?' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a very selective filter',
+            lines: ['Post-filter, pre-filter, or filter during the graph walk.'],
+            task: {
+              type: 'choose',
+              question: 'A filter matches only a handful of rows. Which strategy fits?',
+              options: [
+                { text: 'Pre-filter: find the matching ids, then exact search over them' },
+                { text: 'Post-filter the ANN top-k', why: 'Selective filters leave too few results after the ANN step.' },
+                { text: 'Filtered HNSW graph walk', why: 'That suits broad filters; with few matches, exact search on the payload index is cheaper.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Selective → pre-filter/exact; broad → filtered HNSW; tenant isolation → partition or namespace.',
+            then: [{ send: ['q', 'filter'], curve: true, label: 'ids first' }, { send: ['filter', 'out'], label: 'exact', tone: 'ok' }],
+          },
+        ],
+      },
+      short: {
+        id: 'filtered-search-empty-results',
+        title: 'Why filtered search comes back empty',
+        beats: [
+          {
+            type: 'grid',
+            kicker: '2M chunks · 50 tenants · tenant 7',
+            head: 'Search first, filter *after*',
+            cells: 40,
+            hot: 1,
+            caption: 'HNSW hands back 40 candidates; ~2% belong to tenant 7',
+            sub: 'Asked for the top 10, the user gets **0–2 rows**: "no results".',
+          },
+          {
+            type: 'flow',
+            kicker: 'pgvector post-filter',
+            head: 'The filter runs *after* the index scan',
+            steps: [
+              'Query: top-10 for tenant 7',
+              'HNSW scan, ef_search 40',
+              'Filter tenant_id = 7',
+              '0–2 rows returned',
+            ],
+            broken: 2,
+          },
+          {
+            type: 'ladder',
+            kicker: 'Same query, four setups',
+            head: 'Rows returned for a *top-10*',
+            rungs: [
+              {
+                label: 'ef_search 40 (0–2)',
+                amount: 2,
+              },
+              {
+                label: 'ef_search 400',
+                amount: 8,
+              },
+              {
+                label: 'iterative_scan',
+                amount: 10,
+              },
+              {
+                label: 'Partition per tenant',
+                amount: 10,
+              },
+            ],
+            unit: 'rows',
+            sub: 'iterative_scan = relaxed_order keeps scanning until 10 match: recall@10 **0.96**, p95 22 ms.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Partitioned by tenant_id',
+            value: 6,
+            unit: 'ms p95, 10 rows, recall 0.98',
+            sub: 'Each partition holds only **40K vectors**, so its HNSW is small and fast.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'When to use what',
+            head: 'Match the strategy to *the filter*',
+            items: [
+              {
+                label: 'Tenant isolation: partition or namespace',
+                keep: true,
+              },
+              {
+                label: 'Selective filter: pre-filter, exact search',
+                keep: true,
+              },
+              {
+                label: 'Broad filter: filtered HNSW',
+                keep: true,
+              },
+              {
+                label: 'Post-filter and hope',
+              },
+            ],
+            keepLabel: 'Use',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'pgvector, ef_search 40, a filter matching 10% of rows. About how many rows come back?',
+            answer: 1,
+            options: [
+              {
+                text: '40',
+                why: 'The index returns 40 candidates, but the filter drops the ~90% that do not match.',
+              },
+              {
+                text: '~4',
+                why: '10% of 40 candidates survive the post-filter, on average about 4 rows.',
+              },
+              {
+                text: 'Always 10',
+                why: 'Only filtering during the search (or iterative scan) keeps going until 10 match.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Filter *during* the search, not after it.',
+          sub: 'And always **validate filtered recall** against exact search.',
+        },
+      },
       body: `**Intuition:** "find the 10 most similar chunks **that belong to tenant 42 and were published after 2025**". Doing the similarity search and the filter in the wrong order either returns too few results or scans everything.
 
 **Mechanics — three strategies:**

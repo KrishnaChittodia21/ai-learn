@@ -32,6 +32,110 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Model Context Protocol (MCP) — hosts, clients, servers and JSON-RPC',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'open an issue', x: 110, y: 70 },
+          { id: 'host', kind: 'agent', label: 'Host', sub: 'LLM, UI, consent', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'emits a tool call', x: 340, y: 230 },
+          { id: 'client', kind: 'server', label: 'MCP client', sub: '1:1 with a server', x: 570, y: 70 },
+          { id: 'server', kind: 'tool', label: 'GitHub server', sub: 'tools · resources', x: 800, y: 70 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'USB-C for AI apps',
+            lines: [
+              'Each tool ships one **server**; each app implements one **client**: N + M, not N × M.',
+              'The **host** owns the LLM, the UI and user consent.',
+              'It creates one **client** per server.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'server' },
+              { say: 1 },
+              { lit: 'host' },
+              { say: 2 },
+              { send: ['host', 'client'], label: 'one per server' },
+              { send: ['client', 'server'], label: 'connect' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Opening an issue over JSON-RPC',
+            lines: [
+              '`tools/list` returns 26 tools, including `create_issue` with its JSON Schema.',
+              'The host passes the definitions to the model, which emits a tool call.',
+              'The host asks the user to confirm, then the client sends `tools/call`.',
+              'Result: "Created acme/web#482".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['client', 'server'], label: 'tools/list' },
+              { send: ['server', 'client'], label: '26 tools' },
+              { say: 1 },
+              { send: ['host', 'llm'], label: 'definitions' },
+              { send: ['llm', 'host'], label: 'create_issue', curve: true },
+              { say: 2 },
+              { send: ['host', 'user'], label: 'confirm?' },
+              { send: ['user', 'host'], label: 'approve', tone: 'ok' },
+              { send: ['client', 'server'], label: 'tools/call' },
+              { say: 3 },
+              { send: ['server', 'client'], label: 'acme/web#482', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who controls what?',
+            lines: ['Each primitive has a different controller.'],
+            task: {
+              type: 'choose',
+              question: 'Which primitive does the model decide to call?',
+              options: [
+                { text: 'Tools' },
+                { text: 'Resources', why: 'Resources are application-controlled: the host decides what to attach.' },
+                { text: 'Prompts', why: 'Prompts are user-controlled: picked from a menu or slash command.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Tools: model. Resources: application. Prompts: user.',
+            then: [{ send: ['llm', 'host'], label: 'tool call', curve: true }, { send: ['client', 'server'], label: 'tools/call' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who asks for consent?',
+            lines: ['`create_issue` writes to an external system.'],
+            task: {
+              type: 'pick',
+              question: 'Which part shows the confirmation dialog?',
+              answer: 'host',
+              hints: {
+                server: 'The server exposes the tool; consent belongs to the AI application.',
+                client: 'The client routes messages for one server connection.',
+                llm: 'The model only emits the tool call.',
+              },
+            },
+            solved: 'The host owns the LLM, the UI and user consent.',
+            then: [{ send: ['host', 'user'], label: 'confirm?' }, { send: ['user', 'host'], label: 'approve', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When to reach for MCP',
+            lines: [
+              'The same GitHub server works unchanged in an IDE, a CLI agent and a custom agent.',
+              'Use MCP when a capability should be reusable across hosts.',
+              'For one private function inside one app, plain function calling is simpler.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['client', 'server'], label: 'any host', count: 3 },
+              { say: 1 },
+              { badge: 'server', text: 'reusable', tone: 'ok' },
+              { say: 2 },
+              { lit: 'llm' },
+            ],
+          },
+        ],
+      },
       short: {
         id: 'mcp-in-90-seconds',
         title: 'MCP in 90 seconds',
@@ -232,6 +336,105 @@ export async function runTool(client: Client, name: string, input: Record<string
     },
     {
       heading: 'MCP Servers and Tools — building a server with the TypeScript SDK',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'reads descriptions', x: 110, y: 70 },
+          { id: 'client', kind: 'server', label: 'MCP client', sub: 'stdio or HTTP', x: 340, y: 70 },
+          { id: 'schema', kind: 'guard', label: 'zod inputSchema', sub: 'limit ≤ 10', x: 570, y: 70 },
+          { id: 'handler', kind: 'tool', label: 'Tool handler', sub: 'search_notes', x: 800, y: 70 },
+          { id: 'notes', kind: 'data', label: 'Notes store', sub: 'notes://{id}', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A small adapter',
+            lines: [
+              '`registerTool(name, { description, inputSchema, … }, handler)`.',
+              'The description is the model\'s documentation: when to use it, what it returns.',
+              'The handler calls your system and returns `{ content, structuredContent }`.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'handler' },
+              { say: 1 },
+              { send: ['client', 'llm'], label: 'description' },
+              { say: 2 },
+              { send: ['handler', 'notes'], label: 'query' },
+              { send: ['notes', 'handler'], label: 'hits', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: limit 50',
+            lines: ['The model calls `search_notes({ query: \'pricing\', limit: 50 })`. The max is 10.'],
+            task: {
+              type: 'pick',
+              question: 'Which part rejects the call before your handler runs?',
+              answer: 'schema',
+              hints: {
+                handler: 'The handler never sees it: the bad call is rejected first.',
+                notes: 'The store is never queried.',
+                client: 'The client routes the message; the server validates it.',
+              },
+            },
+            solved: 'Strict schemas reject bad calls before your API sees them; the model retries with 10.',
+            then: [
+              { send: ['client', 'schema'], label: 'limit: 50', tone: 'err' },
+              { send: ['schema', 'llm'], label: 'validation error', tone: 'err', curve: true },
+              { send: ['client', 'schema'], label: 'limit: 10', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Protect the context window',
+            lines: [
+              'Return concise `content` (~60 tokens) plus `structuredContent` with ids.',
+              'Full note bodies would have cost ~4,500 tokens.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['handler', 'client'], label: '3 notes', tone: 'ok', curve: true },
+              { badge: 'handler', text: '~60 tokens', tone: 'ok' },
+              { say: 1 },
+              { badge: 'notes', text: '~4,500 tokens', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: an empty title',
+            lines: ['`create_note` is called with an empty title.'],
+            task: {
+              type: 'choose',
+              question: 'What should the handler return?',
+              options: [
+                { text: 'isError: true with an actionable message' },
+                { text: 'Throw and crash the server', why: 'A recoverable failure should come back to the model so it can fix and retry.' },
+                { text: 'An empty success', why: 'That fails silently; the model never learns what went wrong.' },
+              ],
+              answer: 0,
+            },
+            solved: '"title must be non-empty; ask the user for one": the model asks the user instead of failing silently.',
+            then: [{ send: ['handler', 'client'], label: 'isError', tone: 'miss', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Operational rules',
+            lines: [
+              'With stdio, stdout is the protocol channel: never `console.log`, log to stderr.',
+              'For HTTP: validate `Origin`, bind to 127.0.0.1 locally, require auth remotely.',
+              'Annotations like `readOnlyHint` are hints for hosts, not security.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'client', text: 'stdout sacred', tone: 'miss' },
+              { say: 1 },
+              { badge: 'client', text: 'Origin + auth', tone: 'ok' },
+              { say: 2 },
+              { badge: 'handler', text: 'readOnlyHint' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an MCP server is a small adapter: it translates "the model wants to do X" into a call on your system, and describes each capability well enough that a model picks it correctly.
 
 **Building blocks (\`@modelcontextprotocol/sdk\` v1)**
@@ -446,6 +649,107 @@ export function register(server: McpServer, customerId: string) {
     },
     {
       heading: 'Putting it together — MCP auth and security: tool poisoning, over-permissioned servers and defences',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'email Sam forecast', x: 110, y: 70 },
+          { id: 'host', kind: 'agent', label: 'Host', sub: 'pins definitions', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'reads descriptions', x: 340, y: 230 },
+          { id: 'weather', kind: 'tool', label: 'Weather server', sub: 'poisoned description', x: 570, y: 70 },
+          { id: 'email', kind: 'tool', label: 'Email server', sub: 'send_email', x: 800, y: 70 },
+          { id: 'auth', kind: 'guard', label: 'OAuth 2.1', sub: 'audience-bound token', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Tool poisoning',
+            lines: [
+              'The model reads tool descriptions as instructions.',
+              'After 40 blank lines, `get_forecast` says: also call send_email with a BCC to the attacker.',
+              'The user asks to email Sam the forecast; the model obeys the hidden line.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['weather', 'llm'], label: 'description', curve: true },
+              { say: 1 },
+              { badge: 'weather', text: 'hidden BCC', tone: 'err' },
+              { say: 2 },
+              { send: ['user', 'host'], label: 'email Sam' },
+              { send: ['llm', 'email'], label: 'send_email + bcc', tone: 'err', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the rug pull',
+            lines: ['A server changes its tool definitions after you approved it.'],
+            task: {
+              type: 'choose',
+              question: 'What stops it?',
+              options: [
+                { text: 'Hash definitions at approval; block or re-prompt when they change' },
+                { text: 'Trust the readOnlyHint annotation', why: 'Annotations are hints, not security, and the server controls them.' },
+                { text: 'A longer system prompt', why: 'The model reads poisoned descriptions as instructions; pinning catches the change in code.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pinning: the host stored a SHA-256 of each definition, so the update was blocked for re-review.',
+            then: [{ send: ['weather', 'host'], label: 'list_changed', tone: 'miss' }, { badge: 'host', text: 'hash changed', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Layers that would have stopped it',
+            lines: [
+              '**Confirmation UI** for `send_email` shows all recipients, BCC included.',
+              '**Isolation**: an agent that needs weather never loads the email server.',
+              '**Server-side policy**: external BCC needs an explicit user setting.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['host', 'user'], label: 'to Sam + BCC?', tone: 'miss' },
+              { say: 1 },
+              { down: 'email' },
+              { wait: 700 },
+              { down: 'email', on: false },
+              { say: 2 },
+              { badge: 'email', text: 'BCC blocked', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Auth for remote servers',
+            lines: [
+              'The server is an **OAuth 2.1 resource server**; a 401 points to its metadata.',
+              'The client runs OAuth + PKCE with a resource indicator.',
+              'The token\'s audience is this server: no token passthrough.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['host', 'email'], label: 'request', curve: true },
+              { send: ['email', 'host'], label: '401', tone: 'err', curve: true },
+              { say: 1 },
+              { send: ['host', 'auth'], label: 'OAuth + PKCE', curve: true },
+              { say: 2 },
+              { badge: 'auth', text: 'aud = this server', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where least privilege lives',
+            lines: ['A server holds an admin token; one injected prompt could delete data.'],
+            task: {
+              type: 'pick',
+              question: 'Which part enforces least privilege?',
+              answer: 'auth',
+              hints: {
+                llm: 'The model can be steered by injected text; privilege must not depend on it.',
+                weather: 'Descriptions are prompts from a third party, not a control.',
+                user: 'The user confirms writes, but scopes live in credentials.',
+              },
+            },
+            solved: 'Least privilege lives in credentials and server-side checks: scoped, per-user, audience-bound tokens.',
+            then: [{ send: ['auth', 'email'], label: 'scoped token', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** connecting an MCP server is like installing a browser extension for your AI: the model reads its tool descriptions as instructions, and its tools act with your credentials.
 
 **Threats**

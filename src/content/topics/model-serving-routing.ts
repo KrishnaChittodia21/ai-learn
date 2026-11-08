@@ -34,6 +34,118 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Model Serving — vLLM, SGLang, TensorRT-LLM and the metrics that matter',
+      steps: {
+        actors: [
+          { id: 'clients', kind: 'user', label: 'Clients', sub: 'HTTP / SSE', x: 110, y: 70 },
+          { id: 'api', kind: 'server', label: 'API server', sub: 'OpenAI-compatible', x: 340, y: 70 },
+          { id: 'sched', kind: 'server', label: 'Scheduler', sub: 'continuous batching', x: 570, y: 70 },
+          { id: 'gpu', kind: 'llm', label: 'Prefill + decode', sub: 'one token per step', x: 800, y: 70 },
+          { id: 'metrics', kind: 'metric', label: 'Metrics', sub: 'TTFT · ITL · goodput', x: 340, y: 230 },
+          { id: 'kv', kind: 'cache', label: 'KV cache', sub: 'PagedAttention blocks', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'What an inference server does',
+            lines: [
+              'Requests arrive; the server **tokenises** them and **schedules** them into GPU batches.',
+              '**Prefill** processes the prompt; **decode** generates tokens one at a time.',
+              'Tokens **stream** back, and the server exposes **metrics**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['clients', 'api'], label: 'request' },
+              { send: ['api', 'sched'], label: 'tokens' },
+              { say: 1 },
+              { lit: 'gpu' },
+              { send: ['sched', 'gpu'], label: 'batch' },
+              { badge: 'gpu', text: 'prefill → decode' },
+              { say: 2 },
+              { send: ['gpu', 'clients'], label: 'stream', tone: 'ok', curve: true },
+              { send: ['gpu', 'metrics'], label: 'TTFT · ITL' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Continuous batching',
+            lines: [
+              'New requests **join** the running batch at every decode step.',
+              'Finished ones **leave immediately**, instead of waiting for the whole batch.',
+              'Typical gain: several-fold higher throughput than static batching.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['api', 'sched'], label: 'join', tone: 'req', count: 3 },
+              { send: ['sched', 'gpu'], label: 'next step' },
+              { say: 1 },
+              { badge: 'sched', text: 'done → leaves', tone: 'ok' },
+              { say: 2 },
+              { badge: 'gpu', text: 'busy every step', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: PagedAttention',
+            lines: ['The KV cache can be pre-allocated contiguously, or stored in fixed-size blocks like OS virtual memory.'],
+            task: {
+              type: 'choose',
+              question: 'Why does storing the KV cache in fixed-size blocks raise throughput?',
+              options: [
+                { text: 'Memory is allocated on demand, so little is wasted and batches can be larger' },
+                {
+                  text: 'Each decode step computes fewer tokens',
+                  why: 'Decode still makes one token per step per sequence; the win is memory, not compute.',
+                },
+                {
+                  text: 'It removes the need for a scheduler',
+                  why: 'The scheduler still forms the batches; paging changes how KV memory is allocated.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'vLLM measured under 4% KV waste vs 60–80% for contiguous pre-allocation: larger batches, 2–4× throughput.',
+            then: [{ lit: 'kv' }, { send: ['gpu', 'kv'], label: 'blocks' }, { badge: 'kv', text: 'under 4% waste', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The metrics that matter',
+            lines: [
+              '**TTFT**: dominated by queueing + prefill.',
+              '**ITL/TPOT**: decode speed per user.',
+              '**Throughput**: tokens/s per GPU.',
+              '**Goodput**: requests/s meeting both the TTFT and ITL SLOs.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'metrics' },
+              { badge: 'metrics', text: 'TTFT' },
+              { say: 1 },
+              { badge: 'metrics', text: 'ITL' },
+              { say: 2 },
+              { badge: 'metrics', text: 'tokens/s' },
+              { say: 3 },
+              { badge: 'metrics', text: 'goodput', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the batch-size trade-off',
+            lines: ['`--max-num-seqs` caps how many sequences run per step.', 'Throughput and per-user latency trade off through it.'],
+            task: {
+              type: 'choose',
+              question: 'A bigger `--max-num-seqs` lifts tokens/s, but p95 TTFT now breaks your SLO. What do you optimise?',
+              options: [
+                { text: 'Goodput: the highest setting that still meets the TTFT and ITL SLOs, then add replicas' },
+                { text: 'Raw tokens/s, whatever TTFT does', why: 'Throughput that misses the SLO is not useful to users.' },
+                { text: 'Batch size 1 for the lowest latency', why: 'That wastes the GPU; tune the trade-off against the SLO instead.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Optimise goodput (SLO-meeting requests), not raw tokens/s.',
+            then: [{ send: ['sched', 'gpu'], label: 'batch' }, { badge: 'metrics', text: 'goodput', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a model server is a restaurant kitchen. Requests arrive at random, some orders are tiny, some huge; a good kitchen keeps every burner busy (batching) and never reserves a whole table for a party of one (memory management).
 
 **What an inference server does:** tokenise, schedule requests into GPU batches, run prefill (process the prompt) and decode (generate tokens one at a time), manage the KV cache, stream tokens back, and expose metrics.
@@ -213,6 +325,115 @@ export function summarise(samples: Sample[], slo: Slo) {
     },
     {
       heading: 'Model Routing — sending each request to the cheapest model that can handle it',
+      steps: {
+        actors: [
+          { id: 'req', kind: 'user', label: 'Request', sub: 'easy or hard?', x: 110, y: 150 },
+          { id: 'router', kind: 'judge', label: 'Router', sub: 'predicts difficulty', x: 340, y: 150 },
+          { id: 'small', kind: 'llm', label: 'Small model', sub: 'cheap, fast', x: 570, y: 70 },
+          { id: 'strong', kind: 'llm', label: 'Strong model', sub: '10–30× the price', x: 570, y: 230 },
+          { id: 'valid', kind: 'judge', label: 'Validator', sub: 'schema, tests, judge', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A triage desk',
+            lines: [
+              'Most requests are easy; a few need the expensive model.',
+              'A **router** sends easy prompts to a cheap, fast model and hard ones to the strong one.',
+              'You pay specialist prices only when needed.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['req', 'router'], label: 'prompt' },
+              { say: 1 },
+              { send: ['router', 'small'], label: 'easy', tone: 'ok' },
+              { send: ['router', 'strong'], label: 'hard', tone: 'req' },
+              { say: 2 },
+              { badge: 'strong', text: 'only when needed' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: router types',
+            lines: ['Rules, classifiers, embedding kNN and LLM routers all decide **before** any answer exists.'],
+            task: {
+              type: 'choose',
+              question: 'Which router uses a validator instead of a predictor?',
+              options: [
+                { text: 'Cascade: the cheap model answers first; escalate if validation fails' },
+                { text: 'Classifier', why: 'A classifier predicts "strong model needed" from labelled data.' },
+                { text: 'Rules', why: 'Rules decide up front from task type, prompt length or tenant tier.' },
+                { text: 'LLM router', why: 'A small LLM rates difficulty up front: it predicts, it does not validate.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Routers predict difficulty up front; cascades escalate on a validated failure.',
+            then: [
+              { send: ['router', 'small'], label: 'try cheap' },
+              { send: ['small', 'valid'], label: 'answer' },
+              { badge: 'valid', text: 'fails', tone: 'err' },
+              { send: ['valid', 'strong'], label: 'escalate', tone: 'req' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'How a cascade works',
+            lines: [
+              'The cheap model answers first.',
+              'A **validator** checks it: JSON schema, unit tests, self-reported confidence or a judge.',
+              'Only failures escalate to the strong model.',
+              'Works best when validation is cheap and reliable.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['router', 'small'], label: 'try cheap' },
+              { say: 1 },
+              { send: ['small', 'valid'], label: 'answer' },
+              { badge: 'valid', text: 'schema ✓', tone: 'ok' },
+              { say: 2 },
+              { send: ['small', 'valid'], label: 'answer' },
+              { badge: 'valid', text: 'fails', tone: 'err' },
+              { send: ['valid', 'strong'], label: 'escalate', tone: 'req' },
+              { say: 3 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Calibrate the threshold',
+            lines: [
+              'A router outputs `p_strong` between 0 and 1.',
+              'Pick the threshold on a validation set for a target share, e.g. 25% to the strong model.',
+              'Check quality on your eval at that point; recalibrate when traffic shifts.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'router', text: 'p_strong' },
+              { say: 1 },
+              { send: ['router', 'small'], label: 'below', tone: 'ok', count: 3 },
+              { send: ['router', 'strong'], label: 'above', tone: 'req' },
+              { say: 2 },
+              { lit: 'valid' },
+              { badge: 'valid', text: 'eval quality', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to route',
+            lines: ['Routing pays off only when tiers differ a lot in price and traffic differs in difficulty.'],
+            task: {
+              type: 'choose',
+              question: 'Where does a router earn its keep?',
+              options: [
+                { text: 'Mixed-difficulty traffic with a 10–30× price gap between tiers' },
+                { text: 'Almost every request needs the strong model', why: 'Then nearly everything goes strong anyway: skip routing.' },
+                { text: 'Very low volume', why: 'If volume is too low, the savings do not matter.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Route by predicted difficulty, escalate by validated failure, and measure cost per successful task.',
+          },
+        ],
+      },
       body: `**Intuition:** a hospital triage desk. Most patients need a nurse, a few need a specialist. Routing sends easy prompts to a cheap, fast model and hard ones to the expensive model, so you pay specialist prices only when needed.
 
 **Router types:**
@@ -364,6 +585,115 @@ console.log(t, evaluate(scores, scores.map((s) => s < 0.5), t));`,
     },
     {
       heading: 'Model Selection — a selection matrix driven by your own evals',
+      steps: {
+        actors: [
+          { id: 'cands', kind: 'llm', label: 'Candidates', sub: 'public benchmarks', x: 110, y: 70 },
+          { id: 'hard', kind: 'guard', label: 'Hard constraints', sub: 'pass / fail', x: 340, y: 70 },
+          { id: 'score', kind: 'judge', label: 'Weighted score', sub: 'quality · cost · p95', x: 570, y: 70 },
+          { id: 'pareto', kind: 'metric', label: 'Pareto view', sub: 'quality vs cost', x: 800, y: 70 },
+          { id: 'eval', kind: 'data', label: 'Your eval', sub: '200–500 cases', x: 340, y: 230 },
+          { id: 'pick', kind: 'llm', label: 'Chosen model', sub: 'version pinned', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Hiring a model',
+            lines: [
+              'Public benchmarks are the CV: they get candidates shortlisted.',
+              'Your eval on your own data is the job trial: it decides.',
+              'Cost and latency matter too.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'cands' },
+              { send: ['cands', 'hard'], label: 'shortlist' },
+              { say: 1 },
+              { lit: 'eval' },
+              { send: ['eval', 'score'], label: 'pass rate', tone: 'ok' },
+              { say: 2 },
+              { badge: 'score', text: 'cost · latency' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Two stages',
+            lines: [
+              '**Hard constraints** first, pass/fail: context window, modality, tool calling, residency, licence, rate limits.',
+              'Then **weighted scoring** on the survivors, led by task quality on your eval.',
+              'Drop options that are worse on both quality and cost (Pareto-dominated).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cands', 'hard'], label: 'candidates', tone: 'req', count: 3 },
+              { badge: 'hard', text: 'fails residency', tone: 'err' },
+              { say: 1 },
+              { send: ['hard', 'score'], label: 'survivors', tone: 'ok' },
+              { send: ['eval', 'score'], label: 'pass rate' },
+              { say: 2 },
+              { send: ['score', 'pareto'] },
+              { badge: 'pareto', text: 'dominated: out', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the order',
+            lines: ['Each stage needs what the previous one produced.'],
+            task: {
+              type: 'order',
+              question: 'Put the selection steps in order.',
+              items: [
+                'Hard constraints (pass/fail)',
+                'Run your eval on the survivors',
+                'Drop Pareto-dominated options',
+                'Weigh trade-offs and choose per use case',
+              ],
+              hint: 'Pass/fail filters come first; you need eval numbers before you can see which options are dominated.',
+            },
+            solved: 'Hard constraints first, then scored trade-offs; choose per use case.',
+            then: [
+              { send: ['hard', 'score'], label: 'survivors' },
+              { send: ['score', 'pareto'] },
+              { send: ['pareto', 'pick'], label: 'chosen', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cost per successful task',
+            lines: ['Cost per successful task = (tokens × price) / success rate, plus the cost of handling failures.'],
+            task: {
+              type: 'choose',
+              question: 'Model X costs half as much as Y but passes 20 points fewer of your cases. Is it cheaper?',
+              options: [
+                { text: 'Often not: retries and human review of its failures can make it more expensive overall' },
+                { text: 'Yes: half the price is half the cost', why: 'Price per token ignores failures; retries and human review cost money too.' },
+                { text: 'Only latency decides this', why: 'Latency is one criterion; cost per successful task is what answers this question.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Compare cost per successful task, not per token.',
+          },
+          {
+            kind: 'watch',
+            title: 'Re-select regularly',
+            lines: [
+              'New releases every few months shift the frontier.',
+              'Keep the eval harness and matrix automated, so a new candidate is scored in hours.',
+              'Record the exact model id/version you use.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cands', 'hard'], label: 'new release', tone: 'req' },
+              { say: 1 },
+              { send: ['hard', 'score'] },
+              { send: ['eval', 'score'], label: 'automated' },
+              { send: ['score', 'pareto'] },
+              { say: 2 },
+              { send: ['pareto', 'pick'] },
+              { badge: 'pick', text: 'version pinned', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** choosing a model is like hiring: the CV (public benchmarks) gets candidates shortlisted, but the job trial (your eval on your data) decides, and the salary (cost) and notice period (latency, rate limits) matter too.
 
 **Two-stage process:**
@@ -497,6 +827,179 @@ console.log(paretoFront([
     },
     {
       heading: 'Fallback Models — fallback chains, circuit breakers and retry budgets',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'server', label: 'App', sub: 'LLM feature', x: 110, y: 150 },
+          { id: 'breaker', kind: 'guard', label: 'Circuit breaker', sub: 'per provider + model', x: 340, y: 150 },
+          { id: 'primary', kind: 'llm', label: 'Primary model', sub: 'primary region', x: 570, y: 70 },
+          { id: 'same', kind: 'llm', label: 'Same model', sub: 'other region/provider', x: 800, y: 70 },
+          { id: 'other', kind: 'llm', label: 'Comparable model', sub: 'another vendor', x: 570, y: 230 },
+          { id: 'small', kind: 'cache', label: 'Smaller / cached', sub: 'degraded mode', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Failures to plan for',
+            lines: [
+              '429 rate limits, 5xx / overloaded, regional outages, timeouts and stalled streams.',
+              'Also content-filter refusals and silent quality regressions after a model update.',
+              'A fallback chain keeps the lights on, maybe dimmer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'breaker'], label: 'call' },
+              { send: ['breaker', 'primary'] },
+              { badge: 'primary', text: '429 / 5xx', tone: 'err' },
+              { say: 1 },
+              { badge: 'primary', text: 'timeout', tone: 'err' },
+              { say: 2 },
+              { send: ['breaker', 'same'], label: 'fallback', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: build the chain',
+            lines: ['Each hop has its own timeout.'],
+            task: {
+              type: 'order',
+              question: 'Order a typical fallback chain, first hop first.',
+              items: [
+                'Primary model, primary region',
+                'Same model via another region or provider',
+                'Comparable model from another vendor',
+                'Smaller model or cached answer',
+              ],
+              hint: 'Change as little as possible first: identical prompts and nearly identical behaviour beat a different model.',
+            },
+            solved: 'Same model elsewhere first, then a comparable model, then smaller or cached.',
+            then: [{ send: ['breaker', 'primary'] }, { send: ['breaker', 'same'] }, { send: ['breaker', 'other'] }, { send: ['breaker', 'small'] }],
+          },
+          {
+            kind: 'watch',
+            title: 'The circuit breaker',
+            lines: [
+              '**Closed**: calls flow; failures are tracked in a rolling window.',
+              '**Open**: after e.g. 5 consecutive failures or >50% errors in 30 s, skip this hop for a cool-down (30–60 s).',
+              '**Half-open**: one probe goes through; success closes, failure re-opens.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['breaker', 'primary'], label: 'calls', tone: 'ok' },
+              { say: 1 },
+              { badge: 'primary', text: 'errors', tone: 'err' },
+              { badge: 'breaker', text: 'open', tone: 'err' },
+              { down: 'primary' },
+              { send: ['breaker', 'same'], label: 'skip ahead', tone: 'ok' },
+              { say: 2 },
+              { down: 'primary', on: false },
+              { send: ['breaker', 'primary'], label: 'probe', tone: 'req' },
+              { badge: 'breaker', text: 'closed', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what to retry',
+            lines: ['Retry only retryable errors, with exponential backoff, jitter and a retry budget.'],
+            task: {
+              type: 'choose',
+              question: 'Which failure should you retry?',
+              options: [
+                { text: 'A 429 or 5xx, honouring `retry-after`' },
+                { text: 'A 401 unauthorised', why: 'Never retry 400/401: the same request fails the same way.' },
+                { text: 'A content-policy refusal', why: 'Content-policy errors are not retryable.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Retry 429/5xx/timeouts with jittered backoff, capped by a budget (≤10–20% extra load).',
+          },
+          {
+            kind: 'watch',
+            title: 'Streaming and monitoring',
+            lines: [
+              'Once tokens reach the user, a mid-stream model switch is visible.',
+              'Fall back only before the first token, or restart the answer explicitly.',
+              'Monitor fallback rate and quality per hop: an unexercised fallback fails when you need it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['primary', 'app'], label: 'tokens', tone: 'ok', curve: true },
+              { say: 1 },
+              { badge: 'app', text: 'before 1st token' },
+              { say: 2 },
+              { send: ['breaker', 'same'], label: 'test' },
+              { send: ['breaker', 'other'], label: 'test' },
+              { send: ['breaker', 'small'], label: 'test' },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'when-the-primary-model-goes-down',
+        title: 'When the primary model goes down',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'A Monday · 22 minutes of 529s',
+            head: 'The first hop *fails*, the chain holds',
+            steps: [
+              'Primary: 529 "overloaded" on 60% of calls',
+              'Same model via another provider',
+              'Comparable model from another vendor',
+              'Smaller model with a degraded-mode notice',
+            ],
+            broken: 0,
+          },
+          {
+            type: 'race',
+            kicker: 'p95 latency',
+            head: 'Retrying a dying provider is *slow*',
+            lanes: [
+              { label: 'No breaker: p95 24 s', seconds: 12, tone: 'pink' },
+              { label: 'Breaker open: p95 3.6 s', seconds: 1.8, tone: 'good' },
+            ],
+            sub: 'Without a breaker, every request tries the primary first, and retries **triple the load** on it.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Circuit breaker per hop',
+            head: 'Closed, *open*, half-open',
+            steps: ['Closed: calls flow, failures counted', 'Open: > 50% errors in 20 s, skip it for 45 s', 'Half-open: one probe; success closes it'],
+            stats: [
+              { value: '61%', label: 'fallback rate for 22 min' },
+              { value: '0.4%', label: 'fallback rate after' },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Retry budget',
+            head: 'Retry only what can *recover*',
+            items: [
+              { label: '429 rate limits', keep: true },
+              { label: '5xx and 529 overloaded', keep: true },
+              { label: 'Timeouts and connection resets', keep: true },
+              { label: '400 invalid request' },
+              { label: '401 and content-policy errors' },
+            ],
+            keepLabel: 'Retry',
+            sub: 'Backoff + jitter, and retries capped at **10–20%** of requests.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'After a tool-schema change, the primary returns 400 "invalid request". What should the fallback layer do?',
+            answer: 1,
+            options: [
+              { text: 'Retry three times, then fall back', why: 'A 400 is deterministic: retries waste calls and the next hop may reject it or hide the bug.' },
+              { text: 'Surface the error and alert, no retry or fallback', why: 'It is a client bug: fail fast so someone fixes it.' },
+              { text: 'Open the circuit breaker on the primary', why: 'That punishes a healthy provider for your own bug.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Fall back *fast*; never retry a bug.',
+          sub: 'Same model on another provider first, a **breaker per hop**, and test every hop before you need it.',
+        },
+      },
       body: `**Intuition:** a fallback chain is a backup generator: when mains power (your primary model) fails, the lights stay on, maybe dimmer. A circuit breaker is the fuse that stops you hammering a failing provider and making things worse.
 
 **Failure modes to plan for:** 429 rate limits, 5xx / overloaded (e.g. 529), regional outages, timeouts and stalled streams, content-filter refusals, and silent quality regressions after a model update.

@@ -34,6 +34,110 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'GenAI Fundamentals — what generative AI is and where it fits',
+      steps: {
+        actors: [
+          { id: 'email', kind: 'user', label: 'Support email', sub: 'messy natural text', x: 110, y: 70 },
+          { id: 'classic', kind: 'judge', label: 'Classic ML', sub: 'a judge: picks label', x: 340, y: 70 },
+          { id: 'label', kind: 'data', label: 'Label', sub: '"billing" 0.93', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'next token, repeat', x: 340, y: 230 },
+          { id: 'diffusion', kind: 'llm', label: 'Diffusion model', sub: 'noise → denoise', x: 570, y: 230 },
+          { id: 'content', kind: 'document', label: 'New content', sub: 'reply · SQL · image', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A judge vs an author',
+            lines: [
+              'Classic ML is a **judge**: "is this email spam? yes/no".',
+              'Generative AI is an **author**: it produces brand-new content.',
+              'The content resembles the data it learned from.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['email', 'classic'], label: 'email' },
+              { send: ['classic', 'label'], label: 'billing', tone: 'ok' },
+              { say: 1 },
+              { send: ['email', 'llm'], label: 'email + prompt', curve: true },
+              { send: ['llm', 'content'], label: 'draft reply', tone: 'ok', curve: true },
+              { say: 2 },
+              { badge: 'content', text: 'brand-new', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Condition in, sample out',
+            lines: [
+              'A generative model learns a **probability distribution** over data.',
+              'You give it a condition (a prompt) and it **samples** an output.',
+              'LLMs predict the next token and repeat; diffusion models start from noise and denoise step by step.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { say: 1 },
+              { send: ['email', 'llm'], label: 'prompt', curve: true },
+              { send: ['llm', 'content'], label: 'sample', tone: 'ok', curve: true },
+              { say: 2 },
+              { badge: 'llm', text: 'next token', ms: 1000 },
+              { badge: 'diffusion', text: 'denoise', ms: 1000 },
+              { send: ['diffusion', 'content'], label: 'image', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which family?',
+            lines: ['Each family generates a different kind of output.'],
+            task: {
+              type: 'pick',
+              question: 'You need to generate an image. Which model family does it?',
+              answer: 'diffusion',
+              hints: {
+                llm: 'LLMs generate text, code and JSON by predicting the next token.',
+                classic: 'Classic ML judges existing data; it does not generate new content.',
+              },
+            },
+            solved: 'Diffusion models generate images, video and audio by denoising step by step.',
+            then: [{ lit: 'diffusion' }, { send: ['diffusion', 'content'], label: 'image', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to use GenAI',
+            lines: ['GenAI fits messy natural language, or rules too many to hand-write.'],
+            task: {
+              type: 'choose',
+              question: 'Which job is a good fit for an LLM?',
+              options: [
+                { text: 'Summarise a support email and draft a reply' },
+                { text: 'Exact arithmetic on invoice totals', why: 'Exact arithmetic is a "when not to": code is cheaper and provably correct.' },
+                { text: 'A deterministic business rule', why: 'Deterministic rules belong in code, a regex or a SQL query.' },
+                { text: 'A response under ~50 ms', why: 'Strict latency budgets under ~50 ms are a "when not to".' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use GenAI when input or output is messy natural language; use code when the answer must be exact.',
+            then: [{ send: ['email', 'llm'], label: 'email', curve: true }, { send: ['llm', 'content'], label: 'summary + draft', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'The hybrid usually wins',
+            lines: [
+              'Many teams keep the cheap classifier for routing.',
+              'The LLM writes only the summary and the draft reply.',
+              'Your job shifts from "train a model" to the prompt, context, tools and checks around it: **verify its work**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['email', 'classic'], label: 'route' },
+              { send: ['classic', 'label'], label: 'billing', tone: 'ok' },
+              { say: 1 },
+              { send: ['email', 'llm'], label: 'summarise', curve: true },
+              { send: ['llm', 'content'], label: 'draft', tone: 'ok', curve: true },
+              { say: 2 },
+              { badge: 'content', text: 'verify it', tone: 'req', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** classic machine learning is a *judge* ("is this email spam? yes/no"). Generative AI is an *author*: it produces brand-new content (a reply, a SQL query, an image) that resembles the data it learned from.
 
 **Mechanics.** A generative model learns a probability distribution over data. At run time you give it a *condition* (a prompt) and it **samples** an output from that distribution. Different families do this differently:
@@ -217,6 +321,107 @@ for (const t of tasks) console.log(t.name, '=>', shouldUseLLM(t));
     // ---------------------------------------------------------------- 2
     {
       heading: 'LLM Fundamentals — tokens, next-token prediction, context windows and sampling',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'user', label: 'Your app', sub: 'sends the text', x: 110, y: 70 },
+          { id: 'tokens', kind: 'data', label: 'Tokens', sub: '~4 English chars each', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'scores every token', x: 570, y: 70 },
+          { id: 'out', kind: 'document', label: 'Output so far', sub: 'append, repeat', x: 800, y: 70 },
+          { id: 'window', kind: 'metric', label: 'Context window', sub: 'input + output cap', x: 340, y: 230 },
+          { id: 'temp', kind: 'metric', label: 'Temperature', sub: 'lower = sharper', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Autocomplete, one token at a time',
+            lines: [
+              'The model reads your text as **tokens** (word pieces).',
+              'It predicts a probability for every possible next token and picks one.',
+              'It appends it and repeats until a stop token or `max_tokens`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'tokens'], label: 'text' },
+              { send: ['tokens', 'llm'], label: 'tokens' },
+              { say: 1 },
+              { badge: 'llm', text: '" Paris" 0.80', ms: 1200 },
+              { say: 2 },
+              { send: ['llm', 'out'], label: '" Paris"', tone: 'ok' },
+              { send: ['out', 'llm'], label: 'append', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the generation loop',
+            lines: ['Every reply is built by the same small loop.'],
+            task: {
+              type: 'order',
+              question: 'Put one turn of the generation loop in order.',
+              items: ['Read the text as tokens', 'Score every possible next token', 'Pick one token', 'Append it to the text', 'Repeat until a stop token or max_tokens'],
+              hint: 'The model has to see tokens before it can score them; stopping is the last check.',
+            },
+            solved: 'Tokens in, a probability for each next token, pick one, append, repeat.',
+            then: [{ send: ['tokens', 'llm'], label: 'tokens' }, { send: ['llm', 'out'], label: 'next', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Temperature reshapes the odds',
+            lines: [
+              '"The capital of France is": " Paris" has 0.80 at T = 1.0.',
+              'At T = 0.5 it rises to 0.98: lower temperature squashes the tail.',
+              'At T = 2.0 it falls to 0.54: higher temperature flattens it and odd continuations appear.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'temp' },
+              { badge: 'llm', text: 'Paris 0.80', ms: 1000 },
+              { say: 1 },
+              { send: ['temp', 'llm'], label: 'T = 0.5' },
+              { badge: 'llm', text: 'Paris 0.98', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { send: ['temp', 'llm'], label: 'T = 2.0', tone: 'miss' },
+              { badge: 'llm', text: 'Paris 0.54', tone: 'miss', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: set the temperature',
+            lines: ['Pick the knob setting for the job.'],
+            task: {
+              type: 'choose',
+              question: 'You are extracting fields from invoices. Which setting fits?',
+              options: [
+                { text: 'Temperature ≈ 0–0.3' },
+                { text: 'Temperature 0.7–1.0', why: 'That range suits brainstorming, not extraction.' },
+                { text: 'Lower temperature and top-p together', why: 'Change temperature or top-p, not both.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Low temperature (≈ 0–0.3) for extraction and classification; change temperature or top-p, not both.',
+            then: [{ send: ['temp', 'llm'], label: 'T = 0.2' }, { badge: 'llm', text: 'sharp', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Stateless: the app resends everything',
+            lines: [
+              'The model remembers nothing between calls.',
+              'A "chat" is your app resending the whole conversation every turn.',
+              'A 20-turn chat of ~300 tokens per turn resends ~6,000 tokens on turn 20, and long chats eventually overflow the window.',
+            ],
+            script: [
+              { say: 0 },
+              { down: 'llm' },
+              { down: 'llm', on: false },
+              { say: 1 },
+              { send: ['app', 'tokens'], label: 'whole chat', count: 3 },
+              { send: ['tokens', 'llm'], label: 'every turn' },
+              { say: 2 },
+              { lit: 'window' },
+              { badge: 'window', text: '~6,000 tokens', tone: 'miss', ms: 1200 },
+            ],
+          },
+        ],
+      },
       short: {
         id: 'how-an-llm-picks-the-next-word',
         title: 'How an LLM picks the next word',

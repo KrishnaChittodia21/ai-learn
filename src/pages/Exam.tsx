@@ -936,7 +936,7 @@ function AttemptAnalysis({ items, missed }: { items: MCQ[]; missed: MCQ[] }) {
                         <span className="rev-count">{ws.missed.length} missed</span>
                         <span className="rev-heading">{ws.heading}</span>
                         <Link to={`/topic/${topic.id}?tab=learn&s=${ws.index}`} className="rev-link">
-                          Revise §{ws.index + 1} <ArrowRight size={13} aria-hidden />
+                          Revise section {ws.index + 1} <ArrowRight size={13} aria-hidden />
                         </Link>
                       </li>
                     ))}

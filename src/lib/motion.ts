@@ -44,12 +44,6 @@ export function typeChunks(text: string): string[] {
   return text.match(/\s+|[^\s]{1,4}/g) ?? [];
 }
 
-/** Swipe deck: what a release does. dx in px (negative = left), v in px/ms. */
-export function deckRelease(dx: number, v: number): 'next' | 'prev' | 'tap' | 'settle' {
-  if (Math.abs(dx) > 110 || (v > 0.11 && Math.abs(dx) > 12)) return dx < 0 ? 'next' : 'prev';
-  return Math.abs(dx) < 6 ? 'tap' : 'settle';
-}
-
 /** Loading placeholders stay invisible this long, so fast loads never flash a skeleton. */
 export const SKELETON_DELAY = 200;
 

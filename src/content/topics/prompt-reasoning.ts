@@ -40,6 +40,110 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Chain-of-thought — few-shot vs zero-shot, hidden reasoning, and reasoning models',
+      steps: {
+        actors: [
+          { id: 'prompt', kind: 'document', label: 'Prompt', sub: 'task + output format', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'each token = compute', x: 340, y: 70 },
+          { id: 'think', kind: 'document', label: '<thinking>', sub: 'room to work', x: 570, y: 70 },
+          { id: 'logs', kind: 'data', label: 'Logs', sub: 'keep the reasoning', x: 800, y: 70 },
+          { id: 'answer', kind: 'data', label: '<answer>', sub: 'only this is parsed', x: 340, y: 230 },
+          { id: 'code', kind: 'judge', label: 'Your code', sub: 'extracts <answer>', x: 570, y: 230 },
+          { id: 'user', kind: 'user', label: 'User', sub: 'sees the answer', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Room to work before the answer',
+            lines: [
+              '"Just the number" on a multi-step problem is long division in your head.',
+              'Each output token is a little computation; reasoning written **before** the answer gives the model room to work.',
+              'Refund task: answer-only was 64% correct; "reason step by step in <thinking>" reached 88%.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'llm'], label: 'amount only' },
+              { send: ['llm', 'answer'], label: '$208.32', tone: 'err' },
+              { say: 1 },
+              { send: ['llm', 'think'], label: '240 × 0.85 = 204…' },
+              { say: 2 },
+              { send: ['think', 'answer'], label: '$207.36', tone: 'ok', curve: true },
+              { badge: 'answer', text: '64% → 88%', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which style?',
+            lines: ['Few-shot CoT, zero-shot CoT and built-in thinking all get reasoning out of the model.'],
+            task: {
+              type: 'choose',
+              question: 'A fixed task type where you want to teach the step order. Which style fits best?',
+              options: [
+                { text: 'Few-shot CoT: 2–8 worked examples showing the steps' },
+                { text: 'Zero-shot CoT: "think step by step"', why: 'Cheap to add, but with no examples it cannot teach the kind of steps.' },
+                { text: 'Built-in thinking with effort', why: 'You control depth there, not the script of steps.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Few-shot CoT teaches format and the kind of steps: 96% on the refund task, and every output parses.',
+            then: [{ send: ['prompt', 'llm'], label: '3 worked examples' }, { send: ['llm', 'think'], label: 'same step order', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Separate thinking from the answer',
+            lines: [
+              'Reasoning goes in `<thinking>`, the result in `<answer>`: code extracts only the answer.',
+              'A missing `<answer>` is a detectable failure instead of a silent one.',
+              'Strip `<thinking>` before display and keep it in logs: it is not guaranteed to be the faithful cause of the answer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'think'], label: 'reasoning' },
+              { send: ['llm', 'answer'], label: 'result' },
+              { send: ['answer', 'code'], label: '<answer>' },
+              { say: 1 },
+              { badge: 'code', text: 'missing? flag it', tone: 'req', ms: 1000 },
+              { say: 2 },
+              { send: ['think', 'logs'], label: 'keep' },
+              { send: ['code', 'user'], label: 'answer only', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a model that already thinks',
+            lines: ['Reasoning models plan with their own thinking tokens.'],
+            task: {
+              type: 'choose',
+              question: 'Moving the prompt to a reasoning model: what do you keep?',
+              options: [
+                { text: 'The task, constraints, what to check and the output contract' },
+                { text: '"Think step by step"', why: 'On a model that already thinks, it adds nothing.' },
+                { text: 'A script: "step 1 do X, step 2 do Y"', why: 'Prescriptive scripts often do worse: they constrain a planner that is better than your script.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Give a reasoning model a clear goal and checks, tune depth with effort, and measure: 98% on the refund task.',
+            then: [{ send: ['prompt', 'llm'], label: 'goal + checks' }, { send: ['llm', 'answer'], label: '207.36', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When CoT is not worth it',
+            lines: [
+              'Lookups, extraction and simple classification with clear rules do not need it.',
+              'CoT adds output tokens and latency on every call (~90 tokens per order here).',
+              'Route only hard requests to reasoning, and compute deterministic maths in code.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'llm'], label: 'lookup' },
+              { send: ['llm', 'answer'], label: 'direct', tone: 'ok' },
+              { say: 1 },
+              { badge: 'think', text: '+90 tokens', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { badge: 'code', text: 'maths in code', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** asking a model for "just the number" on a multi-step problem is like asking a student to do long division in their head. Each output token is a little computation; reasoning tokens written *before* the answer give the model room to work, and the answer is then conditioned on that work.
 
 **Three ways to get the reasoning:**
@@ -201,6 +305,110 @@ export function splitCot(output: string): { answer: string | null; reasoning: st
     },
     {
       heading: 'Self-consistency — sample several reasoning paths, then vote',
+      steps: {
+        actors: [
+          { id: 's1', kind: 'llm', label: 'Sample 1', sub: 'path A', x: 340, y: 70 },
+          { id: 's2', kind: 'llm', label: 'Sample 2', sub: 'path B', x: 570, y: 70 },
+          { id: 's3', kind: 'llm', label: 'Sample 3', sub: 'path C', x: 800, y: 70 },
+          { id: 'prompt', kind: 'document', label: 'CoT prompt', sub: 'ends in <answer>', x: 110, y: 230 },
+          { id: 'vote', kind: 'judge', label: 'Vote in code', sub: 'parse · count', x: 570, y: 230 },
+          { id: 'human', kind: 'user', label: 'Human', sub: 'ties + weak majority', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Right answers agree',
+            lines: [
+              'Ask several careful colleagues independently: right answers tend to agree.',
+              'Mistakes tend to scatter across **different** wrong answers.',
+              'Self-consistency samples several CoT paths from one model and keeps the answer most of them reach.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 's1'], label: 'same prompt', curve: true },
+              { send: ['prompt', 's2'], label: 'same prompt', curve: true },
+              { send: ['prompt', 's3'], label: 'same prompt', curve: true },
+              { say: 1 },
+              { badge: 's1', text: 'APPROVE', tone: 'ok', ms: 900 },
+              { badge: 's2', text: 'REJECT', tone: 'miss', ms: 900 },
+              { badge: 's3', text: 'APPROVE', tone: 'ok', ms: 900 },
+              { say: 2 },
+              { send: ['s1', 'vote'], label: 'APPROVE' },
+              { send: ['s2', 'vote'], label: 'REJECT', tone: 'miss' },
+              { send: ['s3', 'vote'], label: 'APPROVE' },
+              { badge: 'vote', text: 'APPROVE 2–1', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the algorithm',
+            lines: ['Self-consistency is a short recipe, mostly in code.'],
+            task: {
+              type: 'order',
+              question: 'Put the self-consistency steps in order.',
+              items: ['One CoT prompt ending in a strict answer', 'Call it N times with sampling on', 'Parse and normalise each answer', 'Majority vote in code', 'Log the split'],
+              hint: 'You can only count answers once they are parsed; the split is recorded after the vote.',
+            },
+            solved: 'One strict prompt, N sampled calls, parse, vote in code, and log whether it was 5–0 or 3–2.',
+            then: [{ send: ['prompt', 's2'], label: 'N calls', curve: true, count: 3 }, { send: ['s2', 'vote'], label: 'parsed', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Abstain when the vote is weak',
+            lines: [
+              'Abstain on a tie, a weak majority, or when `UNSURE` wins: send it to a human.',
+              'A 2 APPROVE / 2 REJECT / 1 UNSURE split is genuinely ambiguous: voting more will not fix it.',
+              'Expense claims: 1 call 86%; 5-call vote 92%; vote + abstain 97% of auto-decided, 7% to a human.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['s1', 'vote'], label: 'APPROVE' },
+              { send: ['s2', 'vote'], label: 'REJECT', tone: 'miss' },
+              { send: ['s3', 'vote'], label: 'UNSURE', tone: 'miss' },
+              { say: 1 },
+              { send: ['vote', 'human'], label: 'tie', tone: 'req' },
+              { say: 2 },
+              { badge: 'vote', text: '97% auto', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Cost and latency',
+            lines: [
+              'N samples cost N× the output tokens.',
+              'Run them in parallel: latency is the slowest sample, not N× one call.',
+              'Adaptive: stop after 3 if they agree, else go to 5: ~3.4× instead of 5×.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'prompt', text: 'N× tokens', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['prompt', 's1'], label: 'parallel', curve: true },
+              { send: ['prompt', 's2'], label: 'parallel', curve: true },
+              { send: ['prompt', 's3'], label: 'parallel', curve: true },
+              { say: 2 },
+              { badge: 'vote', text: '3–0: stop', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where it helps',
+            lines: ['Voting needs short answers you can compare exactly.'],
+            task: {
+              type: 'choose',
+              question: 'Which job is a good fit for self-consistency?',
+              options: [
+                { text: 'Labelling an expense claim from a closed set' },
+                { text: 'Writing a customer email', why: 'Open-ended text has nothing to count: use a judge or universal self-consistency.' },
+                { text: 'A policy every sample misreads the same way', why: 'Voting cannot fix an error every sample makes the same way.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use it for maths, multiple choice, classification and single-value extraction.',
+            then: [{ send: ['s3', 'vote'], label: 'APPROVE', tone: 'ok' }, { badge: 'vote', text: 'majority', tone: 'ok' }],
+          },
+        ],
+      },
       short: {
         id: 'self-consistency-ask-five-times',
         title: 'Self-consistency: ask five times',
@@ -437,6 +645,109 @@ export function majorityVote(samples: (string | null)[], opts: { minValid?: numb
     },
     {
       heading: 'Decomposition — least-to-most, step-back and sub-question prompts',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Hard question', sub: 'easy ones combined', x: 110, y: 70 },
+          { id: 'plan', kind: 'llm', label: 'Decompose', sub: 'JSON sub-questions', x: 340, y: 70 },
+          { id: 'solve', kind: 'llm', label: 'Solve parts', sub: 'Q1 → A1 → Q2 …', x: 570, y: 70 },
+          { id: 'synth', kind: 'llm', label: 'Synthesis', sub: 'cites sub-answers', x: 800, y: 70 },
+          { id: 'principle', kind: 'document', label: 'Principle', sub: 'P ∝ T / V', x: 340, y: 230 },
+          { id: 'answer', kind: 'document', label: 'Answer', sub: 'traceable', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Split first, then solve',
+            lines: [
+              'Hard questions are often several easy questions in a trench coat.',
+              '**Least-to-most**: list the sub-problems simplest first, then solve them in order.',
+              'Slide trips in 15 minutes: one trip is 4 s, 15 minutes is 900 s, so 900 / 4 = **225**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'plan'], label: 'question' },
+              { say: 1 },
+              { send: ['plan', 'solve'], label: 'Q1, Q2, Q3' },
+              { say: 2 },
+              { badge: 'solve', text: '4 s → 900 s', ms: 1000 },
+              { send: ['solve', 'synth'], label: 'A1 A2 A3' },
+              { send: ['synth', 'answer'], label: '225', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Step back to the principle',
+            lines: [
+              'Gas question: temperature doubles, volume grows 8×. Direct CoT answered "doubles" (wrong).',
+              '**Step-back** first asks: "What principle governs this?" → ideal gas law, P ∝ T / V.',
+              'Using it: P₂ = P₁ × 2 / 8 = **P₁ / 4**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'solve'], label: 'direct', curve: true },
+              { badge: 'solve', text: '"doubles"', tone: 'err', ms: 1000 },
+              { say: 1 },
+              { send: ['plan', 'principle'], label: 'what principle?' },
+              { lit: 'principle' },
+              { say: 2 },
+              { send: ['principle', 'solve'], label: 'P ∝ T / V' },
+              { send: ['solve', 'answer'], label: 'P₁ / 4', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the pattern',
+            lines: ['Least-to-most, step-back and parallel sub-questions fit different shapes of problem.'],
+            task: {
+              type: 'choose',
+              question: 'Compare three vendors on price; no part depends on another. Which pattern?',
+              options: [
+                { text: 'Sub-question: answer each in parallel, then synthesise' },
+                { text: 'Least-to-most', why: 'Least-to-most is for when later steps need earlier answers; here nothing depends on anything.' },
+                { text: 'Step-back', why: 'Step-back helps when the model grabs the wrong formula or fact.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Independent parts → parallel sub-questions; dependent parts → least-to-most; wrong principle → step-back.',
+            then: [{ send: ['plan', 'solve'], label: '3 in parallel', count: 3 }, { send: ['solve', 'synth'], label: 'combine', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Mechanics that matter',
+            lines: [
+              'Ask for the decomposition as **JSON**, validate it, and cap it at 3–6 parts.',
+              'Feed answers forward explicitly: the prompt for part 3 contains Q1/A1 and Q2/A2.',
+              'Keep the original question in every sub-prompt; synthesis cites which sub-answer each claim came from.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'plan', text: '3–6 parts', ms: 1000 },
+              { say: 1 },
+              { badge: 'solve', text: 'answers forward', ms: 1000 },
+              { say: 2 },
+              { send: ['q', 'synth'], label: 'original question', curve: true },
+              { send: ['synth', 'answer'], label: 'cited', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to decompose',
+            lines: ['A wrong A1 poisons A2 and A3, and every extra part adds a call.'],
+            task: {
+              type: 'choose',
+              question: 'When should you reach for explicit decomposition?',
+              options: [
+                { text: 'When a single CoT call fails on your eval set' },
+                { text: 'By default, on every question', why: 'Over-decomposition adds calls and latency to questions one CoT call would solve.' },
+                { text: 'Whenever the model can list many sub-questions', why: 'Unbounded lists explode cost: cap at 3–6 parts.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Decompose when one CoT call fails your evals, or when parts need different tools, retrieval or parallelism.',
+            then: [{ send: ['q', 'plan'], label: 'hard one' }, { send: ['plan', 'solve'], label: 'split', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** hard questions are often several easy questions in a trench coat. Decomposition prompts make the model split the problem first, then solve the parts, so each step is small enough to get right.
 
 **Three patterns:**
@@ -588,6 +899,94 @@ export async function leastToMost(question: string, llm: Llm) {
     },
     {
       heading: 'Prompt chaining — small prompts joined by JSON contracts and gates',
+      steps: {
+        actors: [
+          { id: 'email', kind: 'document', label: 'Invoice email', sub: '1,000 per day', x: 110, y: 70 },
+          { id: 'extract', kind: 'llm', label: 'Extract', sub: 'smaller, cheaper LLM', x: 340, y: 70 },
+          { id: 'gate', kind: 'guard', label: 'Gate (code)', sub: 'parse · schema · sum', x: 570, y: 70 },
+          { id: 'write', kind: 'llm', label: 'Write', sub: 'sees JSON only', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human queue', sub: 'both attempts', x: 570, y: 230 },
+          { id: 'note', kind: 'document', label: 'Approval note', sub: '99.6% correct', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An assembly line of small prompts',
+            lines: [
+              'Each step prompt does **one thing**: extract, then write.',
+              'A **JSON contract** fixes exactly what the next step expects.',
+              'A **gate in code** sits between steps so a bad part never reaches the next station.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['email', 'extract'], label: 'email' },
+              { say: 1 },
+              { send: ['extract', 'gate'], label: 'JSON' },
+              { say: 2 },
+              { badge: 'gate', text: 'Σ items = total', tone: 'ok', ms: 1000 },
+              { send: ['gate', 'write'], label: 'valid JSON', tone: 'ok' },
+              { send: ['write', 'note'], label: 'note', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the gate fails',
+            lines: ['The extracted total is a string, not a number.'],
+            task: {
+              type: 'choose',
+              question: 'What is the failure policy at a gate?',
+              options: [
+                { text: 'Retry once with the exact validation error; on a second failure, send it to a human' },
+                { text: 'Pass it on and see if the next step copes', why: 'Never pass invalid data forward.' },
+                { text: 'Retry until it passes', why: 'Retry once; on a second failure stop and hand off with both attempts.' },
+              ],
+              answer: 0,
+            },
+            solved: 'One retry with the error appended, then a human queue: 94% pass first time, 4% after a retry, 2% to a human.',
+            then: [
+              { send: ['gate', 'extract'], label: 'total: expected number', tone: 'miss', curve: true },
+              { send: ['extract', 'gate'], label: 'retry' },
+              { send: ['gate', 'human'], label: 'still bad', tone: 'req' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what does Write see?',
+            lines: ['Later steps should see validated data, not the raw input.'],
+            task: {
+              type: 'pick',
+              question: 'Which part should feed the Write step?',
+              answer: 'gate',
+              hints: {
+                email: 'The raw email would bloat the prompt and give injected text room to steer the step.',
+                extract: 'Extract output is unchecked until it passes the gate.',
+              },
+            },
+            solved: 'Write sees only gate-validated JSON: smaller prompts and less room for injected text.',
+            then: [{ send: ['gate', 'write'], label: 'validated JSON', tone: 'ok' }, { send: ['write', 'note'], label: 'note', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Chain or one prompt?',
+            lines: [
+              'One big prompt: 88% of notes correct, with errors written confidently and invisibly.',
+              'Chain when sub-jobs have different success criteria, or you need to test or swap one step.',
+              'Not for simple or latency-critical tasks: five steps at 95% each give ~77% end to end, so gates matter.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['email', 'write'], label: 'one big prompt', curve: true, tone: 'miss' },
+              { badge: 'note', text: '88% correct', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['email', 'extract'], label: 'email' },
+              { send: ['extract', 'gate'], label: 'JSON' },
+              { send: ['gate', 'write'], label: 'valid', tone: 'ok' },
+              { say: 2 },
+              { badge: 'gate', text: '95%^5 ≈ 77%', tone: 'req', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an assembly line beats one person building a whole car. A prompt chain splits a job into small prompts that each do **one thing**, passes structured data between them, and puts a **quality gate** (code) between steps so a bad part never reaches the next station.
 
 **Anatomy of a chain:**
@@ -757,6 +1156,111 @@ export async function runStep<T>(call: (feedback: string) => Promise<string>, sc
     },
     {
       heading: 'ReAct prompting — reason, act, observe until a stop condition',
+      steps: {
+        actors: [
+          { id: 'prompt', kind: 'document', label: 'Prompt', sub: 'tools · format · exit', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'Thought + Action', x: 340, y: 70 },
+          { id: 'runtime', kind: 'server', label: 'Your runtime', sub: 'parses, runs the tool', x: 570, y: 70 },
+          { id: 'tool', kind: 'tool', label: 'search / calc', sub: 'real evidence', x: 800, y: 70 },
+          { id: 'final', kind: 'document', label: 'Final Answer', sub: '38 years', x: 340, y: 230 },
+          { id: 'stop', kind: 'guard', label: 'Stop rules', sub: 'steps · loops · cost', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Thought, Action, Observation',
+            lines: [
+              'The model writes a **Thought** and names an **Action**: a tool and its input.',
+              'Your code runs it and returns an **Observation**.',
+              'The next thought builds on real evidence, until a `Final Answer:`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'llm'], label: 'question' },
+              { send: ['llm', 'runtime'], label: 'search[…]' },
+              { say: 1 },
+              { send: ['runtime', 'tool'], label: 'run' },
+              { send: ['tool', 'runtime'], label: '1969', tone: 'ok' },
+              { send: ['runtime', 'llm'], label: 'Observation', tone: 'ok', curve: true },
+              { say: 2 },
+              { send: ['llm', 'final'], label: 'Final Answer', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who appends the Observation?',
+            lines: ['Generation is cut with a stop sequence at `Observation:`.'],
+            task: {
+              type: 'pick',
+              question: 'Which part parses the Action, runs the tool and appends the Observation?',
+              answer: 'runtime',
+              hints: {
+                llm: 'If the model wrote the Observation it would happily invent the tool result: that is why generation stops at "Observation:".',
+                prompt: 'The prompt describes the tools and format; it does not run anything.',
+              },
+            },
+            solved: 'The model writes Thought and Action; your runtime validates and runs it and appends the real Observation.',
+            then: [{ send: ['llm', 'runtime'], label: 'Action' }, { send: ['runtime', 'tool'], label: 'run' }, { send: ['runtime', 'llm'], label: 'Observation', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'A real trace',
+            lines: [
+              'Moon landing year → 1969. First iPhone → 2007.',
+              '`calculator[2007 - 1969]` → 38. **Final Answer: 38 years.**',
+              '4 LLM calls, 3 tool calls; the prompt grew from ~350 to ~620 tokens because every call re-reads the trace.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'tool'], label: 'search', curve: true },
+              { send: ['tool', 'llm'], label: '1969', tone: 'ok', curve: true },
+              { send: ['llm', 'tool'], label: 'search', curve: true },
+              { send: ['tool', 'llm'], label: '2007', tone: 'ok', curve: true },
+              { say: 1 },
+              { send: ['llm', 'tool'], label: 'calculator', curve: true },
+              { send: ['tool', 'llm'], label: '38', tone: 'ok', curve: true },
+              { send: ['llm', 'final'], label: '38 years', tone: 'ok' },
+              { say: 2 },
+              { badge: 'prompt', text: '~620 tokens', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the step limit is hit',
+            lines: ['Stop conditions live in code: Final Answer, max steps, a repeated action, a budget.'],
+            task: {
+              type: 'choose',
+              question: 'The run hits max steps without a Final Answer. What do you return?',
+              options: [
+                { text: 'An honest "could not complete", or a hand-off' },
+                { text: 'The last thought, as the answer', why: 'On a non-success stop, never pass off the last thought as the answer.' },
+                { text: 'Nothing: let it keep searching', why: 'Without stop conditions models keep searching; limits are enforced in code.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Any non-success stop returns an honest "could not complete" (or hands off).',
+            then: [{ lit: 'stop' }, { badge: 'stop', text: 'max steps', tone: 'req' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Same loop, safer protocol',
+            lines: [
+              'Clear tool descriptions matter most: vague ones are the top cause of wrong tool picks.',
+              'Give an explicit exit: "If the tools cannot answer, say so in the Final Answer."',
+              'Today native tool calling gives structured tool-use blocks: the same loop, with no `Action:` strings to parse.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'prompt', text: 'clear tools', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { send: ['prompt', 'llm'], label: 'exit rule' },
+              { say: 2 },
+              { send: ['llm', 'runtime'], label: 'tool_use JSON', tone: 'ok' },
+              { send: ['runtime', 'tool'], label: 'run' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** ReAct (Yao et al. 2022) turns chain-of-thought into a conversation with the outside world. Instead of reasoning only over what it memorised, the model writes a **Thought**, names an **Action** (a tool and its input), and your code returns an **Observation**. The next thought builds on real evidence.
 
 **The prompt has five parts:**
@@ -910,6 +1414,109 @@ export function parseReactStep(text: string, toolNames: string[]): Step {
     },
     {
       heading: 'Self-critique, tree of thoughts and PAL — verify, search and execute',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'draft, ideas or code', x: 110, y: 70 },
+          { id: 'verifier', kind: 'judge', label: 'Verifier', sub: 'tests, schema, docs', x: 340, y: 70 },
+          { id: 'tree', kind: 'data', label: 'Thought tree', sub: 'generate · evaluate', x: 570, y: 70 },
+          { id: 'sandbox', kind: 'guard', label: 'Sandbox', sub: 'no network or secrets', x: 340, y: 230 },
+          { id: 'interp', kind: 'tool', label: 'Interpreter', sub: 'runs the program', x: 570, y: 230 },
+          { id: 'answer', kind: 'document', label: 'Answer', sub: 'checked', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Self-critique needs a real checker',
+            lines: [
+              'Generate a draft, get specific feedback, revise.',
+              'Asking the same model "are you sure?" with no new information can flip right answers to wrong.',
+              'It works when the critique comes from an **external verifier**: tests, a compiler, a schema, sources.',
+              'Fixed max rounds; stop when the verifier passes; keep the best version so far.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'verifier'], label: 'draft' },
+              { say: 1 },
+              { badge: 'llm', text: 'are you sure?', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { send: ['verifier', 'llm'], label: '2 tests fail', tone: 'miss', curve: true },
+              { send: ['llm', 'verifier'], label: 'revised' },
+              { say: 3 },
+              { badge: 'verifier', text: 'pass: stop', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Tree of thoughts: search with pruning',
+            lines: [
+              '**Generate** k candidate next thoughts, **evaluate** each, then **search**: keep the best b or backtrack.',
+              'Game of 24: CoT solved 4% of puzzles, ToT (b = 5) solved 74%.',
+              'The cost: branching 3, depth 3, beam 2 is **30 calls** and 6 rounds, versus 1 call for CoT.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'tree'], label: 'k thoughts', count: 3, curve: true },
+              { badge: 'tree', text: 'sure/maybe/no', ms: 1000 },
+              { say: 1 },
+              { badge: 'tree', text: '4% → 74%', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { badge: 'llm', text: '30 calls', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'PAL: write code, let it run',
+            lines: [
+              'The model writes a short program; an **interpreter** runs it.',
+              'Croissants: CoT in text drifted to $42.02; the program printed **42.0**, exact.',
+              'Run model code only in a sandbox: no network, no secrets, CPU/memory/time limits.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'interp'], label: 'program', curve: true },
+              { say: 1 },
+              { send: ['interp', 'answer'], label: '42.0', tone: 'ok' },
+              { say: 2 },
+              { lit: 'sandbox' },
+              { badge: 'sandbox', text: 'limits on', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: trust which critique?',
+            lines: ['Self-critique only helps when something real checks the work.'],
+            task: {
+              type: 'choose',
+              question: 'Which revise loop do you trust for generated code?',
+              options: [
+                { text: 'Revise until the unit tests pass, with a fixed max number of rounds' },
+                { text: 'Ask the model "are you sure?" three times', why: 'Without new information it can flip right answers to wrong.' },
+                { text: 'Revise until the output stops changing', why: 'Use a fixed max number of rounds, and stop if a round makes things worse.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Ground the critique in an external verifier and bound the rounds.',
+            then: [{ send: ['verifier', 'llm'], label: 'test errors', curve: true }, { badge: 'verifier', text: 'pass', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: choose the method',
+            lines: ['A checkable answer, exploration with dead ends, or polished prose each want a different checker.'],
+            task: {
+              type: 'pick',
+              question: 'A word problem with exact arithmetic. Which part should do the maths?',
+              answer: 'interp',
+              hints: {
+                tree: 'Tree of thoughts is for exploration with dead ends, at dozens of calls.',
+                llm: 'Arithmetic in text drifts; let the model write the program instead.',
+                verifier: 'A verifier checks a draft; for exact arithmetic, run code (PAL).',
+              },
+            },
+            solved: 'Checkable answer → PAL; dead ends to explore → ToT; prose polish → a critique rubric plus a judge.',
+            then: [{ send: ['llm', 'interp'], label: 'program', curve: true }, { send: ['interp', 'answer'], label: 'exact', tone: 'ok' }],
+          },
+        ],
+      },
       short: {
         id: 'beyond-the-first-answer',
         title: 'Beyond the first answer',

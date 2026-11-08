@@ -26,7 +26,7 @@ export const PHASES: Phase[] = [
   { id: 'agents', number: 9, level: 'advanced', title: 'AI Agents', blurb: 'ReAct, planning, memory, tools, multi-agent systems, human-in-the-loop, state machines, and evaluating and safeguarding agents.' },
   { id: 'frameworks', number: 10, level: 'advanced', title: 'Frameworks, MCP & Knowledge Graphs', blurb: 'LangChain, LangGraph, LlamaIndex, Model Context Protocol, graph-based retrieval, the modern agent stack (agent SDKs, computer use, A2A, reflection), Agent Skills and working with coding agents.' },
   { id: 'models', number: 11, level: 'advanced', title: 'Fine-Tuning & Models', blurb: 'SFT, LoRA/QLoRA, RLHF/DPO, distillation, open-source LLMs, serving and routing.' },
-  { id: 'multimodal', number: 12, level: 'advanced', title: 'Multimodal & AI Applications', blurb: 'Vision, audio, video, Text-to-SQL, chatbots and enterprise search.' },
+  { id: 'multimodal', number: 12, level: 'advanced', title: 'Multimodal & AI Applications', blurb: 'Vision, audio, video, generative media (diffusion image, video and audio generation), Text-to-SQL, chatbots and enterprise search.' },
   { id: 'security', number: 13, level: 'advanced', title: 'AI Security & Responsible AI', blurb: 'Prompt injection, jailbreaks, PII, guardrails, red teaming and governance, plus alignment and frontier risk (sycophancy, reward hacking, scheming, AI control, lab safety policies).' },
   { id: 'llmops', number: 14, level: 'advanced', title: 'LLMOps & Production', blurb: 'Observability, cost, caching, reliability, deployment and data pipelines.' },
   { id: 'internals', number: 15, level: 'advanced', title: 'Transformer Internals & Inference', blurb: 'Attention math, GPU optimisation, KV cache, speculative decoding and distributed inference.' },

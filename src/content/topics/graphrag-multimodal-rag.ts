@@ -34,6 +34,197 @@ const topic: Topic = {
   sections: [
     {
       heading: 'GraphRAG — entity graphs, community summaries, local vs global search',
+      short: {
+        id: 'graphrag-map-of-incidents',
+        title: 'GraphRAG: a map of 1,800 incidents',
+        beats: [
+          {
+            type: 'counter',
+            kicker: '1,800 post-incident reviews · ≈ 2.4M tokens',
+            value: 6400,
+            unit: 'entities, merged from 21,000 raw mentions',
+            sub: 'Plus **15,000** relationships: services, teams, vendors, failure modes.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Indexing · Microsoft GraphRAG',
+            head: 'Read everything, then *summarise neighbourhoods*',
+            steps: [
+              'Split into 8,000 text units',
+              'An LLM extracts entities and relationships',
+              'Merge duplicate entities',
+              'Leiden: 14 level-0 and 310 leaf communities',
+              'An LLM writes a report per community',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Global query · "What are the recurring root-cause themes?"',
+            head: 'Map-reduce over *reports* wins',
+            rungs: [
+              {
+                label: 'Vector RAG (five random incidents)',
+                amount: 2,
+              },
+              {
+                label: 'GraphRAG global search',
+                amount: 5,
+              },
+            ],
+            unit: 'themes named',
+            sub: 'Map: each of 14 level-0 reports rates its points 0–100. Reduce: the top-rated points, citing **report ids**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Local query · "Which teams depend on the ledger-service?"',
+            head: 'Start at an entity, then *expand*',
+            steps: [
+              'Match entity LEDGER-SERVICE',
+              '1-hop: PAYMENTS-TEAM, BILLING-API, RISK-ENGINE',
+              'Add 6 source text units',
+              'Precise answer with citations',
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Which question best fits GraphRAG global search rather than vector RAG?',
+            options: [
+              {
+                text: 'What is the refund window for damaged items?',
+                why: 'A point lookup: plain vector RAG is cheaper and as good.',
+              },
+              {
+                text: 'Across 3,000 customer interviews, what are the top five unmet needs?',
+                why: 'Right: no single chunk holds it; map-reduce over community reports answers it.',
+              },
+              {
+                text: 'Who is the owner of the billing-api service?',
+                why: 'A specific entity: local search or plain vector RAG.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'GraphRAG for *sensemaking*, vectors for *lookups*.',
+          sub: 'Global search map-reduces over **community reports**; local search expands from matched entities.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'Incident reviews', sub: '1,800 docs', x: 110, y: 70 },
+          { id: 'extract', kind: 'llm', label: 'Extractor', sub: 'entities, relations', x: 340, y: 70 },
+          { id: 'graph', kind: 'data', label: 'Entity graph', sub: '6,400 entities', x: 570, y: 70 },
+          { id: 'comm', kind: 'data', label: 'Communities', sub: 'Leiden hierarchy', x: 800, y: 70 },
+          { id: 'user', kind: 'user', label: 'Question', sub: 'whole-corpus themes', x: 110, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Map-reduce LLM', sub: 'rated partial answers', x: 340, y: 230 },
+          { id: 'reports', kind: 'document', label: 'Reports', sub: 'one per community', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'No single paragraph has the answer',
+            lines: [
+              '"What are the main risks across these 4,000 incident reports?" defeats a top-5 similarity search.',
+              'GraphRAG reads everything, maps who/what is connected, groups it into neighbourhoods…',
+              '…and writes a summary of each. Whole-corpus questions are answered from those summaries.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'themes?' },
+              { badge: 'llm', text: 'top-5 not enough', tone: 'miss', ms: 1300 },
+              { say: 1 },
+              { send: ['docs', 'extract'], label: 'read all' },
+              { send: ['extract', 'graph'], label: 'entities' },
+              { send: ['graph', 'comm'], label: 'group' },
+              { say: 2 },
+              { send: ['comm', 'reports'], label: 'summarise', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Indexing the incident reviews',
+            lines: [
+              '8,000 text units → an LLM extracts 21,000 entity mentions and 15,000 relationships.',
+              'Duplicates merge into 6,400 entities (services, teams, vendors, failure modes).',
+              'Leiden finds 14 level-0 and 310 leaf communities; each gets a report.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'extract'], label: 'text units', count: 3 },
+              { send: ['extract', 'graph'], label: 'mentions', count: 3 },
+              { say: 1 },
+              { badge: 'graph', text: '21,000 → 6,400', ms: 1400 },
+              { say: 2 },
+              { send: ['graph', 'comm'], label: 'Leiden' },
+              { send: ['comm', 'reports'], label: 'reports', count: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the indexing pipeline',
+            lines: ['Each stage builds on the one before.'],
+            task: {
+              type: 'order',
+              question: 'Put the GraphRAG indexing stages in order.',
+              items: [
+                'Split documents into text units',
+                'LLM extracts entities and relationships',
+                'Merge duplicate entities',
+                'Leiden community detection',
+                'LLM writes a report per community',
+              ],
+              hint: 'You cannot detect communities before the graph exists, and reports summarise communities, so they come last.',
+            },
+            solved: 'Text units → extract → merge → communities → reports (then embed descriptions, units and reports).',
+            then: [
+              { send: ['docs', 'extract'], label: 'units' },
+              { send: ['extract', 'graph'], label: 'merge' },
+              { send: ['graph', 'comm'], label: 'Leiden' },
+              { send: ['comm', 'reports'], label: 'reports', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Global search: map, then reduce',
+            lines: [
+              '"What are the recurring root-cause themes?"',
+              '**Map**: each of the 14 level-0 reports returns points rated 0–100.',
+              '**Reduce**: the top-rated points become an answer listing 5 themes; vector RAG named only 2.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'question' },
+              { say: 1 },
+              { send: ['reports', 'llm'], label: 'rated points', count: 3 },
+              { badge: 'llm', text: 'cert expiry: 85', ms: 1300 },
+              { say: 2 },
+              { send: ['llm', 'user'], label: '5 themes', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the query mode',
+            lines: ['"Which teams depend on the ledger-service?"'],
+            task: {
+              type: 'choose',
+              question: 'Which GraphRAG query mode fits?',
+              options: [
+                { text: 'Local: match the entity, expand to its neighbours and source text units' },
+                { text: 'Global: map-reduce over community reports', why: 'Global is for corpus-wide themes; this asks about one specific entity.' },
+                {
+                  text: 'Skip the graph: it is a whole-corpus question',
+                  why: 'It is about one entity\'s connections, which is exactly what the graph stores.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: '`LEDGER-SERVICE` → 1-hop neighbours (`PAYMENTS-TEAM`, `BILLING-API`, `RISK-ENGINE`) + 6 text units, with citations.',
+            then: [{ send: ['user', 'graph'], label: 'LEDGER-SERVICE', curve: true }, { badge: 'graph', text: '1-hop neighbours', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** vector RAG is a librarian who finds the five most similar paragraphs. That fails for *"What are the main risks discussed across these 4,000 incident reports?"* — no single paragraph contains the answer. GraphRAG first reads everything, builds a map of *who/what is connected to whom*, groups it into neighbourhoods, and writes a summary of each neighbourhood. Questions about the whole corpus are answered from those summaries.
 
 **Indexing pipeline (Microsoft GraphRAG, Edge et al. 2024):**
@@ -219,6 +410,110 @@ export function localContext(query: string, g: Graph, maxNeighbours = 3) {
     },
     {
       heading: 'Multimodal RAG — captions, multi-vector retrieval and ColPali page-image search',
+      steps: {
+        actors: [
+          { id: 'pdf', kind: 'document', label: 'Investor decks', sub: '900 pages', x: 110, y: 70 },
+          { id: 'colpali', kind: 'embedder', label: 'ColPali', sub: '~1,030 patch vectors', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Page index', sub: 'MaxSim scoring', x: 570, y: 70 },
+          { id: 'vlm', kind: 'llm', label: 'VLM', sub: 'reads page images', x: 800, y: 150 },
+          { id: 'user', kind: 'user', label: 'Question', sub: 'EMEA margin Q3 FY25', x: 110, y: 230 },
+          { id: 'ocr', kind: 'chunker', label: 'OCR text', sub: 'chart → text', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Knowledge locked in pictures',
+            lines: [
+              'Half the knowledge in a PDF lives in charts, tables, diagrams and scans.',
+              'Text extraction mangles them.',
+              'Multimodal RAG retrieves the visual elements and lets a **VLM** read them.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'pdf' },
+              { say: 1 },
+              { send: ['pdf', 'ocr'], label: 'extract', tone: 'miss', curve: true },
+              { say: 2 },
+              { send: ['index', 'vlm'], label: 'page image', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The text pipeline gets it wrong',
+            lines: [
+              'OCR of the bar chart: "EMEA APAC NA 41 38 44 Q1 Q2 Q3": the numbers lose their labels.',
+              'The top chunk is a narrative paragraph about "margin pressure". Wrong answer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pdf', 'ocr'], label: 'bar chart', curve: true },
+              { badge: 'ocr', text: 'labels lost', tone: 'err', ms: 1300 },
+              { say: 1 },
+              { send: ['user', 'ocr'], label: 'search' },
+              { badge: 'user', text: 'wrong answer', tone: 'err', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'ColPali: search the page image',
+            lines: [
+              'Each page screenshot → ~1,030 patch vectors (128-d); every query token gets its own vector too.',
+              'MaxSim: for each query token, take the best-matching patch, then sum.',
+              'Page 412 (the margin chart) scores 18.7 vs 14.2 for the narrative page; the VLM reads the bar: **41%**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pdf', 'colpali'], label: 'page images' },
+              { send: ['colpali', 'index'], label: 'patch vectors', count: 3 },
+              { say: 1 },
+              { send: ['user', 'index'], label: '12 token vectors', curve: true },
+              { say: 2 },
+              { badge: 'index', text: 'p412: 18.7', tone: 'ok', ms: 1300 },
+              { send: ['index', 'vlm'], label: 'top 3 pages', tone: 'ok' },
+              { badge: 'vlm', text: 'EMEA 41%', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: search text, answer with pixels',
+            lines: ['Text search is a mature stack; pixels keep the chart\'s detail.'],
+            task: {
+              type: 'choose',
+              question: 'Which pattern indexes a text caption for search but hands the VLM the original image?',
+              options: [
+                { text: 'Multi-vector retriever: summary for search, pointer to the raw element' },
+                { text: 'Caption / text-ify only', why: 'Captions alone lose detail; the answer model reads the caption, not the pixels.' },
+                {
+                  text: 'Shared CLIP-style embedding',
+                  why: 'That embeds images and text in one space; it is weak on dense text pages and does not use captions.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Search quality of text, fidelity of pixels: index the summary, answer from the raw image.',
+            then: [{ send: ['index', 'vlm'], label: 'raw image', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: is it worth it?',
+            lines: ['Page-image index: 900 pages × 1,030 vectors × 128 dims ≈ 237 MB in bf16 (≈ 15 MB binary-quantised).'],
+            task: {
+              type: 'choose',
+              question: 'Your corpus is mostly prose, with few charts. What do you build?',
+              options: [
+                { text: 'A good parser plus text RAG' },
+                {
+                  text: 'ColPali over every page',
+                  why: 'Page-image retrieval shines on visual pages; for prose a good parser plus text RAG is cheaper.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Prose → text RAG; visual pages → page-image retrieval; mixed → combine both.',
+            then: [{ send: ['pdf', 'ocr'], label: 'parse prose', tone: 'ok', curve: true }],
+          },
+        ],
+      },
       body: `**Intuition:** half the knowledge in a PDF lives in charts, tables, diagrams and scans that text extraction mangles. Multimodal RAG retrieves those visual elements and lets a vision-language model (VLM) read them.
 
 **Three architectures:**

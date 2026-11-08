@@ -36,6 +36,108 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Context Compression — fewer tokens, same answer',
+      steps: {
+        actors: [
+          { id: 'retr', kind: 'retriever', label: 'Retrieval', sub: '12 chunks · 6,400 tok', x: 110, y: 70 },
+          { id: 'rerank', kind: 'reranker', label: 'Chunk filter', sub: 'rerank ≥ 0.3', x: 340, y: 70 },
+          { id: 'sent', kind: 'embedder', label: 'Sentence filter', sub: 'cosine ≥ 0.55', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'same answer', x: 800, y: 70 },
+          { id: 'tok', kind: 'chunker', label: 'Token-level', sub: 'LLMLingua', x: 340, y: 230 },
+          { id: 'summ', kind: 'llm', label: 'Abstractive', sub: 'LLM summary', x: 570, y: 230 },
+          { id: 'cost', kind: 'metric', label: 'Cost + TTFT', sub: 'fewer input tokens', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Highlight before the meeting',
+            lines: [
+              'Retrieval often hands you 20 chunks × 500 tokens = 10K tokens.',
+              'The answer may depend on about 300 of them.',
+              '**Compression** removes what the model does not need, like highlighting three sentences in a 40-page report.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retr', 'llm'], label: '10K tokens', curve: true, tone: 'miss' },
+              { say: 1 },
+              { badge: 'llm', text: '~300 matter', ms: 1000 },
+              { say: 2 },
+              { send: ['retr', 'rerank'], label: 'chunks' },
+              { send: ['rerank', 'sent'], label: 'fewer' },
+              { send: ['sent', 'llm'], label: 'highlights', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cheapest to most aggressive',
+            lines: ['Four families of compression trade reduction for risk.'],
+            task: {
+              type: 'order',
+              question: 'Order the families from cheapest and safest to most aggressive.',
+              items: ['Chunk filtering', 'Extractive (keep relevant sentences)', 'Token-level (drop low-information tokens)', 'Abstractive (LLM summary)'],
+              hint: 'Dropping whole chunks is the lowest risk; rewriting the text with another LLM call is the most.',
+            },
+            solved: 'Chunk filtering (30–60%) → extractive (2–5x) → token-level (2–20x) → abstractive (5–10x, extra LLM call).',
+            then: [{ send: ['retr', 'rerank'], label: 'filter' }, { send: ['rerank', 'sent'], label: 'extract' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Refund window, compressed',
+            lines: [
+              'Retrieval returns 12 chunks: **6,400 tokens**.',
+              'Rerank threshold 0.3 keeps 5 chunks: **2,700 tokens**.',
+              'Sentence filter (cosine ≥ 0.55) keeps 9 sentences: **410 tokens**.',
+              'Answer: "30 days from delivery, with photos", same answer and citation as uncompressed.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'retr', text: '6,400 tokens', ms: 900 },
+              { say: 1 },
+              { send: ['retr', 'rerank'], label: '12 chunks' },
+              { badge: 'rerank', text: '2,700 tokens', ms: 900 },
+              { say: 2 },
+              { send: ['rerank', 'sent'], label: '5 chunks' },
+              { badge: 'sent', text: '410 tokens', tone: 'ok', ms: 900 },
+              { say: 3 },
+              { send: ['sent', 'llm'], label: '9 sentences', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: know the risks',
+            lines: ['Each family has its own way of going wrong.'],
+            task: {
+              type: 'pick',
+              question: 'Which method risks a hallucinated summary and costs an extra LLM call?',
+              answer: 'summ',
+              hints: {
+                tok: 'Token-level compression risks ungrammatical text and lost numbers.',
+                sent: 'Extractive compression risks losing connective context.',
+                rerank: 'Chunk filtering is the low-risk option.',
+              },
+            },
+            solved: 'Abstractive compression rewrites the documents, so it can hallucinate and needs its own LLM call.',
+            then: [{ send: ['summ', 'llm'], label: 'summary', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When it pays',
+            lines: [
+              '6,400 → 410 tokens at 200K queries/day saves about 1.2B tokens/day ≈ **$3,600/day**.',
+              'TTFT also drops by roughly 300 ms because prefill is shorter.',
+              'Skip it when the context is already under ~2K tokens: the compressor\'s latency costs more than it saves.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['sent', 'cost'], label: '410 tokens', curve: true },
+              { badge: 'cost', text: '$3,600/day', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { badge: 'cost', text: 'TTFT −300 ms', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { send: ['retr', 'llm'], label: '< 2K: as is', curve: true },
+            ],
+          },
+        ],
+      },
       body: `Retrieval often hands you 20 chunks × 500 tokens = 10K tokens, while the answer depends on maybe 300 of them. **Context compression** removes what the model does not need, the way a good analyst highlights three sentences in a 40-page report before a meeting.
 
 **Four families, from cheapest to most aggressive:**
@@ -220,6 +322,156 @@ export async function compressContext(query: string, chunks: Chunk[], budgetToke
     // ---------------------------------------------------------------- 2
     {
       heading: 'Context Engineering — what goes in the window, in what order, within what budget',
+      steps: {
+        actors: [
+          { id: 'sys', kind: 'document', label: 'System + rules', sub: 'stable, cached', x: 110, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'Tool defs', sub: 'only what step needs', x: 340, y: 70 },
+          { id: 'docs', kind: 'document', label: 'Reference docs', sub: 'best evidence first', x: 570, y: 70 },
+          { id: 'hist', kind: 'data', label: 'History', sub: 'recent + summary', x: 800, y: 70 },
+          { id: 'q', kind: 'user', label: 'Question', sub: 'last', x: 110, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'U-shaped recall', x: 570, y: 230 },
+          { id: 'reserve', kind: 'metric', label: 'Output reserve', sub: '2–8K kept free', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Packing a carry-on bag',
+            lines: [
+              '**Context** is everything the model sees: instructions, tools, examples, documents, memory, tool results, history.',
+              'The space is fixed, so everything in it must earn its place.',
+              '**Context rot**: recall falls as the window fills, and facts in the middle are used worst (U-shaped).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['sys', 'llm'], label: 'rules', curve: true },
+              { send: ['tools', 'llm'], label: 'tools', curve: true },
+              { send: ['docs', 'llm'], label: 'docs' },
+              { send: ['hist', 'llm'], label: 'history', curve: true },
+              { say: 1 },
+              { lit: 'reserve' },
+              { say: 2 },
+              { badge: 'llm', text: 'middle = weak', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: lay out the window',
+            lines: ['Stable before volatile: prompt caching needs an identical prefix.'],
+            task: {
+              type: 'order',
+              question: 'Order these context slots from top to bottom.',
+              items: ['System instructions + rules', 'Tool definitions', 'Long reference docs', 'Conversation history', 'Question + output format'],
+              hint: 'The most stable, cacheable parts go first; the question sits last, closest to generation.',
+            },
+            solved: 'System → tools → docs → history → question, with an output reserve that input never eats.',
+            then: [{ send: ['sys', 'llm'], label: 'cached prefix', curve: true, tone: 'ok' }, { send: ['q', 'llm'], label: 'question last', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: place the best evidence',
+            lines: ['Accuracy is U-shaped by position (Liu et al. 2023).'],
+            task: {
+              type: 'choose',
+              question: 'Where should your best evidence chunk go?',
+              options: [
+                { text: 'First or last' },
+                { text: 'In the middle', why: 'Facts in the middle of the context are used far worse than at the start or end.' },
+                { text: 'Anywhere: position does not matter', why: 'Position matters: accuracy is U-shaped by position.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Put the best evidence first or last, never buried in the middle.',
+            then: [{ send: ['docs', 'llm'], label: 'best first', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A copilot sending 92K tokens',
+            lines: [
+              'Per turn: 40 tools (11K), the full 30-turn history (38K), 25 chunks (36K) and raw CRM JSON (7K).',
+              'Accuracy on the golden set: 71%. p50 TTFT: 4.1 s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tools', 'llm'], label: '11K', curve: true, tone: 'miss' },
+              { send: ['hist', 'llm'], label: '38K', curve: true, tone: 'miss' },
+              { send: ['docs', 'llm'], label: '36K', tone: 'miss' },
+              { say: 1 },
+              { badge: 'llm', text: '71% · 4.1 s', tone: 'err', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'After context engineering',
+            lines: [
+              'Tools routed to the 6 relevant ones: **2K**. History = last 4 turns + a 300-token summary: **3K**.',
+              'Reranked top 6 chunks, best first: **4.5K**. CRM JSON projected to 8 fields: **0.4K**.',
+              'Total ~11K tokens (−88%): accuracy **83%**, p50 TTFT **1.2 s**, and the system + tools prefix hits the cache.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tools', 'llm'], label: '2K', curve: true, tone: 'ok' },
+              { send: ['hist', 'llm'], label: '3K', curve: true, tone: 'ok' },
+              { say: 1 },
+              { send: ['docs', 'llm'], label: '4.5K', tone: 'ok' },
+              { say: 2 },
+              { badge: 'llm', text: '83% · 1.2 s', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'packing-the-context-window',
+        title: 'Packing the context window',
+        beats: [
+          {
+            type: 'grid',
+            kicker: 'Support copilot · every turn',
+            head: '40 tools sent, *6 needed*',
+            cells: 40,
+            hot: 6,
+            caption: '40 tool definitions (11K tokens) → the 6 relevant ones (2K)',
+            sub: 'Like a carry-on bag: everything in it must **earn its place**.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Tokens per turn',
+            head: 'Same copilot, *88% fewer tokens*',
+            rungs: [{ label: 'Before', amount: 92 }, { label: 'After context engineering', amount: 11 }],
+            unit: 'K tokens',
+            sub: 'History: last 4 turns + a 300-token summary. Chunks: reranked top 6. CRM JSON: **8 fields**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Golden set',
+            value: 83,
+            suffix: '%',
+            unit: 'accuracy after the cut',
+            stats: [{ value: '71%', label: 'accuracy before' }, { value: '4.1 s → 1.2 s', label: 'p50 TTFT' }],
+          },
+          {
+            type: 'flow',
+            kicker: 'Layout, top to bottom',
+            head: 'Stable first, *question last*',
+            steps: ['System rules + tools (cached prefix)', 'Long reference docs, best first', 'Memory + history summary', 'Trimmed tool results', 'Question + output format'],
+            sub: 'Liu et al. (2023): accuracy is **U-shaped by position**, so the middle is the worst seat.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'You add a timestamp to the top of the system prompt. Cache hits fall from 85% to ~0%. Why?',
+            answer: 0,
+            options: [
+              { text: 'Caching matches an exact prefix, and volatile text now sits inside it', why: 'Any byte that changes per request inside the prefix forces a miss: move it near the end.' },
+              { text: 'Timestamps take too many tokens to cache', why: 'Size is not the problem; changing text inside the cached prefix is.' },
+              { text: 'Personalised prompts are excluded from caching', why: 'There is no such rule: the cache keys on an identical prefix.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Budget every slot, *order it on purpose*.',
+          sub: 'Stable before volatile, best evidence at the edges, **question last**.',
+        },
+      },
       body: `A prompt is one message; **context** is everything the model sees on a call: system instructions, tool definitions, few-shot examples, retrieved documents, memory, tool results and conversation history. Anthropic calls context engineering curating "the optimal set of tokens" for each call. Think of it as packing a carry-on bag: you have a fixed space, so everything in it must earn its place.
 
 **Why it matters:** models suffer **context rot**, where recall falls as the window fills. Liu et al. (2023) found accuracy is **U-shaped by position**: facts at the start or end of the context are used far better than facts in the middle.

@@ -135,19 +135,6 @@
   font: 500 var(--fs-xs) var(--mono);
   color: var(--muted);
 }
-/* one more header item: fold search to its icon earlier */
-@media (max-width: 1480px) {
-  .search-trigger {
-    min-width: 0;
-    width: 40px;
-    padding: 0;
-    justify-content: center;
-  }
-  .search-trigger-text,
-  .search-trigger kbd {
-    display: none;
-  }
-}
 @media (max-width: 900px) {
   .masthead .saved-hdr {
     display: none;

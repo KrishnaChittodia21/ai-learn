@@ -33,6 +33,225 @@ const topic: Topic = {
   sections: [
     {
       heading: 'RAG Evaluation — component vs end-to-end, golden sets and RAGAS metrics',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Golden item', sub: 'damaged-item refunds', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'contexts C1–C5', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Generator', sub: 'answer', x: 570, y: 70 },
+          { id: 'ctx', kind: 'metric', label: 'Context scores', sub: 'precision, recall', x: 340, y: 230 },
+          { id: 'faith', kind: 'judge', label: 'Faithfulness', sub: 'claims vs contexts', x: 570, y: 230 },
+          { id: 'relev', kind: 'metric', label: 'Relevancy', sub: 'answer vs question', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Wrong books, or misread books?',
+            lines: [
+              'A RAG answer fails because the librarian brought the wrong books (**retrieval**)…',
+              '…or because the writer misread the right ones (**generation**).',
+              'Evaluate both, separately.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'retriever'], label: 'question' },
+              { send: ['retriever', 'ctx'], label: 'contexts' },
+              { say: 1 },
+              { send: ['retriever', 'llm'], label: 'contexts' },
+              { send: ['llm', 'faith'], label: 'answer' },
+              { send: ['llm', 'relev'], label: 'answer' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Scoring the retrieval',
+            lines: [
+              'Contexts by rank: C1 ✔, C2 ✘, C3 ✔, C4 ✘, C5 ✔.',
+              '**Context precision** = (1/1 + 2/3 + 3/5) ÷ 3 = **0.756**: relevant chunks ranked above irrelevant ones?',
+              '**Context recall**: both reference claims (5 business days; after photo approval) are covered → **1.0**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'ctx'], label: '✔ ✘ ✔ ✘ ✔' },
+              { say: 1 },
+              { badge: 'ctx', text: 'precision 0.756', ms: 1300 },
+              { say: 2 },
+              { badge: 'ctx', text: 'recall 1.0', tone: 'ok', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: catch the extra claim',
+            lines: ['Answer: "5 business days after photo approval, usually to the original card, and you also get a 10% voucher."'],
+            task: {
+              type: 'pick',
+              question: 'No context mentions a voucher. Which score catches it?',
+              answer: 'faith',
+              hints: {
+                ctx: 'Context scores judge what was retrieved, and the contexts were fine (recall 1.0).',
+                relev: 'Relevancy asks whether the answer addresses the question; it does.',
+              },
+            },
+            solved: 'Faithfulness splits the answer into claims and checks each against the contexts: 3 of 4 supported → 0.75.',
+            then: [{ send: ['llm', 'faith'], label: '4 claims' }, { badge: 'faith', text: '3/4 = 0.75', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Relevancy and the golden set',
+            lines: [
+              '**Response relevancy**: an LLM writes questions from the answer; their similarity to the original (0.93, 0.90, 0.87) averages to **0.90**.',
+              'Golden set: 100–500 real questions with reference answers and gold chunk ids, including unanswerable ones.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'relev'], label: '3 questions' },
+              { badge: 'relev', text: '0.90', tone: 'ok', ms: 1300 },
+              { say: 1 },
+              { lit: 'user' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: online, without references',
+            lines: ['Offline: the golden set on every change. Online: sample production traffic.'],
+            task: {
+              type: 'choose',
+              question: 'Production traffic has no reference answers. Which metrics can you still compute?',
+              options: [
+                { text: 'Faithfulness and response relevancy' },
+                { text: 'Context recall', why: 'Context recall checks the contexts against the reference answer\'s claims, which you don\'t have.' },
+                { text: 'Answer correctness', why: 'Correctness compares the answer to a reference answer.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Reference-free metrics (faithfulness, relevancy) plus user feedback work online; the rest need the golden set.',
+            then: [{ send: ['llm', 'faith'], label: 'sampled' }, { send: ['llm', 'relev'], label: 'sampled' }],
+          },
+        ],
+      },
+      short: {
+        id: 'grading-a-rag-answer',
+        title: 'Grading one RAG answer, four ways',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'Faithfulness · RAGAS',
+            head: 'Split the answer, *check each claim*',
+            claims: [
+              {
+                text: 'Refunds take 5 business days',
+                ok: true,
+              },
+              {
+                text: 'after photo approval',
+                ok: true,
+              },
+              {
+                text: 'usually to the original card',
+                ok: true,
+              },
+              {
+                text: 'you also get a 10% voucher',
+                ok: false,
+                note: 'unsupported by the contexts',
+              },
+            ],
+            sub: 'Supported ÷ total = 3/4: **faithfulness 0.75**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Two ways to fail',
+            head: 'Wrong books, or *misread* books',
+            steps: [
+              'Golden item: question + reference + gold ids',
+              'Retriever brings contexts',
+              'Generator writes the answer',
+              'Score each layer separately',
+            ],
+          },
+          {
+            type: 'claims',
+            kicker: 'Context precision',
+            head: 'Relevant chunks should rank *first*',
+            claims: [
+              {
+                text: 'C1 refund timing',
+                ok: true,
+              },
+              {
+                text: 'C2 shipping rates',
+                ok: false,
+              },
+              {
+                text: 'C3 damaged-item photo rule',
+                ok: true,
+              },
+              {
+                text: 'C4 gift cards',
+                ok: false,
+              },
+              {
+                text: 'C5 refund method',
+                ok: true,
+              },
+            ],
+            sub: '(1/1 + 2/3 + 3/5) ÷ 3 = **0.756**',
+          },
+          {
+            type: 'counter',
+            kicker: 'Context recall',
+            value: 1,
+            decimals: 1,
+            unit: 'both reference claims found in the contexts',
+            sub: 'Reference claims: **5 business days**, **after the photo is approved**.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Response relevancy',
+            head: 'Does the answer address *the question*?',
+            rungs: [
+              {
+                label: 'Generated question 1',
+                amount: 0.93,
+              },
+              {
+                label: 'Generated question 2',
+                amount: 0.9,
+              },
+              {
+                label: 'Generated question 3',
+                amount: 0.87,
+              },
+            ],
+            unit: 'cosine',
+            sub: 'Average: **0.90**. Evasive or off-topic answers score low.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The answer adds a claim no context supports. Which metric drops?',
+            answer: 0,
+            options: [
+              {
+                text: 'Faithfulness',
+                why: 'It checks every answer claim against the contexts: supported ÷ total.',
+              },
+              {
+                text: 'Response relevancy',
+                why: 'It penalises evasive or off-topic answers, not wrong ones.',
+              },
+              {
+                text: 'Context recall',
+                why: 'It checks the contexts against the reference answer, not the generated answer.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Score retrieval and generation *separately*.',
+          sub: 'A golden set of **100–500** real questions, run on every change.',
+        },
+      },
       body: `**Intuition:** a RAG answer can fail because the librarian brought the wrong books (retrieval) or because the writer misread the right ones (generation). Evaluation must check both, separately.
 
 **What to measure:**
@@ -179,6 +398,105 @@ print(df.sort_values("faithfulness").head())`,
     },
     {
       heading: 'Retrieval Evaluation — qrels, hit rate and building a labelled query set',
+      steps: {
+        actors: [
+          { id: 'queries', kind: 'user', label: 'Queries', sub: 'logs + synthetic', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'the run', x: 340, y: 70 },
+          { id: 'metric', kind: 'metric', label: 'Metrics @K', sub: 'Hit, Recall, MRR', x: 570, y: 150 },
+          { id: 'qrels', kind: 'data', label: 'Qrels', sub: 'gold chunk ids', x: 340, y: 230 },
+          { id: 'judge', kind: 'judge', label: 'Labeller', sub: 'human or LLM judge', x: 110, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Were the right pages handed over?',
+            lines: [
+              'Before grading the essay, check the student got the right pages.',
+              'Compare the **run** (your ranked results) with the **qrels** (known-relevant ids per query).',
+              'Metrics are computed from the two at a cut-off K.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['queries', 'retriever'], label: 'queries' },
+              { say: 1 },
+              { send: ['retriever', 'metric'], label: 'run' },
+              { send: ['qrels', 'metric'], label: 'qrels' },
+              { say: 2 },
+              { lit: 'metric' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Getting labels cheaply',
+            lines: [
+              '**Synthetic**: an LLM writes the question each chunk answers; that chunk is the gold. Biased toward lexical overlap, so mix in real queries.',
+              '**Pooling**: union of several retrievers\' top 10, labelled by humans or an LLM judge.',
+              '**Production signals**: clicked citations, thumbs-up (noisy, plentiful).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['qrels', 'queries'], label: 'synthetic', curve: true },
+              { say: 1 },
+              { send: ['retriever', 'judge'], label: 'pool', curve: true },
+              { send: ['judge', 'qrels'], label: 'labels' },
+              { say: 2 },
+              { badge: 'queries', text: 'noisy', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pooling',
+            lines: ['Pooling labels only what some retriever actually returns.'],
+            task: {
+              type: 'order',
+              question: 'Put pooling in order.',
+              items: [
+                'Run several retrievers (BM25, dense, hybrid)',
+                'Take the union of their top 10',
+                'Humans or an LLM judge label the pool',
+                'Store the labels as qrels',
+              ],
+              hint: 'You need the candidates before anyone can judge them, and the judgements become the qrels.',
+            },
+            solved: 'Several retrievers → union of top 10 → judge → qrels.',
+            then: [{ send: ['retriever', 'judge'], label: 'pool', curve: true }, { send: ['judge', 'qrels'], label: 'labels', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Evaluate at two depths',
+            lines: [
+              'Candidate depth (Recall@50) sets the ceiling; context depth (Hit@5) is what the LLM sees.',
+              'Hybrid lifts Recall@50 from 0.88 to 0.94.',
+              'Reranking leaves Recall@50 at 0.94 but moves gold chunks up: Hit@5 0.79 → 0.87, MRR 0.64 → 0.76.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'metric'], label: '@50 and @5' },
+              { say: 1 },
+              { badge: 'metric', text: 'R@50 0.94', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { badge: 'metric', text: 'Hit@5 0.87', tone: 'ok', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the missing 6%',
+            lines: ['Even after hybrid search, 6% of gold chunks are not in the top 50.'],
+            task: {
+              type: 'choose',
+              question: 'What will fix those misses?',
+              options: [
+                { text: 'Content or chunking fixes' },
+                { text: 'A better reranker', why: 'A reranker reorders the same candidates; it cannot bring in chunks that are not in the top 50.' },
+                { text: 'Sending more chunks to the LLM', why: 'The context comes from the same 50 candidates; the gold chunk is not among them.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Recall at candidate depth is the ceiling: what is missing there is a content or chunking problem.',
+            then: [{ down: 'retriever' }, { badge: 'qrels', text: 'fix the content', tone: 'ok' }, { down: 'retriever', on: false }],
+          },
+        ],
+      },
       body: `**Intuition:** before grading the essay, check whether the student was handed the right pages. Retrieval evaluation compares the retriever's ranked list against a list of known-relevant documents for each query.
 
 **Ingredients (classic IR vocabulary):**
@@ -332,6 +650,103 @@ export function missBreakdown(run: Run, qrels: Qrels, k: number, depth: number) 
     },
     {
       heading: 'Precision@K — how much of what you returned is relevant',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'refund, damaged items', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'top 10', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'reads K chunks', x: 570, y: 70 },
+          { id: 'metric', kind: 'metric', label: 'Precision@K', sub: 'relevant ÷ K', x: 340, y: 230 },
+          { id: 'qrels', kind: 'data', label: 'Qrels', sub: '5 relevant chunks', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'How much of the hand-off is useful?',
+            lines: [
+              'You hand the model K chunks; Precision@K is the fraction that are relevant.',
+              'Precision@K = relevant in top K ÷ K.',
+              'It ignores order within the top K and anything ranked below K.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'llm'], label: 'K chunks' },
+              { say: 1 },
+              { send: ['retriever', 'metric'], label: 'top K' },
+              { send: ['qrels', 'metric'], label: 'relevant?', curve: true },
+              { say: 2 },
+              { lit: 'metric' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: compute P@5',
+            lines: ['Relevance by rank: 1, 0, 1, 1, 0, 0, 1, 0, 0, 0.'],
+            task: {
+              type: 'choose',
+              question: 'What is Precision@5?',
+              options: [
+                { text: '3 ÷ 5 = 0.60' },
+                { text: '1.00', why: 'That is P@1: only the first result counts there.' },
+                { text: '4 ÷ 10 = 0.40', why: 'That is P@10; P@5 looks at the top 5 only.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Three of the top five are relevant: P@5 = 0.60.',
+            then: [{ send: ['retriever', 'metric'], label: '1 0 1 1 0' }, { badge: 'metric', text: 'P@5 = 0.60', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Usually falls as K grows',
+            lines: [
+              'P@1 = 1.00, P@3 = 0.667, P@5 = 0.60, P@10 = 0.40.',
+              'Larger K adds lower-ranked, less relevant results.',
+              'Average over queries for a system score: (0.60 + 0.20) ÷ 2 = 0.40.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'metric', text: '1.00 → 0.40', ms: 1400 },
+              { say: 1 },
+              { send: ['retriever', 'llm'], label: 'more noise', tone: 'miss', count: 3 },
+              { say: 2 },
+              { badge: 'metric', text: 'mean P@5 0.40', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the ceiling',
+            lines: ['A query has only 2 relevant docs in the whole corpus.'],
+            task: {
+              type: 'choose',
+              question: 'What is the best possible P@10, even with a perfect ranking?',
+              options: [
+                { text: '0.2' },
+                { text: '1.0', why: 'Only 2 of the 10 slots can ever hold a relevant doc: 2 ÷ 10.' },
+                { text: '0.5', why: 'The denominator is K = 10, not 4.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Precision has a ceiling when a query has fewer relevant docs than K; for one gold chunk, use Hit@K or MRR.',
+            then: [{ send: ['qrels', 'metric'], label: '2 relevant', curve: true }, { badge: 'metric', text: 'max 0.2', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why it matters for RAG',
+            lines: [
+              'Every irrelevant chunk costs tokens and can distract or mislead the generator.',
+              'P at the context depth (e.g. P@5) is a proxy for how clean the context is.',
+              'Use it when several relevant chunks exist and noise is costly, or to compare rerankers.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'llm'], label: 'noise', tone: 'miss' },
+              { badge: 'llm', text: 'distracted', tone: 'miss', ms: 1200 },
+              { say: 1 },
+              { lit: 'metric' },
+              { say: 2 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** you hand the model K chunks; Precision@K is the fraction of them that are actually useful. Low precision = the model is wading through noise.
 
 **Formula:** Precision@K = (number of relevant results in the top K) ÷ K.
@@ -473,6 +888,97 @@ export function bestK(ranked: string[], relevant: Set<string>, maxK: number): nu
     },
     {
       heading: 'Recall@K — how much of the needed evidence you found',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'needs 5 chunks', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'top K', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'uses what it sees', x: 570, y: 70 },
+          { id: 'metric', kind: 'metric', label: 'Recall@K', sub: 'found ÷ all relevant', x: 340, y: 230 },
+          { id: 'qrels', kind: 'data', label: 'Qrels', sub: 'must be complete', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Evidence the model never sees',
+            lines: [
+              'If the answer needs three facts and the top K holds two, the best answer is two-thirds complete.',
+              'Recall@K = relevant in top K ÷ **total** relevant for the query.',
+              'The generator cannot use evidence it never sees: recall bounds the answer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'llm'], label: '2 of 3 facts', tone: 'miss' },
+              { say: 1 },
+              { send: ['retriever', 'metric'], label: 'found' },
+              { send: ['qrels', 'metric'], label: 'all relevant', curve: true },
+              { say: 2 },
+              { lit: 'metric' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Never falls as K grows',
+            lines: [
+              '5 relevant chunks; relevance by rank 1, 0, 1, 1, 0, 0, 1, 0, 0, 0.',
+              'R@1 = 0.20, R@3 = 0.40, R@5 = 0.60, R@10 = 0.80 (the 5th is not in the top 10).',
+              'With a single gold chunk, Recall@K equals **Hit@K**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'metric'], label: '1 0 1 1 0 …' },
+              { say: 1 },
+              { badge: 'metric', text: '0.20 → 0.80', tone: 'ok', ms: 1400 },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: recall and clean context',
+            lines: ['Small K: higher precision, may miss evidence. Large K: more complete, more noise and tokens.'],
+            task: {
+              type: 'choose',
+              question: 'How do you get high recall *and* a clean context?',
+              options: [
+                { text: 'Retrieve wide (K = 30–100), then rerank narrow (top 3–8)' },
+                { text: 'Send K = 3 straight to the LLM', why: 'Cheap and clean, but recall drops: evidence gets missed.' },
+                { text: 'Send all 100 candidates to the LLM', why: 'Recall is high, but the context fills with noise and tokens.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Retrieve wide for recall, rerank narrow for precision.',
+            then: [{ send: ['user', 'retriever'], label: 'K = 100' }, { send: ['retriever', 'llm'], label: 'top 5', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: average over queries',
+            lines: ['K = 5. Query A: 3/5. Query B: 1/1. Query C: 0/2.'],
+            task: {
+              type: 'choose',
+              question: 'What is the mean (per-query) Recall@5?',
+              options: [
+                { text: '(0.60 + 1.00 + 0.00) ÷ 3 = 0.533' },
+                { text: '4 ÷ 8 = 0.50', why: 'That is the micro-average (pooling all items); the per-query mean is 0.533.' },
+                { text: '0.60', why: 'That is query A alone.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Mean of per-query recall is 0.533; micro-averaged it is 0.50. Say which one you report.',
+            then: [{ badge: 'metric', text: 'macro 0.533', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Qrels must be complete',
+            lines: ['Recall needs the **total** number of relevant items per query.', 'Missing labels shrink the denominator and inflate recall.'],
+            script: [
+              { say: 0 },
+              { lit: 'qrels' },
+              { say: 1 },
+              { badge: 'qrels', text: 'missing labels', tone: 'miss', ms: 1300 },
+              { badge: 'metric', text: 'inflated', tone: 'miss', ms: 1300 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** if the answer needs three facts and your top K contains two of them, the model can at best give two-thirds of the answer. Recall@K measures how much of the needed evidence made it into the window.
 
 **Formula:** Recall@K = (relevant results in the top K) ÷ (total relevant results for the query).
@@ -611,6 +1117,94 @@ export function minKForRecall(qs: Q[], target: number, maxK: number): number | n
     },
     {
       heading: 'MRR and NDCG — rewarding relevant results that appear early',
+      steps: {
+        actors: [
+          { id: 'list', kind: 'retriever', label: 'Ranked list', sub: 'grades 0, 2, 3, 0, 1', x: 110, y: 70 },
+          { id: 'rerank', kind: 'reranker', label: 'Reranked list', sub: 'grades 2, 3, 0, 1, 0', x: 110, y: 230 },
+          { id: 'qrels', kind: 'data', label: 'Graded qrels', sub: 'grades 3, 2, 1', x: 340, y: 150 },
+          { id: 'mrr', kind: 'metric', label: 'MRR', sub: '1 ÷ first rank', x: 570, y: 70 },
+          { id: 'ndcg', kind: 'metric', label: 'NDCG@K', sub: 'DCG ÷ IDCG', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Rank 1 beats rank 9',
+            lines: ['A hit at rank 1 and a hit at rank 9 are both "hits", but one is far more useful.', 'MRR and NDCG add a **position discount**.'],
+            script: [
+              { say: 0 },
+              { send: ['list', 'mrr'], label: 'rank 1' },
+              { send: ['list', 'mrr'], label: 'rank 9', tone: 'miss' },
+              { say: 1 },
+              { lit: 'mrr' },
+              { lit: 'ndcg' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: compute MRR',
+            lines: ['Per query: 1 ÷ rank of the **first** relevant result; 0 if there is none.', 'Four queries: first relevant at ranks 1, 3, none, 2.'],
+            task: {
+              type: 'choose',
+              question: 'What is the MRR?',
+              options: [
+                { text: '(1 + 0.333 + 0 + 0.5) ÷ 4 = 0.458' },
+                { text: '1.833 ÷ 3 = 0.611', why: 'The query with no relevant result still counts, as 0: divide by 4.' },
+                { text: '(1 + 3 + 2) ÷ 3 = 2', why: 'MRR averages reciprocal ranks (1 ÷ rank), not the ranks themselves.' },
+              ],
+              answer: 0,
+            },
+            solved: 'MRR = 0.458. Ideal when the user or the LLM mainly needs one good result.',
+            then: [{ send: ['list', 'mrr'], label: '1, ⅓, 0, ½' }, { badge: 'mrr', text: '0.458', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'NDCG: graded and multiple',
+            lines: [
+              'DCG@K = Σ relᵢ ÷ log2(i + 1): rank 1 → ×1, rank 2 → ÷1.585, rank 3 → ÷2.',
+              'Ranking grades 0, 2, 3, 0, 1 → DCG = 3.149. Ideal order 3, 2, 1 → IDCG = 4.762.',
+              'NDCG@5 = 3.149 ÷ 4.762 = **0.661**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['list', 'ndcg'], label: 'DCG', curve: true },
+              { say: 1 },
+              { send: ['qrels', 'ndcg'], label: 'IDCG 4.762' },
+              { say: 2 },
+              { badge: 'ndcg', text: '0.661', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: after reranking',
+            lines: ['The reranker returns the same docs as grades 2, 3, 0, 1, 0.'],
+            task: {
+              type: 'choose',
+              question: 'What happens to NDCG@5?',
+              options: [
+                { text: 'It rises to 0.908' },
+                {
+                  text: 'It stays at 0.661: same relevant docs',
+                  why: 'NDCG discounts by position; moving the grade-2 and grade-3 docs to ranks 1–2 raises DCG to 4.323.',
+                },
+                { text: 'It falls', why: 'The relevant docs moved up, so the discounts shrink and DCG grows.' },
+              ],
+              answer: 0,
+            },
+            solved: 'DCG 4.323 ÷ IDCG 4.762 = 0.908: NDCG rewards relevant results that appear early.',
+            then: [{ send: ['rerank', 'ndcg'], label: 'DCG 4.323' }, { badge: 'ndcg', text: '0.908', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Which one when',
+            lines: [
+              '**MRR**: only the first relevant result counts; for single-answer RAG and judging rerankers.',
+              '**NDCG@10**: graded labels or several useful chunks per question.',
+              'A common variant uses gain 2^rel − 1; state which one you use.',
+            ],
+            script: [{ say: 0 }, { lit: 'mrr' }, { say: 1 }, { lit: 'ndcg' }, { say: 2 }, { badge: 'ndcg', text: 'gain: rel or 2^rel−1', ms: 1400 }],
+          },
+        ],
+      },
       body: `**Intuition:** finding the answer at rank 1 is better than at rank 9, even though both count as a "hit". MRR and NDCG add a *position discount*.
 
 **MRR (Mean Reciprocal Rank):** for each query, take 1 ÷ rank of the **first** relevant result (0 if none in the list or cut-off), then average. Rank 1 → 1, rank 2 → 0.5, rank 3 → 0.333, rank 10 → 0.1. Ideal when users (or the LLM) mainly need *one* good result.

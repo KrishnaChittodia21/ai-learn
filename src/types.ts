@@ -64,7 +64,11 @@ export interface Section {
 
 // ---------- Step lessons (M7): played by src/components/steps/StepLesson.tsx, checked by src/lib/steps.ts ----------
 /** the AI pipeline parts a step diagram is built from (each has its own icon and colour) */
-export const ACTOR_KINDS = ['user', 'document', 'chunker', 'embedder', 'vector-db', 'retriever', 'reranker', 'llm', 'tool', 'agent', 'judge'] as const;
+export const ACTOR_KINDS = [
+  'user', 'document', 'chunker', 'embedder', 'vector-db', 'retriever', 'reranker', 'llm', 'tool', 'agent', 'judge',
+  // general parts for topics outside the RAG/agent pipeline (serving, ops, safety, training)
+  'server', 'cache', 'guard', 'data', 'metric',
+] as const;
 export type ActorKind = (typeof ACTOR_KINDS)[number];
 export type StepTone = 'req' | 'ok' | 'miss' | 'err';
 

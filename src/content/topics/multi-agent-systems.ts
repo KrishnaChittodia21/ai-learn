@@ -39,6 +39,112 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Agentic Workflows — the five composable patterns',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Ticket', sub: 'charged twice + crash', x: 110, y: 70 },
+          { id: 'router', kind: 'llm', label: 'Router', sub: 'small model', x: 340, y: 70 },
+          { id: 'billing', kind: 'llm', label: 'Billing', sub: 'specialist prompt', x: 570, y: 70 },
+          { id: 'bug', kind: 'llm', label: 'Bug', sub: 'specialist prompt', x: 570, y: 230 },
+          { id: 'gate', kind: 'guard', label: 'Gate', sub: 'code check', x: 790, y: 70 },
+          { id: 'judge', kind: 'judge', label: 'Evaluator', sub: 'scores, cap = 3', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Your code fixes the order',
+            lines: [
+              'In a **workflow**, your code fixes the order of steps; the LLM thinks inside each step.',
+              '**Routing**: a cheap classifier returns the intents `billing` and `bug`.',
+              '**Sectioning**: both specialists run at once, so wall time is 2.1 s instead of 3.9 s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'router'], label: 'ticket' },
+              { say: 1 },
+              { badge: 'router', text: 'billing, bug' },
+              { say: 2 },
+              { send: ['router', 'billing'], label: 'billing' },
+              { send: ['router', 'bug'], label: 'bug' },
+              { badge: 'billing', text: '1.8 s', tone: 'ok' },
+              { badge: 'bug', text: '2.1 s', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Gates and an evaluator loop',
+            lines: [
+              'A **gate** is code between steps: an order id like `#8812`, no refund over the order total.',
+              'Gates stop error propagation early.',
+              '**Evaluator-optimizer**: the judge scores tone 3/5, one rewrite scores 5/5, the loop stops.',
+              'Every loop needs a hard cap (here 3).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['billing', 'gate'], label: 'draft' },
+              { badge: 'gate', text: 'pass', tone: 'ok' },
+              { say: 1 },
+              { say: 2 },
+              { send: ['gate', 'judge'], label: 'merged reply' },
+              { badge: 'judge', text: 'tone 3/5', tone: 'miss' },
+              { badge: 'judge', text: 'rewrite: 5/5', tone: 'ok' },
+              { say: 3 },
+              { badge: 'judge', text: 'cap = 3' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the pattern',
+            lines: ['Five building blocks: chaining, routing, parallelisation, orchestrator-workers, evaluator-optimizer.'],
+            task: {
+              type: 'choose',
+              question: 'Inputs fall into distinct classes (refund vs bug vs sales), each needing its own specialist. Which pattern?',
+              options: [
+                { text: 'Routing' },
+                {
+                  text: 'Prompt chaining',
+                  why: 'Chaining is for a task that splits into fixed stages (outline → draft → translate).',
+                },
+                {
+                  text: 'Voting',
+                  why: 'Voting runs the same task N times for confidence; it does not pick a specialist.',
+                },
+                {
+                  text: 'Orchestrator-workers',
+                  why: 'That is for subtasks unknown in advance; these classes are known.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Distinct input classes → routing: a cheap classifier picks one specialist.',
+            then: [
+              { send: ['user', 'router'], label: 'ticket' },
+              { send: ['router', 'billing'], label: 'billing', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: workflow or agent?',
+            lines: ['Most production "agents" are really workflows with one or two agentic steps.'],
+            task: {
+              type: 'choose',
+              question: 'When should you move from a workflow to an agent?',
+              options: [
+                { text: 'Only when the number and order of steps truly cannot be fixed' },
+                {
+                  text: 'As soon as a task needs more than one LLM call',
+                  why: 'Several calls in a fixed order is a workflow: testable, cheap and predictable.',
+                },
+                {
+                  text: 'Always: agents are more capable',
+                  why: 'Try the simplest thing first; in an agent the LLM picks each step, which is harder to test.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Simplest first: one call + retrieval, then a workflow, and an agent only when steps cannot be fixed.',
+          },
+        ],
+      },
       body: `**Intuition:** an agentic workflow is a recipe where *your code* fixes the order of steps and the LLM does the thinking inside each step. It is an assembly line, not a free-roaming worker.
 
 Anthropic's taxonomy gives five building blocks you can combine:
@@ -185,6 +291,119 @@ export async function vote(question: string, n = 3): Promise<{ label: Label; agr
     },
     {
       heading: 'Multi-Agent Systems — supervisor, handoff (swarm) and hierarchical',
+      steps: {
+        actors: [
+          { id: 'lead', kind: 'agent', label: 'Lead agent', sub: 'supervisor', x: 450, y: 70 },
+          { id: 's1', kind: 'agent', label: 'Subagent 1', sub: 'own context window', x: 110, y: 230 },
+          { id: 's2', kind: 'agent', label: 'Subagent 2', sub: 'own context window', x: 340, y: 230 },
+          { id: 's3', kind: 'agent', label: 'Subagent 3', sub: 'own context window', x: 570, y: 230 },
+          { id: 's4', kind: 'agent', label: 'Subagent 4', sub: 'own context window', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A team of specialists',
+            lines: [
+              'Each agent has its own prompt, tools and **its own context window**.',
+              'Research on 4 competitors: the lead writes 4 task specs and fans them out.',
+              'The subagents run in parallel; wall time ≈ the slowest one.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'lead' },
+              { say: 1 },
+              { send: ['lead', 's1'], label: 'task spec' },
+              { send: ['lead', 's2'], label: 'task spec' },
+              { send: ['lead', 's3'], label: 'task spec' },
+              { send: ['lead', 's4'], label: 'task spec' },
+              { say: 2 },
+              { badge: 's4', text: '4 minutes' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Condensed results come back',
+            lines: [
+              'Each subagent burns ~60K tokens in its own window…',
+              '…but returns only ~500 tokens, never the raw transcript.',
+              "The lead's context stays at ~12K: **context isolation**.",
+            ],
+            script: [
+              { say: 0 },
+              { badge: 's1', text: '~60K tokens' },
+              { badge: 's3', text: '~60K tokens' },
+              { say: 1 },
+              { send: ['s1', 'lead'], label: '~500', tone: 'ok' },
+              { send: ['s2', 'lead'], label: '~500', tone: 'ok' },
+              { send: ['s3', 'lead'], label: '~500', tone: 'ok' },
+              { send: ['s4', 'lead'], label: '~500', tone: 'ok' },
+              { say: 2 },
+              { badge: 'lead', text: '~12K context', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: name the topology',
+            lines: ['Supervisor = workers as tools. Hierarchical = supervisors of supervisors.'],
+            task: {
+              type: 'choose',
+              question: 'The active agent passes control with a `transfer_to_x` tool, and the user then talks to x. Which topology?',
+              options: [
+                { text: 'Handoff / swarm' },
+                {
+                  text: 'Supervisor',
+                  why: 'A supervisor calls workers as tools and gets condensed results back; control never leaves it.',
+                },
+                { text: 'Hierarchical', why: 'Hierarchical means nested supervisors (team leads).' },
+              ],
+              answer: 0,
+            },
+            solved: 'Handoff transfers control; lower latency, but loops between agents are harder to reason about.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: split it or not?',
+            lines: ['The win is context isolation and parallelism, not "more intelligence".'],
+            task: {
+              type: 'choose',
+              question: 'Three agents each write one layer of a feature (DB, API, UI). Good split?',
+              options: [
+                { text: 'No: it is one coherent artifact, so keep it with one agent' },
+                {
+                  text: 'Yes: parallel agents are always faster',
+                  why: 'They made conflicting implicit decisions: `userId` vs `user_id`.',
+                },
+                {
+                  text: 'Yes, as long as each returns condensed results',
+                  why: 'Condensing helps context, but the layers are coupled and still drift apart.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Breadth-first, independent parts suit many agents; coupled work belongs to one agent.',
+          },
+          {
+            kind: 'watch',
+            title: 'The trade',
+            lines: [
+              'Single agent: 180K tokens of context, findings lost in the middle, 14 minutes.',
+              'Supervisor + 4: 4 × 60K + 30K lead ≈ 270K tokens, 4 minutes.',
+              '1.5x tokens for 3.5x speed and better coverage.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'lead', text: '14 min alone', tone: 'miss' },
+              { say: 1 },
+              { send: ['lead', 's1'], label: 'spec' },
+              { send: ['lead', 's4'], label: 'spec' },
+              { send: ['s1', 'lead'], label: 'summary', tone: 'ok' },
+              { send: ['s4', 'lead'], label: 'summary', tone: 'ok' },
+              { say: 2 },
+              { badge: 'lead', text: '3.5x faster', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a multi-agent system is a team of specialists, each with its own prompt, tools and *its own context window*. The win is not "more intelligence"; it is **context isolation and parallelism**: each agent sees only what it needs.
 
 **Three topologies:**
@@ -339,6 +558,104 @@ export function nextAgent(state: S, requested: string): S {
     },
     {
       heading: 'Agent Orchestration — state, fan-out, checkpoints and budgets',
+      steps: {
+        actors: [
+          { id: 'plan', kind: 'agent', label: 'Plan node', sub: '12 sub-questions', x: 110, y: 70 },
+          { id: 'workers', kind: 'agent', label: 'worker × 12', sub: 'Send fan-out', x: 340, y: 70 },
+          { id: 'state', kind: 'data', label: 'Shared state', sub: 'findings: concat', x: 570, y: 70 },
+          { id: 'synth', kind: 'llm', label: 'Synthesise', sub: 'the report', x: 790, y: 70 },
+          { id: 'ckpt', kind: 'data', label: 'Checkpointer', sub: 'thread_id: rpt-42', x: 340, y: 230 },
+          { id: 'budget', kind: 'guard', label: 'Budget guard', sub: '250K token cap', x: 680, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Fan out, fan in',
+            lines: [
+              'The plan node produces 12 sub-questions.',
+              '`Send` launches 12 worker runs in one **superstep**.',
+              'Each appends `{ q, answer, tokens }` to `findings` through a concat reducer.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'plan' },
+              { say: 1 },
+              { send: ['plan', 'workers'], label: 'Send', count: 3 },
+              { badge: 'workers', text: '12 runs' },
+              { say: 2 },
+              { send: ['workers', 'state'], label: 'append', tone: 'ok', count: 3 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Retries and checkpoints',
+            lines: [
+              'Worker 9 hits a 429; its retry policy (3 attempts, 1 s → 2 s → 4 s) succeeds on try 2.',
+              'State is saved after each superstep under a `thread_id`.',
+              'The pod is redeployed: the run resumes from the last checkpoint, and finished workers are not re-run.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'workers', text: '429', tone: 'err' },
+              { badge: 'workers', text: 'try 2: ok', tone: 'ok' },
+              { say: 1 },
+              { send: ['state', 'ckpt'], label: 'save' },
+              { say: 2 },
+              { down: 'workers' },
+              { wait: 600 },
+              { down: 'workers', on: false },
+              { send: ['ckpt', 'workers'], label: 'resume', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who stops a runaway?',
+            lines: ['Every orchestrated run needs a step limit, a budget and a partial-result path.'],
+            task: {
+              type: 'pick',
+              question: 'Which part checks the run against its token cap before synthesis?',
+              answer: 'budget',
+              hints: {
+                ckpt: 'The checkpointer saves state so you can resume; it does not stop anything.',
+                state: 'State holds `tokensUsed`, but something has to read it and decide.',
+                synth: 'Synthesis is where the run goes after the check.',
+              },
+            },
+            solved: 'The budget guard reads tokensUsed = 212K against the 250K cap and allows synthesis.',
+            then: [
+              { send: ['state', 'budget'], label: '212K' },
+              { badge: 'budget', text: 'under cap', tone: 'ok' },
+              { send: ['budget', 'synth'], label: 'go', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: over budget',
+            lines: ['A naive loop restarts from scratch or runs forever; a graph has a plan for both.'],
+            task: {
+              type: 'choose',
+              question: 'Had tokensUsed exceeded the cap, what should happen?',
+              options: [
+                { text: 'Jump straight to `synthesise` with partial findings, marked "partial (9/12 sources)"' },
+                {
+                  text: 'Restart the whole run from scratch',
+                  why: 'That throws away finished work; the partial-result path uses it.',
+                },
+                {
+                  text: 'Keep looping until all 12 workers finish',
+                  why: 'That is the runaway the budget exists to stop.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Over budget → synthesise what you have and mark the report partial.',
+            then: [
+              { badge: 'budget', text: 'over cap', tone: 'err' },
+              { send: ['budget', 'synth'], label: 'partial', tone: 'miss' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** orchestration is the air-traffic control around your agents: who runs next, what they see, what happens when one crashes, and when to stop.
 
 A production orchestrator provides:
@@ -489,6 +806,117 @@ assert.equal(route({ ...base, steps: 20, findings: 0 }), 'abort');`,
     },
     {
       heading: 'Debate, voting and consensus — when several answers beat one',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'document', label: 'Contract', sub: 'notice period?', x: 110, y: 150 },
+          { id: 'a1', kind: 'agent', label: 'Agent A', sub: 'model 1', x: 340, y: 70 },
+          { id: 'a2', kind: 'agent', label: 'Agent B', sub: 'model 2', x: 570, y: 70 },
+          { id: 'a3', kind: 'agent', label: 'Agent C', sub: 'model 1, other prompt', x: 455, y: 230 },
+          { id: 'judge', kind: 'judge', label: 'Judge', sub: 'threshold ≥ 0.6', x: 790, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human review', sub: 'escalation', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Self-consistency: the baseline',
+            lines: [
+              'Sample one model N times at temperature > 0 and take the majority answer.',
+              'Cheap and strong when there is one checkable answer…',
+              "…but the samples share the model's biases, so gains flatten as N grows.",
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'a1'], label: 'sample', count: 3 },
+              { badge: 'a1', text: 'majority' },
+              { say: 1 },
+              { badge: 'a1', text: '91% (N = 5)', tone: 'ok' },
+              { say: 2 },
+              { badge: 'a1', text: 'shared biases', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Debate',
+            lines: [
+              'N agents answer; for R rounds each reads the others and revises.',
+              'A majority vote or a judge decides.',
+              'Cost ≈ N × R calls, and context grows every round.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'a1'], label: 'ask' },
+              { send: ['q', 'a2'], label: 'ask', curve: true },
+              { send: ['q', 'a3'], label: 'ask' },
+              { send: ['a1', 'a2'], label: 'reasoning' },
+              { send: ['a2', 'a3'], label: 'reasoning' },
+              { send: ['a3', 'a1'], label: 'reasoning' },
+              { say: 1 },
+              { send: ['a2', 'judge'], label: 'answers' },
+              { badge: 'judge', text: '94%', tone: 'ok' },
+              { say: 2 },
+              { badge: 'a3', text: 'N × R calls', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: same blind spot',
+            lines: ['Copies of one model can agree on the same mistake: **correlated errors**.'],
+            task: {
+              type: 'choose',
+              question: 'Three copies of one model keep agreeing on a wrong answer. Best fix?',
+              options: [
+                { text: 'Heterogeneity: different models, prompts, sources or tools' },
+                { text: 'Add a fourth copy of the same model', why: 'Another copy shares the same blind spot.' },
+                {
+                  text: 'Let the most confident agent decide',
+                  why: 'That is conformity: agents drift to the most confident voice even when it is wrong.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Diversity beats headcount: a different model usually adds more than one more copy.',
+          },
+          {
+            kind: 'watch',
+            title: 'Consensus with a threshold',
+            lines: [
+              'Group equivalent answers ("4.2%" and "4.2 percent" are the same) and weight each group.',
+              'Accept the top group only if it clears a threshold (e.g. ≥ 60% of the weight).',
+              'Otherwise **escalate**: a stronger model, a tool check or a human.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a1', 'judge'], label: 'answer', curve: true },
+              { send: ['a2', 'judge'], label: 'answer' },
+              { send: ['a3', 'judge'], label: 'answer' },
+              { say: 1 },
+              { badge: 'judge', text: '≥ 0.6: accept', tone: 'ok' },
+              { say: 2 },
+              { send: ['judge', 'human'], label: 'not sure', tone: 'miss' },
+              { badge: 'human', text: '9% escalated' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: does agreement prove it?',
+            lines: ['PBFT-style consensus assumes faults are independent and that agreement equals correctness.'],
+            task: {
+              type: 'choose',
+              question: 'All agents agree on an answer. What does that tell you?',
+              options: [
+                { text: 'It is evidence, not proof: verify with tests, retrieval or a calculator when you can' },
+                {
+                  text: 'It is correct: consensus protocols guarantee it',
+                  why: 'Agents built on one model can be honestly and identically wrong.',
+                },
+                { text: 'Nothing: agreement is meaningless', why: 'Agreement is evidence; pair it with verification.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Agreement is evidence, not proof; cheap voting plus escalation beat expensive debate here.',
+          },
+        ],
+      },
       body: `**Intuition:** ask one expert and you get their blind spots. Ask three who must defend their answers to each other and errors get caught — unless all three went to the same school and share the same blind spot.
 
 **Three ways to combine answers (cheapest first):**
@@ -611,6 +1039,93 @@ console.log(consensus([{ text: '90 days', confidence: 0.9 }, { text: '90 Days.',
     },
     {
       heading: 'Shared state and simulations — blackboard architecture and generative agents',
+      steps: {
+        actors: [
+          { id: 'metrics', kind: 'agent', label: 'Metrics agent', sub: 'posts signals', x: 110, y: 70 },
+          { id: 'logs', kind: 'agent', label: 'Log agent', sub: 'posts signals', x: 110, y: 230 },
+          { id: 'board', kind: 'data', label: 'Blackboard', sub: 'signals · hypotheses', x: 450, y: 70 },
+          { id: 'checks', kind: 'data', label: 'checks', sub: 'verifier posts here', x: 450, y: 230 },
+          { id: 'reasoner', kind: 'agent', label: 'Reasoning agent', sub: 'proposes causes', x: 790, y: 70 },
+          { id: 'verifier', kind: 'judge', label: 'Verifier', sub: 'read-only on board', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Everyone writes to one board',
+            lines: [
+              'Specialists do not message each other: each reads the board and posts what it knows.',
+              'The metrics agent posts "p99 latency 4.1 s from 10:02".',
+              'The log agent posts "connection pool exhausted, 10:01:57".',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'board' },
+              { say: 1 },
+              { send: ['metrics', 'board'], label: 'p99 4.1 s' },
+              { say: 2 },
+              { send: ['logs', 'board'], label: 'pool exhausted' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A hypothesis with provenance',
+            lines: [
+              'The reasoning agent reads `signals` and posts H1, "DB pool exhaustion after deploy 4812", citing both entries.',
+              'Every write carries **provenance**: author, time, sources cited.',
+              'Agents read only the sections they subscribe to: ~6K tokens each instead of 40K+.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['board', 'reasoner'], label: 'signals' },
+              { send: ['reasoner', 'board'], label: 'H1 + sources' },
+              { say: 1 },
+              { badge: 'board', text: 'author, sources' },
+              { say: 2 },
+              { badge: 'reasoner', text: '~6K tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: catch the bad hypothesis',
+            lines: ['A second hypothesis cites a log line that does not exist.'],
+            task: {
+              type: 'pick',
+              question: 'Which agent catches it?',
+              answer: 'verifier',
+              hints: {
+                reasoner: 'It wrote the hypothesis; the check should be independent.',
+                metrics: 'It posts signals; it does not re-check hypotheses.',
+                board: 'The board stores entries; it does not check them.',
+              },
+            },
+            solved: 'A read-only verifier re-checks entries against their sources and reports to `checks`, never back onto the board.',
+            then: [
+              { send: ['board', 'verifier'], label: 'H1, H2', curve: true },
+              { badge: 'verifier', text: 'H1 pass', tone: 'ok' },
+              { send: ['verifier', 'checks'], label: 'H2 failed', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: stop the poison',
+            lines: ['One agent writes "42%" instead of "4.2%", and downstream agents treat it as fact.'],
+            task: {
+              type: 'choose',
+              question: 'Which defence keeps the fix auditable?',
+              options: [
+                { text: 'Append-only entries: the correction is a new entry that supersedes the old one' },
+                {
+                  text: 'Let any agent overwrite the entry in place',
+                  why: 'Overwrites erase history, and two agents can overwrite each other; use versioned, append-only writes.',
+                },
+                { text: 'Nothing: anything on the board is trusted', why: 'That is exactly how poisoning spreads.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Provenance, append-only entries, versioned writes and a read-only verifier stop poisoning.',
+          },
+        ],
+      },
       body: `**Intuition:** a hospital ward whiteboard. Specialists do not message each other one by one; each reads the board, adds what they know ("bloods back: low potassium"), and the next specialist reacts. Nobody owns the whole plan, but the board holds it.
 
 **Blackboard architecture.** An old AI pattern (Hearsay-II speech understanding in the 1970s; formalised by Hayes-Roth in 1985) that fits LLM agents well:
@@ -744,6 +1259,165 @@ export async function verifyEntry(
     },
     {
       heading: 'Why multi-agent systems fail — the MAST taxonomy and what to do about each',
+      steps: {
+        actors: [
+          { id: 'planner', kind: 'agent', label: 'Planner', sub: 'coding crew', x: 110, y: 70 },
+          { id: 'coder', kind: 'agent', label: 'Coder', sub: 'coding crew', x: 340, y: 70 },
+          { id: 'tester', kind: 'agent', label: 'Tester', sub: 'coding crew', x: 570, y: 70 },
+          { id: 'reviewer', kind: 'agent', label: 'Reviewer', sub: 'coding crew', x: 790, y: 70 },
+          { id: 'harness', kind: 'guard', label: 'Harness', sub: 'runs tests, says done', x: 340, y: 230 },
+          { id: 'labeller', kind: 'judge', label: 'MAST labels', sub: 'traces by category', x: 680, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: '14 modes, 3 categories',
+            lines: [
+              'MAST groups **14 failure modes** into **3 categories**.',
+              '**Specification**: the setup was wrong before any agent spoke.',
+              '**Inter-agent misalignment**: agents work against each other.',
+              '**Verification and termination**: nobody checks properly.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['planner', 'coder'], label: 'plan' },
+              { say: 1 },
+              { badge: 'reviewer', text: 'never stops', tone: 'err' },
+              { say: 2 },
+              { send: ['tester', 'coder'], label: 'failing case' },
+              { badge: 'coder', text: 'ignored', tone: 'err' },
+              { say: 3 },
+              { badge: 'tester', text: 'tests never run', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: label a failure',
+            lines: ['18 of 120 failed traces: the coder also "tested" and reported pass.'],
+            task: {
+              type: 'choose',
+              question: 'Which MAST category is "disobeyed role"?',
+              options: [
+                { text: 'Specification and system design' },
+                {
+                  text: 'Inter-agent misalignment',
+                  why: 'Misalignment is agents working against each other; here one agent broke its own role.',
+                },
+                {
+                  text: 'Not a coordination failure: just a weak model',
+                  why: 'Failures come from setup and coordination, not only model capability.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Disobeying the role specification is a specification failure; fix it with role contracts.',
+          },
+          {
+            kind: 'watch',
+            title: 'Structural fixes',
+            lines: [
+              'The harness, not an agent, runs the test suite and decides "done".',
+              'The reviewer gets a 2-round cap and a checklist.',
+              "The coder's tools no longer include the test runner.",
+              'The next 300 runs failed 38% less often.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['coder', 'harness'], label: 'code' },
+              { badge: 'harness', text: 'tests run', tone: 'ok' },
+              { say: 1 },
+              { badge: 'reviewer', text: '2-round cap' },
+              { say: 2 },
+              { badge: 'coder', text: 'no test runner' },
+              { say: 3 },
+              { badge: 'harness', text: '38% fewer fails', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: make it a routine',
+            lines: ['Prompt tweaks help only partly; count failures to know which structural fix matters.'],
+            task: {
+              type: 'order',
+              question: 'Put the release routine in order.',
+              items: ['Sample traces', 'Label failures with MAST', 'Count by category', 'Fix the biggest bucket'],
+              hint: 'Measure first, then fix where most failures land.',
+            },
+            solved: 'Sample, label, count, fix the biggest bucket, then repeat every release.',
+            then: [{ send: ['harness', 'labeller'], label: 'traces' }, { badge: 'labeller', text: 'by category' }],
+          },
+        ],
+      },
+      short: {
+        id: 'why-agent-teams-fail',
+        title: 'Why agent teams fail',
+        beats: [
+          {
+            type: 'grid',
+            kicker: 'MAST · Cemri et al. 2025',
+            head: '14 failure modes, *3 categories*',
+            cells: 14,
+            hot: 5,
+            caption: '5 of 14 modes are specification: wrong before any agent spoke',
+            sub: 'The rest: **inter-agent misalignment** and **verification and termination**.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Coding crew · 120 failed traces',
+            head: 'Where it *broke*',
+            rungs: [
+              { label: 'Tests never actually run', amount: 31 },
+              { label: 'Reviewer kept asking for style changes', amount: 26 },
+              { label: 'Premature termination', amount: 24 },
+              { label: 'Coder skipped the tester’s failing case', amount: 21 },
+              { label: 'Coder also tested and reported pass', amount: 18 },
+            ],
+            unit: 'traces',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Structural fixes',
+            head: 'Change the *structure*, not the prompt',
+            items: [
+              { label: 'The harness runs tests and decides done', keep: true },
+              { label: 'Reviewer: 2-round cap + checklist', keep: true },
+              { label: 'Coder loses the test runner', keep: true },
+              { label: 'Just tweak the role prompts' },
+            ],
+            keepLabel: 'FIX',
+            sub: 'In the paper, prompt tweaks helped **only partly**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'The next 300 runs',
+            value: 38,
+            suffix: '%',
+            unit: 'fewer failures',
+            sub: 'What remained was mostly **hard tasks**, not coordination.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Every release',
+            head: 'Count, then *fix*',
+            steps: ['Sample traces', 'Label failures with MAST', 'Count by category', 'Fix the biggest bucket'],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A reviewer agent declares the task complete without running the tests. Which category?',
+            answer: 2,
+            options: [
+              { text: 'Specification and system design', why: 'The setup was fine; the failure is that nobody checked.' },
+              { text: 'Inter-agent misalignment', why: 'No agent worked against another; the check simply never happened.' },
+              { text: 'Task verification and termination', why: 'Declaring success without checking is a verification failure: let a harness-run suite decide done.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Agent teams fail like *human* teams.',
+          sub: 'Unclear briefs, miscommunication, nobody checking: let **code** decide when a task is done.',
+        },
+      },
       body: `**Intuition:** most failed projects with several people fail on unclear briefs, miscommunication and nobody checking the work — not because one person was incompetent. Multi-agent LLM systems fail the same way.
 
 **MAST** (Multi-Agent System failure Taxonomy, Cemri et al. 2025, "Why Do Multi-Agent LLM Systems Fail?") was built by annotating execution traces from several open-source multi-agent frameworks. It groups **14 failure modes** into **3 categories**:

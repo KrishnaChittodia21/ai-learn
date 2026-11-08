@@ -164,6 +164,110 @@ console.log(indexSizeGB({ ...base, bytesPerDim: 1 }));     // 129   (int8 scalar
         explanation: 'Retrieval enforces whatever ACL metadata the index holds; if the sync is slow or broken, revoked access persists. The model, reranker and embeddings only see documents that passed the stale filter.',
       },
       source: 'Microsoft — Baseline OpenAI end-to-end chat reference architecture; Anthropic — Contextual Retrieval (2024)',
+      steps: {
+        actors: [
+          { id: 'conn', kind: 'document', label: 'Connectors', sub: 'content + ACLs', x: 110, y: 70 },
+          { id: 'ing', kind: 'chunker', label: 'Ingestion', sub: 'parse · chunk · embed', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Hybrid index', sub: 'vector + BM25 + ACL', x: 570, y: 70 },
+          { id: 'user', kind: 'user', label: 'Employee', sub: 'flood cover, TX?', x: 110, y: 230 },
+          { id: 'query', kind: 'retriever', label: 'Query service', sub: 'rewrite · filter', x: 340, y: 230 },
+          { id: 'rerank', kind: 'reranker', label: 'Reranker', sub: 'cross-encoder', x: 570, y: 230 },
+          { id: 'gen', kind: 'llm', label: 'Generation', sub: 'via gateway + cites', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Fill the library',
+            lines: [
+              '**Connectors** pull content from every system, with its ACLs.',
+              '**Ingestion** parses, chunks (300–800 tokens) and embeds.',
+              'The **index** is hybrid (vector + BM25) with source, version and ACL metadata.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'conn' },
+              { say: 1 },
+              { send: ['conn', 'ing'], label: 'docs + ACLs' },
+              { say: 2 },
+              { send: ['ing', 'index'], label: 'chunks', tone: 'ok' },
+              { lit: 'index' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Answer with the badge checked',
+            lines: [
+              'The rewrite adds filters: product HX, state TX, status current.',
+              '50 hybrid candidates (85 ms) → reranker keeps the top 6 (120 ms).',
+              'The answer carries 2 citations; first token in 1.1 s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'query'], label: 'question' },
+              { badge: 'query', text: '+ status: current', ms: 1200 },
+              { say: 1 },
+              { send: ['query', 'index'], label: 'ACL pre-filter', curve: true },
+              { send: ['index', 'rerank'], label: '50' },
+              { say: 2 },
+              { send: ['rerank', 'gen'], label: 'top 6' },
+              { badge: 'gen', text: '2 citations', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where ACLs live',
+            lines: ['The librarian checks your badge **before** handing anything over.'],
+            task: {
+              type: 'choose',
+              question: 'Where must the platform enforce document ACLs?',
+              options: [
+                { text: 'As a pre-filter inside the search' },
+                {
+                  text: 'After generation, by hiding answers the user may not see',
+                  why: 'Never after generation: restricted text has already reached the model.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Enforce ACLs as pre-filters inside the search, never after generation.',
+            then: [{ send: ['query', 'index'], label: 'ACL pre-filter', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: an outdated policy',
+            lines: ['An answer cites a policy that has since been superseded.'],
+            task: {
+              type: 'choose',
+              question: 'Which mitigation fits "outdated policy cited"?',
+              options: [
+                { text: 'Version metadata, a "latest only" filter and freshness boosts' },
+                { text: 'Blue/green index aliases', why: 'That mitigates index-rebuild downtime, not stale versions.' },
+                { text: 'Layout-aware parsers', why: 'That mitigates garbled tables, not stale versions.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Version metadata plus a "latest only" filter keeps superseded documents out.',
+            then: [{ badge: 'query', text: '+ status: current', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure it',
+            lines: [
+              'recall@6 rose from **0.71 to 0.88** after adding the "status: current" filter.',
+              'It removed superseded policies from the candidates.',
+              'Track recall@k and groundedness continuously; version every index.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'rerank', text: 'recall@6 0.88', tone: 'ok', ms: 1400 },
+              { say: 1 },
+              { send: ['index', 'rerank'], label: 'current only', tone: 'ok' },
+              { say: 2 },
+              { lit: 'index' },
+            ],
+          },
+        ],
+      },
     },
     {
       heading: 'AI Copilot Architecture — in-app context, a fast path and a slow path',
@@ -311,9 +415,203 @@ export function packContext(snippets: Snip[], budgetTokens: number): Snip[] {
         explanation: 'Stale requests waste capacity and arrive too late to be useful; debounce and cancellation cut load, and a small FIM model fits the budget. A frontier model or larger context makes latency worse, and streaming is not the bottleneck for short completions.',
       },
       source: 'GitHub blog (2023) — How GitHub Copilot is getting better at understanding your code',
+      steps: {
+        actors: [
+          { id: 'rep', kind: 'user', label: 'Sales rep', sub: 'typing an email', x: 110, y: 70 },
+          { id: 'ctx', kind: 'data', label: 'Context engine', sub: 'prefix · app state', x: 110, y: 230 },
+          { id: 'svc', kind: 'server', label: 'Copilot service', sub: 'fast or slow path', x: 340, y: 150 },
+          { id: 'small', kind: 'llm', label: 'Small model', sub: 'fast inline path', x: 570, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent + tools', sub: 'slow path, streamed', x: 570, y: 230 },
+          { id: 'tel', kind: 'metric', label: 'Telemetry', sub: 'accepted · retained', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The fast path',
+            lines: [
+              'The client sends the prefix (600 tokens) plus account context (400 tokens).',
+              'A small model returns a 25-token continuation.',
+              'p50 **210 ms**: the inline budget is p50 < 300 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['rep', 'ctx'], label: 'keystrokes' },
+              { send: ['ctx', 'svc'], label: 'prefix + context' },
+              { say: 1 },
+              { send: ['svc', 'small'], label: 'complete' },
+              { send: ['small', 'svc'], label: '25 tokens', tone: 'ok' },
+              { say: 2 },
+              { send: ['svc', 'rep'], label: 'suggestion', tone: 'ok' },
+              { badge: 'small', text: 'p50 210 ms', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which path?',
+            lines: ['Two paths with very different budgets.'],
+            task: {
+              type: 'pick',
+              question: 'Which path should an inline completion take?',
+              answer: 'small',
+              hints: { agent: 'The slow path takes seconds to minutes; inline suggestions need p50 < 300 ms.' },
+            },
+            solved: 'Inline suggestions take the fast path: a small model, p50 under 300 ms.',
+            then: [{ send: ['svc', 'small'] }, { send: ['small', 'svc'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The slow path',
+            lines: [
+              "\"Prepare me for tomorrow's call with Acme.\"",
+              'An agent calls the CRM API, the calendar and the RAG platform.',
+              "A 1-page brief streams back in 14 s; writes need the user's permission and confirmation.",
+            ],
+            script: [
+              { say: 0 },
+              { send: ['rep', 'svc'], label: 'request', curve: true },
+              { say: 1 },
+              { send: ['svc', 'agent'], label: 'task' },
+              { badge: 'agent', text: 'CRM · calendar', ms: 1200 },
+              { say: 2 },
+              { send: ['agent', 'svc'], label: 'brief', tone: 'ok' },
+              { send: ['svc', 'rep'], label: 'stream', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: keystroke traffic',
+            lines: ['Drafting one email triggered **18** requests.'],
+            task: {
+              type: 'choose',
+              question: 'What brought it down to 7 actual calls?',
+              options: [
+                { text: 'Debouncing keystrokes and cancelling stale requests' },
+                { text: 'Sending every keystroke to the slow path', why: 'The slow path takes seconds; it does not reduce the number of calls.' },
+                { text: 'Dropping the account context', why: 'The context engine is what makes suggestions good; it does not reduce calls.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Debounce and cancel stale requests to survive keystroke-level traffic.',
+            then: [{ send: ['ctx', 'svc'], label: 'debounced' }, { badge: 'svc', text: '18 → 7 calls', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure acceptance, not thumbs',
+            lines: [
+              'Inline acceptance 27%, retained after 30 s 21%.',
+              'Adding the "last edited note" to context ranking lifted acceptance to **31%** in a 2-week A/B test.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['svc', 'tel'], label: 'shown · accepted' },
+              { badge: 'tel', text: '27% accepted', ms: 1200 },
+              { say: 1 },
+              { badge: 'ctx', text: '+ last note', ms: 1000 },
+              { badge: 'tel', text: '31% accepted', tone: 'ok', ms: 1400 },
+            ],
+          },
+        ],
+      },
     },
     {
       heading: 'Multi-Tenant Agent Platform — many customers, shared infrastructure, zero cross-talk',
+      short: {
+        id: 'multi-tenant-noisy-neighbour',
+        title: 'Noisy neighbours on an agent platform',
+        beats: [
+          {
+            type: 'race',
+            kicker: '09:00 · one tenant starts a 40,000-document job',
+            head: 'p95 latency for *everyone else*',
+            lanes: [
+              {
+                label: 'Pre-fairness incident: 11 s',
+                seconds: 11,
+                tone: 'pink',
+              },
+              {
+                label: 'Weighted fair queuing: 3.1 s',
+                seconds: 3.1,
+                tone: 'good',
+              },
+            ],
+            seconds: 12,
+            sub: 'Per-tenant limit: **200K TPM and 20 concurrent runs**.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Pen-test',
+            head: '"Search *all* customers\' tickets"',
+            claims: [
+              {
+                text: 'Tenant id from the signed session',
+                ok: true,
+                note: 'results stay in the tenant',
+              },
+              {
+                text: 'Tenant id filled in by the model',
+                ok: false,
+                note: 'an injection can pass another tenant’s id',
+              },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'The isolation checklist',
+            head: 'Scope *everything* by tenant',
+            items: [
+              {
+                label: 'Identity, data, tools and credentials',
+                keep: true,
+              },
+              {
+                label: 'Sandboxes, memory and cache keys',
+                keep: true,
+              },
+              {
+                label: 'Quotas, traces and billing',
+                keep: true,
+              },
+              {
+                label: 'A shared semantic cache',
+              },
+            ],
+            keepLabel: 'SCOPED',
+          },
+          {
+            type: 'counter',
+            kicker: 'Runaway loop guard · max 25 tool calls · $2 cap',
+            prefix: '$',
+            value: 1.98,
+            decimals: 2,
+            unit: 'where a looping agent stopped',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'An agent tool takes a tenant_id argument the model fills from the conversation. The risk?',
+            answer: 1,
+            options: [
+              {
+                text: 'Higher token usage',
+                why: 'Token cost is minor next to the real risk.',
+              },
+              {
+                text: 'A prompt injection makes the model pass another tenant’s id',
+                why: 'Model-controlled tenant ids turn every prompt injection into a cross-tenant breach.',
+              },
+              {
+                text: 'None, if the system prompt says to use the right tenant',
+                why: 'System-prompt instructions are not a security boundary.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Tenant id comes from the *session*.',
+          sub: 'Never from model output; fair queuing and loop caps protect **every** tenant.',
+        },
+      },
       body: `A multi-tenant agent platform is an **apartment building**: tenants share the foundations, lifts and plumbing (compute, models, gateway) but each apartment has its own lock, mailbox and meter (data, credentials, quotas, logs).
 
 **What must be tenant-scoped (the isolation checklist)**
@@ -468,6 +766,102 @@ export function makeSearchTicketsTool(s: Session) {
         explanation: 'Model-controlled tenant ids turn every prompt injection into a cross-tenant breach. The tenant must come from the authenticated session server-side. Token cost and speed are minor, and system-prompt instructions are not a security boundary.',
       },
       source: 'AWS SaaS Lens — tenant isolation (silo, bridge, pool); OWASP Top 10 for LLM Applications (2025)',
+      steps: {
+        actors: [
+          { id: 'ta', kind: 'user', label: 'Tenant A', sub: 'pooled, bulk job', x: 110, y: 70 },
+          { id: 'tb', kind: 'user', label: 'Tenant B', sub: 'pooled', x: 110, y: 230 },
+          { id: 'gw', kind: 'guard', label: 'Gateway', sub: 'per-tenant quotas', x: 340, y: 150 },
+          { id: 'agent', kind: 'agent', label: 'Agent run', sub: 'max 25 tool calls', x: 570, y: 150 },
+          { id: 'ret', kind: 'retriever', label: 'Retrieval tool', sub: 'tenant from session', x: 800, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Shared store', sub: 'RLS on tenant_id', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An apartment building',
+            lines: [
+              'Tenants share compute, models and the gateway.',
+              'Each has its own lock, mailbox and meter: data, credentials, quotas and logs.',
+              'The tenant id travels in every token.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ta', 'gw'] },
+              { send: ['tb', 'gw'] },
+              { say: 1 },
+              { send: ['gw', 'agent'], label: 'tenant A' },
+              { send: ['agent', 'ret'], label: 'search' },
+              { send: ['ret', 'store'], label: 'tenant_id = A' },
+              { say: 2 },
+              { badge: 'gw', text: 'tenant id', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pen-test',
+            lines: ["An agent prompt says \"search all customers' tickets\"."],
+            task: {
+              type: 'choose',
+              question: 'Where does the retrieval tool take the tenant id from?',
+              options: [
+                { text: 'The signed, authenticated session' },
+                { text: 'The arguments the model put in the tool call', why: 'Never trust model output for the tenant id; a prompt can steer it.' },
+                { text: 'The prompt text', why: 'The prompt is exactly what the attacker controls.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Derive the tenant id from the authenticated session, never from model output; results stay in the tenant.',
+            then: [{ send: ['agent', 'ret'], label: 'all customers?', tone: 'err' }, { send: ['ret', 'store'], label: 'tenant_id = A', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A noisy neighbour',
+            lines: [
+              'Tenant A launches a 40,000-document bulk agent job.',
+              'Per-tenant limits: 200K TPM and 20 concurrent runs; weighted fair queuing.',
+              'Other tenants keep p95 at 3.1 s, versus 11 s in the pre-fairness incident.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ta', 'gw'], label: 'bulk job', count: 3 },
+              { say: 1 },
+              { badge: 'gw', text: '20 runs max', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { send: ['tb', 'gw'], tone: 'ok' },
+              { badge: 'tb', text: 'p95 3.1 s', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Runaway loop guard',
+            lines: ['Each run is capped: max 25 tool calls, cost cap $2.', 'A looping agent was stopped at $1.98.'],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'ret'], count: 3 },
+              { badge: 'agent', text: '25 calls · $2', ms: 1000 },
+              { say: 1 },
+              { badge: 'agent', text: 'stopped $1.98', tone: 'err', ms: 1400 },
+              { down: 'agent' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the tier',
+            lines: ['Isolation tiers: pool, bridge, silo.'],
+            task: {
+              type: 'choose',
+              question: 'Which isolation tier fits a regulated enterprise customer?',
+              options: [
+                { text: 'Silo: a dedicated stack or VPC' },
+                { text: 'Pool: shared everything plus tenant_id filters', why: 'Pool is for SMB tenants, at low cost.' },
+                { text: 'Bridge: shared compute, separate data stores and keys', why: 'Bridge is the mid-market tier.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pool for SMB, bridge for mid-market, silo for regulated enterprise.',
+          },
+        ],
+      },
     },
     {
       heading: 'Control Plane vs Data Plane for AI — decide slowly, serve fast',
@@ -623,6 +1017,101 @@ export function shouldRollback(base: Stats, canary: Stats): boolean {
         explanation: 'The data plane depends synchronously on the control plane, so its availability is capped by the config DB. Caching versioned snapshots in memory restores static stability. The other options describe unrelated concerns.',
       },
       source: 'Kubernetes docs — cluster components; Istio/Envoy control-plane vs data-plane architecture; AWS — static stability (Builders’ Library)',
+      steps: {
+        actors: [
+          { id: 'gate', kind: 'judge', label: 'CI eval gate', sub: 'groundedness', x: 110, y: 70 },
+          { id: 'cp', kind: 'server', label: 'Control plane', sub: 'registry · prompts', x: 340, y: 70 },
+          { id: 'tel', kind: 'metric', label: 'Telemetry', sub: 'per-version metrics', x: 800, y: 70 },
+          { id: 'snap', kind: 'cache', label: 'Config snapshot', sub: 'in memory', x: 340, y: 230 },
+          { id: 'dp', kind: 'server', label: 'Data plane', sub: 'gateway pods', x: 570, y: 230 },
+          { id: 'users', kind: 'user', label: 'Users', sub: '400 RPS', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Decide slowly',
+            lines: [
+              'Change: prompt "support-answer" v14 → v15.',
+              'CI eval gate: groundedness 0.91 → 0.93, relevance flat: **pass**.',
+              'The control plane publishes snapshot #8812.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'cp' },
+              { say: 1 },
+              { send: ['cp', 'gate'], label: 'v15' },
+              { badge: 'gate', text: '0.91 → 0.93', tone: 'ok', ms: 1200 },
+              { send: ['gate', 'cp'], label: 'pass', tone: 'ok' },
+              { say: 2 },
+              { send: ['cp', 'snap'], label: '#8812' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Serve fast',
+            lines: ['The data plane serves every request from the in-memory snapshot.', 'It **never** calls the control plane on the hot path.'],
+            script: [
+              { say: 0 },
+              { send: ['users', 'dp'], label: 'request', count: 3 },
+              { send: ['snap', 'dp'], label: 'config' },
+              { send: ['dp', 'users'], tone: 'ok' },
+              { say: 1 },
+              { badge: 'dp', text: 'no hot-path call', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: roll out v15',
+            lines: ['A one-line prompt edit can change outputs for millions of users.'],
+            task: {
+              type: 'order',
+              question: 'Put the rollout of prompt v15 in order.',
+              items: ['CI eval gate passes', 'Push the snapshot to 5% of gateway pods', 'Compare per-version metrics', 'Ramp to 50%, then 100%'],
+              hint: 'Evals before any traffic; a small canary before the ramp.',
+            },
+            solved: 'Eval gate → 5% canary → compare per-version metrics → ramp.',
+            then: [{ send: ['gate', 'cp'], tone: 'ok' }, { send: ['cp', 'snap'] }, { send: ['dp', 'tel'], label: 'metrics', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the control plane is down',
+            lines: ['The control-plane database is down for **25 minutes** during a migration.'],
+            setup: [{ down: 'cp' }],
+            task: {
+              type: 'choose',
+              question: 'What happens to user requests?',
+              options: [
+                { text: 'They keep being served from the last-known-good snapshot; only config changes are blocked' },
+                { text: '100% errors until it is back', why: 'That was the old design, which fetched the prompt from the config DB per request.' },
+                { text: 'Requests queue until the control plane returns', why: 'Static stability: the data plane keeps serving from memory.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Static stability: snapshot #8812 keeps serving, 0 failed user requests.',
+            then: [
+              { send: ['users', 'dp'] },
+              { send: ['snap', 'dp'] },
+              { send: ['dp', 'users'], tone: 'ok' },
+              { badge: 'dp', text: '0 failed', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Telemetry flows back',
+            lines: [
+              'The data plane reports per-version metrics, traces and eval samples.',
+              'After 30 min: thumbs-down 4.1% (v15) vs 4.3% (v14), p95 unchanged → ramp.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['dp', 'tel'], label: 'metrics', curve: true },
+              { say: 1 },
+              { badge: 'tel', text: '4.1% vs 4.3%', tone: 'ok', ms: 1200 },
+              { send: ['tel', 'cp'], label: 'ramp', curve: true },
+            ],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

@@ -7,13 +7,22 @@ import type * as UiPrefsModule from '../src/lib/uiPrefs.ts';
 
 /** where each page's targets live */
 const SOURCES: Record<GuideId, string[]> = {
-  today: ['pages/Home.tsx', 'components/NeuralCoverage.tsx', 'components/achievements/AchievementsSummary.tsx'],
+  today: ['pages/Home.tsx', 'components/NeuralCoverage.tsx'],
+  track: ['pages/Track.tsx', 'components/achievements/AchievementsSummary.tsx'],
   topic: ['pages/Topic.tsx', 'components/StudyPath.tsx', 'components/SectionPractice.tsx'],
   exam: ['pages/Exam.tsx'],
   saved: ['pages/Saved.tsx'],
   shorts: ['pages/Shorts.tsx'],
   plan: ['pages/Plan.tsx'],
   settings: ['pages/Settings.tsx'],
+  syllabus: ['pages/Contents.tsx'],
+  weak: ['pages/WeakAreas.tsx'],
+  practice: ['pages/WeakAreas.tsx', 'pages/Exam.tsx'],
+  challenges: ['pages/Companies.tsx'],
+  achievements: ['pages/Achievements.tsx'],
+  paths: ['pages/Paths.tsx'],
+  drills: ['pages/Drills.tsx'],
+  glossary: ['pages/Glossary.tsx'],
 };
 const src = (f: string) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
 
@@ -42,8 +51,11 @@ test("every stop's target exists in its page's markup", () => {
 
 test('each guided page has a route and maps back to its guide', () => {
   const app = src('App.tsx');
-  for (const path of ["path: 'topic/:id'", "path: 'topic/:id/exam'", "path: 'saved'", "path: 'shorts'", "path: 'plan'", "path: 'settings'", 'index: true']) assert.ok(app.includes(path), path);
+  for (const path of ["path: 'topic/:id'", "path: 'topic/:id/exam'", "path: 'saved'", "path: 'shorts'", "path: 'plan'", "path: 'track'", "path: 'settings'", 'index: true']) assert.ok(app.includes(path), path);
   assert.equal(guideIdFor('/'), 'today');
+  assert.equal(guideIdFor('/track'), 'track');
+  for (const [path, id] of [['/contents', 'syllabus'], ['/weak-areas', 'weak'], ['/practice', 'practice'], ['/challenges', 'challenges'], ['/challenges/q1', 'challenges'], ['/achievements', 'achievements'], ['/paths', 'paths'], ['/paths/mcp/certificate', 'paths'], ['/drills', 'drills'], ['/drills/bm25', 'drills'], ['/glossary', 'glossary']] as const)
+    assert.equal(guideIdFor(path), id, path);
   assert.equal(guideIdFor('/topic/rag-fundamentals'), 'topic');
   assert.equal(guideIdFor('/topic/rag-fundamentals/exam'), 'exam');
   assert.equal(guideIdFor('/saved'), 'saved');
@@ -51,7 +63,7 @@ test('each guided page has a route and maps back to its guide', () => {
   assert.equal(guideIdFor('/short/rag-in-90-seconds'), null, 'the player has no guide of its own');
   assert.equal(guideIdFor('/plan'), 'plan');
   assert.equal(guideIdFor('/settings'), 'settings');
-  assert.equal(guideIdFor('/contents'), null, 'no guide: "?" opens the welcome tour');
+  assert.equal(guideIdFor('/no-such-page'), null, 'no guide: "?" opens the welcome tour');
 });
 
 // uiPrefs reads localStorage once at import: stub it and import fresh copies

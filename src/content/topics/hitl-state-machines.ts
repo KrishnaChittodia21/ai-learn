@@ -32,6 +32,175 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Human-in-the-Loop — approval gates with interrupt() and Command({ resume })',
+      steps: {
+        actors: [
+          { id: 'agent', kind: 'agent', label: 'Refund node', sub: 'issue_refund(249)', x: 110, y: 70 },
+          { id: 'policy', kind: 'guard', label: 'Policy', sub: '≤ $50 auto-approve', x: 340, y: 70 },
+          { id: 'ckpt', kind: 'data', label: 'Checkpointer', sub: 'thread_id', x: 340, y: 230 },
+          { id: 'lead', kind: 'user', label: 'Support lead', sub: 'approve, edit, reject', x: 570, y: 70 },
+          { id: 'tool', kind: 'tool', label: 'Refund API', sub: 'executes', x: 800, y: 70 },
+          { id: 'audit', kind: 'metric', label: 'Audit log', sub: 'proposed vs approved', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Please sign here',
+            lines: [
+              'The agent proposes `issue_refund` for $249.',
+              '$249 > $50, so the node calls `interrupt(payload)`.',
+              'A checkpoint is saved and the run stops; the caller sees `__interrupt__`.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'agent' },
+              { send: ['agent', 'policy'], label: '$249' },
+              { say: 1 },
+              { badge: 'policy', text: 'over $50', tone: 'err' },
+              { say: 2 },
+              { send: ['agent', 'ckpt'], label: 'checkpoint', curve: true },
+              { send: ['policy', 'lead'], label: '__interrupt__' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The lead edits, the run resumes',
+            lines: [
+              'The order total was $219: shipping is non-refundable. She chooses **edit**.',
+              '`Command({ resume })` with the same `thread_id` restarts the node **from its first line**.',
+              'This time `interrupt()` returns the edit; the tool runs with $219.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'lead', text: 'edit → $219' },
+              { say: 1 },
+              { send: ['lead', 'ckpt'], label: 'resume', curve: true },
+              { send: ['ckpt', 'agent'], label: 'restart node', curve: true },
+              { say: 2 },
+              { send: ['agent', 'tool'], label: '$219', tone: 'ok', curve: true },
+              { send: ['tool', 'audit'], label: '249 → 219' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what runs twice?',
+            lines: ['On resume the paused node re-executes from the top.'],
+            task: {
+              type: 'choose',
+              question: 'What does that mean for code before `interrupt()` in the node?',
+              options: [
+                { text: 'It must be safe to run twice: no side effects' },
+                { text: 'Nothing: resume continues after interrupt()', why: 'Resume restarts the node from its first line.' },
+                { text: 'It is skipped on resume', why: 'It runs again; only interrupt() now returns the decision.' },
+              ],
+              answer: 0,
+            },
+            solved: 'No side effects before interrupt(); a checkpointer and the same thread_id are mandatory.',
+            then: [{ send: ['ckpt', 'agent'], label: 're-run', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what to gate',
+            lines: ['Approving every read-only search trains reviewers to click "approve" blindly.'],
+            task: {
+              type: 'choose',
+              question: 'Which call deserves an approval gate?',
+              options: [
+                { text: 'An irreversible refund above the threshold' },
+                { text: 'A read-only search', why: 'Gating harmless reads causes approval fatigue.' },
+                { text: 'Every tool call', why: 'Gate by risk tier, not everywhere.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Gate irreversible, financial, external-facing or privileged actions.',
+            then: [{ send: ['agent', 'policy'], label: 'refund' }, { badge: 'policy', text: 'gate', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure the gate',
+            lines: [
+              'The audit log stores proposed, approved, reviewer and latency.',
+              'Over a month, 7% of gated refunds were edited.',
+              'That is evidence the gate is earning its cost.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tool', 'audit'], label: 'record' },
+              { say: 1 },
+              { badge: 'audit', text: '7% edited', tone: 'ok' },
+              { say: 2 },
+              { lit: 'lead' },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'refund-that-waited-for-a-human',
+        title: 'The refund that waited for a human',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'Order #A-1932 · broken blender',
+            head: 'Pause *before* the money moves',
+            steps: ['Agent proposes issue_refund: $249', '$249 > $50, so interrupt()', 'Checkpoint saved, run stops', 'Support lead edits it to $219', 'Resume: the refund runs with $219'],
+          },
+          {
+            type: 'claims',
+            kicker: 'What the lead saw',
+            head: 'The proposal, *checked*',
+            claims: [
+              { text: 'Order A-1932 gets a refund', ok: true, note: '$249 is over $50, so a human decides' },
+              { text: 'Refund amount: $249', ok: false, note: 'order total was $219; shipping is non-refundable' },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'Command({ resume })',
+            head: 'The node runs *again*',
+            steps: ['Resume with the same thread_id', 'The node restarts from its first line', 'interrupt() now returns the edit', 'The tool runs with $219'],
+            sub: 'Anything before interrupt() runs **twice**: no side effects there.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Gate by risk tier',
+            head: 'Not *every* call',
+            items: [
+              { label: 'Irreversible actions', keep: true },
+              { label: 'Financial actions', keep: true },
+              { label: 'External-facing or privileged', keep: true },
+              { label: 'Read-only search' },
+            ],
+            keepLabel: 'GATE',
+            sub: 'Gating everything trains reviewers to click **approve** blindly.',
+          },
+          {
+            type: 'counter',
+            kicker: 'One month of gated refunds',
+            value: 7,
+            suffix: '%',
+            unit: 'were edited by a reviewer',
+            stats: [
+              { value: 249, label: 'proposed ($)' },
+              { value: 219, label: 'approved ($)' },
+            ],
+            sub: 'Evidence the gate is **earning its cost**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A node sends a Slack message, then calls interrupt(). After approval the message appears twice. Why?',
+            answer: 1,
+            options: [
+              { text: 'Command({ resume }) sends a duplicate notification', why: 'Resume only supplies the decision; the node itself re-runs.' },
+              { text: 'On resume the node re-runs from its first line', why: 'Any side effect above interrupt() repeats: move it to its own node or make it idempotent.' },
+              { text: 'The checkpointer replays all past messages', why: 'The checkpoint restores state; it does not resend anything.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Freeze, ask, then *resume*.',
+          sub: 'interrupt() pauses on a checkpoint; gate by **risk**, and measure the edits.',
+        },
+      },
       body: `**Intuition:** human-in-the-loop (HITL) is a "please sign here" step: the agent prepares an action, freezes, and a person approves, edits or rejects it before anything irreversible happens.
 
 **Four HITL patterns**
@@ -229,6 +398,112 @@ export function requiresApproval(a: Action, ctx: Ctx): { gate: boolean; reason: 
     },
     {
       heading: 'State Machines — agents with explicit states, transitions, guards and step limits',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'proposes events', x: 110, y: 150 },
+          { id: 'table', kind: 'guard', label: 'Transition table', sub: '(state, event) → next', x: 340, y: 150 },
+          { id: 'assess', kind: 'data', label: 'ASSESSING', sub: 'estimate $4,800', x: 570, y: 70 },
+          { id: 'await', kind: 'data', label: 'Awaiting', sub: 'AWAITING_APPROVAL', x: 570, y: 230 },
+          { id: 'paying', kind: 'tool', label: 'PAYING', sub: 'payout', x: 800, y: 230 },
+          { id: 'log', kind: 'metric', label: 'Event log', sub: 'audit and replay', x: 800, y: 70 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A board game for your agent',
+            lines: [
+              'The agent is on one square (state) at a time.',
+              'The LLM chooses **events**; the transition table decides if the move is legal.',
+              '**Guards** add conditions: an estimate over 2000 must wait for approval.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'assess' },
+              { say: 1 },
+              { send: ['llm', 'table'], label: 'ESTIMATE_READY' },
+              { say: 2 },
+              { badge: 'table', text: 'amount > 2000' },
+              { send: ['table', 'await'], label: 'next state' },
+              { lit: 'await' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a premature payout',
+            lines: ['In `AWAITING_APPROVAL` the LLM emits `EXECUTE_PAYOUT`.'],
+            task: {
+              type: 'choose',
+              question: 'What happens?',
+              options: [
+                { text: 'Rejected: there is no such transition, and it is logged' },
+                { text: 'The payout runs', why: 'Paying is unreachable from AWAITING_APPROVAL without APPROVED.' },
+                { text: 'The state machine crashes', why: 'Invalid events are rejected and logged, and the agent is told why.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Prompts can drift, but the process cannot: anything not in the table is rejected.',
+            then: [
+              { send: ['llm', 'table'], label: 'EXECUTE_PAYOUT', tone: 'err' },
+              { badge: 'table', text: 'invalid', tone: 'err' },
+              { send: ['table', 'log'], label: 'invalid_transition', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Four eyes, then pay',
+            lines: [
+              '`APPROVED` by adjuster-9, not the requester: the guard passes.',
+              '`PAYING` + `PAID` → `DONE` after 9 steps (limit 25).',
+              'Terminal states plus a max-steps guard make every run end.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'table'], label: 'APPROVED' },
+              { badge: 'table', text: 'approver ≠ req.', tone: 'ok' },
+              { say: 1 },
+              { send: ['await', 'paying'], label: 'PAYING', tone: 'ok' },
+              { say: 2 },
+              { send: ['paying', 'log'], label: 'DONE · 9 steps', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who decides legality?',
+            lines: ['One part proposes; another enforces.'],
+            task: {
+              type: 'pick',
+              question: 'Which part decides whether a move is legal?',
+              answer: 'table',
+              hints: {
+                llm: 'The LLM only proposes events.',
+                log: 'The event log records what happened; it does not decide.',
+                await: 'States are squares on the board, not the rules.',
+              },
+            },
+            solved: 'LLM proposes events; code validates and applies transitions.',
+            then: [{ send: ['llm', 'table'], label: 'event' }, { badge: 'table', text: 'legal?', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What the log proved',
+            lines: [
+              '31 invalid-transition attempts out of 2,400 claims (1.3%).',
+              'Each would have been a premature payout in the free-loop prototype.',
+              'In LangGraph: nodes ≈ states, conditional edges ≈ guarded transitions, recursionLimit ≈ max steps.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'log', text: '31 / 2,400', tone: 'miss' },
+              { say: 1 },
+              { down: 'paying' },
+              { wait: 700 },
+              { down: 'paying', on: false },
+              { say: 2 },
+              { lit: 'table' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a state machine is a board game for your agent: it can only be on one square at a time, and the rules say which squares it may move to next. The LLM chooses *events*; your code decides whether the move is legal.
 
 **Ingredients**
@@ -378,6 +653,112 @@ export function replay(events: Ev[], requester = 'user-1') {
     },
     {
       heading: 'Putting it together — a durable, approval-gated workflow that survives days',
+      steps: {
+        actors: [
+          { id: 'graph', kind: 'agent', label: 'Claim graph', sub: 'claim:C-882', x: 110, y: 70 },
+          { id: 'pg', kind: 'data', label: 'PostgresSaver', sub: 'durable checkpoints', x: 340, y: 70 },
+          { id: 'queue', kind: 'data', label: 'Pending row', sub: 'slaAt Mon 12:00', x: 570, y: 70 },
+          { id: 'reviewer', kind: 'user', label: 'Adjuster', sub: 'approves in the UI', x: 800, y: 70 },
+          { id: 'api', kind: 'server', label: 'Resume API', sub: 'POST /approvals', x: 570, y: 230 },
+          { id: 'sla', kind: 'server', label: 'SLA scheduler', sub: 'resumes overdue', x: 110, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Friday 17:40',
+            lines: [
+              'Claim C-882 hits `AWAITING_APPROVAL`; the graph interrupts.',
+              'The checkpoint lives in Postgres; a pending row goes to the reviewer queue.',
+              'The worker is redeployed twice over the weekend; nothing is lost.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'graph' },
+              { say: 1 },
+              { send: ['graph', 'pg'], label: 'checkpoint' },
+              { send: ['pg', 'queue'], label: 'pending row' },
+              { say: 2 },
+              { down: 'graph' },
+              { wait: 800 },
+              { down: 'graph', on: false },
+              { badge: 'pg', text: 'still there', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Monday 09:12',
+            lines: [
+              'The adjuster approves; the API validates role and decision.',
+              'It resumes with `Command({ resume })` on `thread_id = claim:C-882`.',
+              'Paused 63.5 hours, compute used while paused: zero.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['reviewer', 'api'], label: 'approve', curve: true },
+              { say: 1 },
+              { send: ['api', 'graph'], label: 'resume', curve: true },
+              { send: ['pg', 'graph'], label: 'state' },
+              { say: 2 },
+              { badge: 'graph', text: 'DONE', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the double click',
+            lines: ['A duplicate click arrives 300 ms after the first.'],
+            task: {
+              type: 'choose',
+              question: 'How do you stop the thread being resumed twice?',
+              options: [
+                { text: "A conditional update: `UPDATE ... WHERE status = 'pending'` first" },
+                { text: 'Trust the UI to disable the button', why: 'Two reviewers can click at once; the guard must be in the database.' },
+                { text: 'Resume both and dedupe later', why: 'The payout would already have run twice.' },
+              ],
+              answer: 0,
+            },
+            solved: 'First click updates 1 row and resumes; the duplicate updates 0 rows and gets 409.',
+            then: [
+              { send: ['api', 'queue'], label: '1 row' },
+              { send: ['api', 'queue'], label: '0 rows → 409', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: nobody approves',
+            lines: ['The pending row has an SLA deadline.'],
+            task: {
+              type: 'pick',
+              question: 'Which part resumes an overdue thread?',
+              answer: 'sla',
+              hints: {
+                reviewer: 'The reviewer is the one who has not answered.',
+                pg: 'Postgres stores the checkpoint; it does not wake threads.',
+                api: 'The resume API waits for a reviewer request.',
+              },
+            },
+            solved: 'The SLA scheduler resumes with `{ type: \'timeout\' }`, which the graph maps to escalate or reject.',
+            then: [{ send: ['sla', 'graph'], label: 'timeout', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The production recipe',
+            lines: [
+              'Deterministic thread ids (`claim:` + claimId), so any service can resume.',
+              'Pay with an idempotency key: `claim:C-882:pay`.',
+              'Audit proposed vs approved values, reviewer id and latency.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'graph', text: 'claim:C-882' },
+              { send: ['sla', 'graph'], label: 'same id' },
+              { say: 1 },
+              { send: ['graph', 'pg'], label: 'PAYING' },
+              { say: 2 },
+              { lit: 'queue' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** combine the two ideas: the state machine defines *where* human approval is required, and LangGraph's interrupt + a durable checkpointer makes the wait cheap and crash-safe, even if approval comes on Monday.
 
 **Production recipe**

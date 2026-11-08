@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { RouteSkeleton } from '../components/RouteSkeleton';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PHASES, TOPICS, TOPIC_BY_ID } from '../content';
 import type { CodeChallenge, EnvelopeQuestion, InterviewQuestion, Topic } from '../types';
 import {
@@ -19,7 +19,9 @@ import { topicSteps } from '../lib/nextStep';
 import { StudyPath, type TabId } from '../components/StudyPath';
 import { CoachTip } from '../components/CoachTip';
 import { NextUp } from '../components/NextUp';
-import { BookOpen, Check, ChevronDown, CirclePlay, Crosshair, Library, Lightbulb, Lock, Play } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, ChevronDown, CirclePlay, Crosshair, Library, Lightbulb, Lock, Play } from 'lucide-react';
+import { getUiPrefs, saveUiPrefs, useUiPrefs } from '../lib/uiPrefs';
+import { cameFrom, pageLabel } from '../lib/navHistory';
 import { PREREQS } from '../content/prereqs';
 import { drillsForTopic } from '../content/drills';
 import { projectsForTopic } from '../content/projects';
@@ -33,7 +35,6 @@ import { shortLength } from '../lib/shorts';
 import { SHORTS, useShorts } from '../lib/useShorts';
 import { currentlyWrong, weakSections } from '../lib/weak';
 import { CoreView, GoDeeper, ModeSwitch } from '../components/ReadViewLearn';
-import { useLessonMode } from '../lib/uiPrefs';
 import { StepLesson } from '../components/steps/StepLesson';
 import { showToast } from '../lib/toast';
 import { useTopic } from '../lib/useTopic';
@@ -85,7 +86,8 @@ export default function TopicPage() {
       </div>
     );
   }
-  return topic ? <TopicView topic={topic} /> : <RouteSkeleton />;
+  // keyed by topic, so moving to another topic remounts the view (fresh Read/Steps choices and Back origin)
+  return topic ? <TopicView key={topic.id} topic={topic} /> : <RouteSkeleton />;
 }
 
 function TopicView({ topic }: { topic: Topic }) {
@@ -94,6 +96,13 @@ function TopicView({ topic }: { topic: Topic }) {
   const tab = (TAB_IDS.find((t) => t === params.get('tab')) ?? 'learn') as TabId;
   const phase = PHASES.find((ph) => ph.id === topic.phase);
   const idx = TOPICS.findIndex((t) => t.id === topic.id);
+  const nav = useNavigate();
+  const { key, pathname } = useLocation();
+  // Back: to wherever the learner came from (named on the button); on a fresh deep link, to this topic's phase
+  // in the Syllabus, opened. The origin is read once, when the topic opens.
+  const [from] = useState(() => (key !== 'default' ? cameFrom(pathname) : null));
+  const fromLabel = (from && pageLabel(from, (id) => TOPICS.find((t) => t.id === id)?.title)) || 'Syllabus';
+  const back = () => (from ? nav(-1) : nav(phase ? `/contents#phase-${phase.id}` : '/contents'));
   const prev = TOPICS[idx - 1];
   const next = TOPICS[idx + 1];
   const capstones = projectsForTopic(topic.id);
@@ -146,21 +155,14 @@ function TopicView({ topic }: { topic: Topic }) {
 
   return (
     <div className="page tp">
-      <nav className="tp-crumbs" aria-label="Breadcrumb">
-        <Link to="/contents">Syllabus</Link>
-        {phase && (
-          <>
-            <span aria-hidden>/</span>
-            <Link to={`/contents#phase-${phase.id}`}>
-              Phase {String(phase.number).padStart(2, '0')} · {phase.title}
-            </Link>
-            <span aria-hidden>/</span>
-            <span aria-current="page">
-              Topic {phase.number}.{topic.order}
-            </span>
-          </>
-        )}
-      </nav>
+      <div className="tp-topbar">
+        <button type="button" className="btn btn-sm tp-back" onClick={back}>
+          <ArrowLeft size={15} aria-hidden /> Back to {fromLabel}
+        </button>
+        <p className="tp-here" aria-current="page">
+          You&apos;re on <strong>{titleMain}</strong>
+        </p>
+      </div>
 
       <header className="tp-hero glass">
         <div className="tp-hero-glow" aria-hidden />
@@ -333,12 +335,21 @@ function LearnTab({ topic }: { topic: Topic }) {
   const active = useActiveSection(topic.sections.length);
   const [tocOpen, setTocOpen] = useState(false);
   const n = topic.sections.length;
-  const { open: openShorts, newToday, nextLocked, watched } = useShorts();
+  const { watched } = useShorts();
   const shorts = SHORTS.filter((e) => e.topic.id === topic.id);
-  const [mode, setMode] = useLessonMode();
+  // Read or Steps is chosen per section (keyed by topic so another topic starts fresh); every section opens on Read
+  // remembered in this browser per section, so a section you switched to Steps opens on Steps next time
+  const stepsOn = useUiPrefs().stepsSections ?? {};
+  const modeOf = (i: number) => (stepsOn[`${topic.id}:${i}`] ? 'steps' : 'read');
+  const setModeAt = (i: number, m: 'read' | 'steps') => {
+    const next = { ...(getUiPrefs().stepsSections ?? {}) };
+    if (m === 'steps') next[`${topic.id}:${i}`] = true;
+    else delete next[`${topic.id}:${i}`];
+    saveUiPrefs({ stepsSections: next });
+  };
   // the animation lives in the Read view: switch to it, then scroll there
   const toViz = (i: number) => {
-    setMode('read');
+    setModeAt(i, 'read');
     requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`viz-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
   };
 
@@ -404,12 +415,7 @@ function LearnTab({ topic }: { topic: Topic }) {
               {shorts.map((e) => {
                 const id = e.short.id;
                 return (
-                  <ShortThumb
-                    key={id}
-                    entry={e}
-                    state={!openShorts.has(id) ? 'locked' : watched(id) ? 'watched' : id === newToday ? 'new' : undefined}
-                    lockNote={e === nextLocked ? 'Unlocks next study day' : 'Locked'}
-                  />
+                  <ShortThumb key={id} entry={e} state={watched(id) ? 'watched' : undefined} />
                 );
               })}
             </div>
@@ -423,17 +429,17 @@ function LearnTab({ topic }: { topic: Topic }) {
             <article key={s.heading} id={`s-${i}`} className={`tp-sec ${i === active ? 'is-active' : ''}`} aria-labelledby={`s-${i}-h`}>
               <header className="tp-sec-head">
                 <div className="tp-sec-titles">
-                  <div className="tp-sec-no">§ {sectionNo(i)}</div>
+                  <div className="tp-sec-no">Section {sectionNo(i)}</div>
                   <h2 id={`s-${i}-h`}>{title}</h2>
                   {sub && <p className="tp-sec-sub">{sub}</p>}
                 </div>
                 {s.short && (
                   <Link className="watch-short" to={`/short/${s.short.id}`}>
                     <span className="pp" aria-hidden>
-                      {openShorts.has(s.short.id) ? <Play size={13} /> : <Lock size={13} />}
+                      <Play size={13} />
                     </span>
                     <span>
-                      Watch the Short <small>{openShorts.has(s.short.id) ? shortLength(s.short) : 'locked'}</small>
+                      Watch the Short <small>{shortLength(s.short)}</small>
                     </span>
                   </Link>
                 )}
@@ -445,13 +451,13 @@ function LearnTab({ topic }: { topic: Topic }) {
                   </label>
                 </div>
               </header>
-              {s.steps && <ModeSwitch id={`s-${i}`} s={s} mode={mode} onChange={setMode} />}
-              {s.steps && mode === 'steps' ? (
+              {s.steps && <ModeSwitch id={`s-${i}`} s={s} mode={modeOf(i)} onChange={(m) => setModeAt(i, m)} />}
+              {s.steps && modeOf(i) === 'steps' ? (
                 <div id={`s-${i}-panel`} role="tabpanel" aria-labelledby={`s-${i}-tab-steps`}>
                   <StepLesson
                     lesson={s.steps}
-                    name={`${topic.title.split(/[:(]/)[0].trim()} §${i + 1}`}
-                    onRead={() => setMode('read')}
+                    name={`${topic.title.split(/[:(]/)[0].trim()}, section ${i + 1}`}
+                    onRead={() => setModeAt(i, 'read')}
                     onFinish={(missed) => {
                       recordSteps(topic.id, i, missed);
                       showToast(
@@ -502,14 +508,14 @@ function LearnTab({ topic }: { topic: Topic }) {
               <nav className="tp-sec-pager" aria-label={`After section ${i + 1}`}>
                 {prevS ? (
                   <button type="button" className="tp-sec-prev" onClick={() => scrollToSection(i - 1)}>
-                    ← §{i} {headingParts(prevS.heading).title}
+                    ← {i}. {headingParts(prevS.heading).title}
                   </button>
                 ) : (
                   <span />
                 )}
                 {nextS && (
                   <button type="button" className={`btn ${i === active ? 'btn-primary' : ''} tp-sec-next`} onClick={() => scrollToSection(i + 1)}>
-                    §{i + 2} {headingParts(nextS.heading).title} →
+                    {i + 2}. {headingParts(nextS.heading).title} →
                   </button>
                 )}
               </nav>
@@ -908,7 +914,7 @@ export function StudyLock({ topic, what }: { topic: Topic; what: string }) {
         {unread.map(({ s, i }) => (
           <li key={i}>
             <button type="button" className="link-btn" onClick={() => goRead(i)}>
-              §{i + 1} {s.heading}
+              {i + 1}. {s.heading}
             </button>
           </li>
         ))}
@@ -959,7 +965,7 @@ function SectionViz({ topic, sectionIndex }: { topic: Topic; sectionIndex: numbe
               className="viz-backlink"
               onClick={() => document.getElementById(`s-${first}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             >
-              <CirclePlay size={15} aria-hidden className="inline-icon" /> Interactive: {meta.title} (in §{first + 1} above), revisit it
+              <CirclePlay size={15} aria-hidden className="inline-icon" /> Interactive: {meta.title} (in section {first + 1} above), revisit it
               with this section in mind
             </button>
           );

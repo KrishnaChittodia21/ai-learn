@@ -68,7 +68,7 @@ function ChallengeList({ qs, locked, done }: { qs: CompanyQuestion[]; locked: bo
 
 function Head({ children, lead }: { children?: ReactNode; lead: ReactNode }) {
   return (
-    <header className="ch-head">
+    <header className="ch-head" data-guide="ch-head">
       <p className="ch-kicker">Final track · {COMPANY_QUESTIONS.length} challenges</p>
       <h1>
         <span className="gtext">Architecture challenges</span>
@@ -101,7 +101,7 @@ function Locked({ detail = false }: { detail?: boolean }) {
         }
       />
 
-      <section className="ch-lock glass" aria-labelledby="ch-lock-title">
+      <section className="ch-lock glass" aria-labelledby="ch-lock-title" data-guide="ch-lock">
         <div className="ch-lock-orb" aria-hidden>
           <Lock size={26} />
         </div>
@@ -128,7 +128,7 @@ function Locked({ detail = false }: { detail?: boolean }) {
         </div>
       </section>
 
-      <section className="ch-remaining-wrap" aria-labelledby="ch-remaining-title">
+      <section className="ch-remaining-wrap" aria-labelledby="ch-remaining-title" data-guide="ch-remaining">
         <h2 id="ch-remaining-title" className="ch-label">
           Remaining exams · {remaining.length}
         </h2>
@@ -221,7 +221,7 @@ export function CompaniesPage() {
         </dl>
       )}
 
-      <section className="ch-index" aria-label="Challenges">
+      <section className="ch-index" aria-label="Challenges" data-guide="ch-index">
         <ChallengeList qs={qs} locked={false} done={p.company} />
       </section>
     </div>
@@ -340,14 +340,14 @@ export function CompanyQuestionPage() {
       </header>
 
       <div className="ws-top">
-        <section className="ws-brief card" aria-labelledby="ws-brief-label">
+        <section className="ws-brief card" aria-labelledby="ws-brief-label" data-guide="ws-brief">
           <h2 id="ws-brief-label" className="ch-label">
             The brief
           </h2>
           <Markdown>{q.prompt}</Markdown>
         </section>
 
-        <section className="ws-timer glass" aria-label="Mock interview timer">
+        <section className="ws-timer glass" aria-label="Mock interview timer" data-guide="ws-timer">
           <TimerRing left={left} full={full} running={running} />
           <div className="ws-timer-side">
             <div className="ws-timer-set">
@@ -411,7 +411,7 @@ export function CompanyQuestionPage() {
         <p className="ws-hint">Saved as you type. Reveal the model answer one stage at a time and compare it with yours before moving on.</p>
       </section>
 
-      <nav className="ws-stages" aria-label="Model answer stages">
+      <nav className="ws-stages" aria-label="Model answer stages" data-guide="ws-stages">
         <ol>
           {STAGES.map((s, i) => (
             <li key={s}>

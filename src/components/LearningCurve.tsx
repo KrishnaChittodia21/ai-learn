@@ -340,34 +340,3 @@ function GapBracket({ m, g, cx, cy }: { m: Pace; g: Geo; cx: number; cy: number 
     </g>
   );
 }
-
-/** the Today card's sparkline of the same curve (static) */
-export function Sparkline({ m }: { m: Pace }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [W, setW] = useState(0);
-  useEffect(() => {
-    const el = box.current!;
-    const ro = new ResizeObserver(() => setW(Math.round(el.clientWidth)));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  const H = 70;
-  const g = W ? geom(m, W, H, { l: 2, r: 2, t: 8, b: 6 }) : null;
-  const delta = m.state === 'done' ? 'goal reached' : m.state === 'behind' ? `${hm(m.gap)} behind` : m.state === 'ahead' ? `${hm(-m.gap)} ahead` : 'on pace';
-  return (
-    <div className="td-plan-mini" ref={box}>
-      {g && (
-        <svg viewBox={`0 0 ${W} ${H}`} height={H} role="img" aria-label={`Sparkline: ${pct(m.you, m.goalMinutes)}% covered, ${delta}${m.finish ? `, ETA ${fmtDay(m.finish)}` : ''}`}>
-          <line className="lc-goal" x1={0} x2={W} y1={yOf(g, m.goalMinutes, m.goalMinutes)} y2={yOf(g, m.goalMinutes, m.goalMinutes)} />
-          <Gap you={g.you} pac={g.pac} />
-          <path className="mk-pac" d={P([...g.pac, ...g.pacF.slice(1)])} />
-          <path className="mk-proj" d={P(g.proj)} />
-          {g.you.length > 1 && <path className="mk-you" d={P(g.you)} />}
-          <line className="lc-today" x1={xOf(g, m.past.at(-1)!.day)} x2={xOf(g, m.past.at(-1)!.day)} y1={0} y2={H} />
-          <circle className="lc-dot" cx={xOf(g, m.past.at(-1)!.day)} cy={yOf(g, m.you, m.goalMinutes)} r={3.5} />
-          {m.finish && <circle cx={g.proj.at(-1)![0]} cy={g.proj.at(-1)![1]} r={3} className="mk-eta" />}
-        </svg>
-      )}
-    </div>
-  );
-}

@@ -33,6 +33,101 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Repo memory: CLAUDE.md, AGENTS.md and a state file',
+      steps: {
+        actors: [
+          { id: 'agent', kind: 'agent', label: 'Coding agent', sub: 'blank each session', x: 110, y: 70 },
+          { id: 'router', kind: 'document', label: 'CLAUDE.md', sub: 'router, every session', x: 340, y: 70 },
+          { id: 'rules', kind: 'document', label: 'agent-rules.md', sub: 'read at startup', x: 570, y: 70 },
+          { id: 'topic', kind: 'document', label: 'docs/testing.md', sub: 'only when touched', x: 800, y: 70 },
+          { id: 'state', kind: 'data', label: 'agent_state.json', sub: 'where work stands', x: 340, y: 230 },
+          { id: 'chat', kind: 'data', label: 'Chat transcript', sub: 'leave it out', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Every session starts blank',
+            lines: [
+              'The agent guesses the test command, the package manager, the generated folders, differently each time.',
+              '**Repo memory** answers those questions before the first turn.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'agent', text: 'npm? pnpm?', tone: 'miss', ms: 1100 },
+              { say: 1 },
+              { send: ['router', 'agent'], label: 'commands + rules', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A router, not an encyclopedia',
+            lines: [
+              'Keep the root file short (a screen or two) and **link out**.',
+              'Rules load at startup; topic docs only when the task touches them.',
+              'Any rule should be reachable in **two hops**.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'router' },
+              { say: 1 },
+              { send: ['router', 'rules'], label: 'startup' },
+              { send: ['router', 'topic'], label: 'task touches tests', curve: true },
+              { say: 2 },
+              { badge: 'topic', text: 'two hops', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what goes in the router?',
+            lines: ['Every incident tends to add a rule and none removes one.'],
+            task: {
+              type: 'choose',
+              question: 'What belongs in the root CLAUDE.md / AGENTS.md?',
+              options: [
+                { text: 'What the repo is, the exact build/test/lint/type-check commands, hard rules and links to deeper docs' },
+                { text: 'Every rule ever added after an incident', why: 'That is how the file grows to 2,000 lines and the agent acts on a fraction of it.' },
+                { text: 'The full architecture write-up', why: 'Deep topics go in linked docs, read only when the task touches them.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The router stays short: what the repo is, exact commands, hard rules, links by path.',
+          },
+          {
+            kind: 'watch',
+            title: 'Rules vs state',
+            lines: [
+              'Instructions are standing rules; **state** is where this piece of work stands.',
+              'Keep task id, touched files, assumptions, open blockers, next action.',
+              'Write it atomically (temp file, then rename) and reject writes that fail the schema.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'state'], label: 'progress', curve: true },
+              { say: 1 },
+              { badge: 'state', text: 'next action', ms: 1000 },
+              { say: 2 },
+              { badge: 'state', text: 'schema ok', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what goes in state?',
+            lines: ['Test: would this be useful in three months when someone re-runs the task?'],
+            task: {
+              type: 'choose',
+              question: 'Which belongs in `agent_state.json`?',
+              options: [
+                { text: 'Open blockers' },
+                { text: 'The chat transcript', why: 'Transcripts stay out; the repo, not the chat, is the system of record.' },
+                { text: 'Reasoning traces', why: 'Reasoning traces stay out of state.' },
+                { text: '"The user seemed annoyed"', why: 'Not useful in three months; leave it out.' },
+              ],
+              answer: 0,
+            },
+            solved: 'State holds task id, touched files, assumptions, blockers and next action; not chat or reasoning.',
+            then: [{ down: 'chat' }, { send: ['agent', 'state'], label: 'blockers', tone: 'ok', curve: true }],
+          },
+        ],
+      },
       body: `A coding agent starts every session knowing nothing about your repo. It will guess the test command, the package manager and which folders are generated, and it will guess differently each time. **Repo memory** is the set of files that answer those questions before the first turn.
 
 **The instruction file.** Claude Code loads \`CLAUDE.md\` from the project at the start of a session (and a personal one from \`~/.claude/CLAUDE.md\`); \`/init\` drafts a first version from the codebase. Many other agents read \`AGENTS.md\`, an open convention. Tools differ in which name they read, so teams often keep one file as the source and point the other at it.
@@ -151,6 +246,93 @@ TypeScript + Fastify service. Node 22, pnpm.
     // ---------------------------------------------------------------- 2
     {
       heading: 'Instructions as checkable constraints',
+      steps: {
+        actors: [
+          { id: 'rules', kind: 'document', label: 'agent-rules.md', sub: 'id, kind, check', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'reads the rules', x: 340, y: 70 },
+          { id: 'perms', kind: 'guard', label: 'Permission rules', sub: 'allow · ask · deny', x: 570, y: 70 },
+          { id: 'hook', kind: 'tool', label: 'Hook', sub: 'your code, pre-call', x: 800, y: 70 },
+          { id: 'reviewer', kind: 'user', label: 'Reviewer', sub: 'reads the contract', x: 110, y: 230 },
+          { id: 'ci', kind: 'judge', label: 'CI', sub: 'same checks every PR', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Advice vs a rule',
+            lines: [
+              '"Be careful with the database" is advice: nobody can tell if it was followed.',
+              'A useful rule says what must or must not happen **and how to check it**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['rules', 'agent'], label: 'be careful', tone: 'miss' },
+              { say: 1 },
+              { send: ['rules', 'agent'], label: 'never edit X', tone: 'ok' },
+              { badge: 'rules', text: 'check: diff', tone: 'ok', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: name the kind',
+            lines: ['Five kinds cover most needs: startup, forbidden, done, uncertainty, approval.'],
+            task: {
+              type: 'choose',
+              question: 'Rule: "`pnpm test` and `pnpm tsc` exit 0". Which kind is it?',
+              options: [
+                { text: 'Done: what proves the task is finished' },
+                { text: 'Startup', why: 'Startup rules say what must be true before work starts, such as a valid state file.' },
+                { text: 'Forbidden', why: 'Forbidden rules say what must never happen, such as editing a path.' },
+                { text: 'Approval', why: 'Approval rules say what needs a human, such as a new dependency.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Done rules are checked by recorded exit codes; a rule that fits no kind is two rules glued together.',
+          },
+          {
+            kind: 'watch',
+            title: 'Prompts guide, harnesses enforce',
+            lines: [
+              '**Permission rules**: allow, ask, deny; deny wins over allow.',
+              '**Hooks** run your code before a tool call and can block it.',
+              '**CI** runs the same checks on every PR, whoever wrote it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'perms'], label: 'Read(./.env)' },
+              { badge: 'perms', text: 'deny', tone: 'err', ms: 900 },
+              { say: 1 },
+              { send: ['agent', 'hook'], label: 'edit generated/', curve: true },
+              { badge: 'hook', text: 'blocked', tone: 'err', ms: 900 },
+              { say: 2 },
+              { send: ['agent', 'ci'], label: 'PR' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who enforces?',
+            lines: ['The rule file is the human-readable contract; the runtime keeps it.'],
+            task: {
+              type: 'pick',
+              question: 'Which part runs your own code before a tool call and can block it?',
+              answer: 'hook',
+              hints: {
+                rules: 'The rule file states the expectation; it does not block anything.',
+                perms: 'Permission rules are allow/ask/deny patterns in settings, not your own code.',
+                ci: 'CI runs checks on the PR, after the turn, not before each tool call.',
+                reviewer: 'The reviewer reads the contract; it does not intercept tool calls.',
+              },
+            },
+            solved: 'Hooks block during a turn; CI is the backstop; the rule file tells reviewers what is enforced.',
+            then: [{ send: ['agent', 'hook'], label: 'tool call', curve: true }, { badge: 'hook', text: 'blocked', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Give a path, not a wall',
+            lines: ['"Run `pnpm codegen` to change generated code" gives a way forward; "don\'t touch generated code" only gives a wall.'],
+            script: [{ say: 0 }, { send: ['rules', 'agent'], label: 'run pnpm codegen', tone: 'ok' }],
+          },
+        ],
+      },
       body: `"Be careful with the database" is advice. The agent cannot tell whether it has followed it, and neither can you. A useful rule says what must or must not happen **and how anyone can check it**.
 
 **Five kinds of rule cover most needs:**
@@ -255,6 +437,105 @@ export function checkForbidden(changed: string[], rules: Rule[]) {
     // ---------------------------------------------------------------- 3
     {
       heading: 'Scope contracts: what this task may touch',
+      steps: {
+        actors: [
+          { id: 'human', kind: 'user', label: 'You', sub: 'approve the scope', x: 110, y: 70 },
+          { id: 'contract', kind: 'document', label: 'Scope contract', sub: 'before work starts', x: 340, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'fix login bug', x: 570, y: 70 },
+          { id: 'backlog', kind: 'data', label: 'Backlog', sub: 'feature_list.json', x: 800, y: 70 },
+          { id: 'allowed', kind: 'data', label: 'allowed_files', sub: 'src/auth/**', x: 340, y: 230 },
+          { id: 'forbidden', kind: 'guard', label: 'forbidden_files', sub: 'db/migrations/**', x: 570, y: 230 },
+          { id: 'diff', kind: 'judge', label: 'Diff check', sub: 'at the end', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Fix a bug, touch everything',
+            lines: [
+              'Asked to fix a login bug, the agent also tidies the router and upgrades a dependency.',
+              'Each change may be reasonable; together the PR is unreviewable.',
+              'A **scope contract** says, before work starts, what this task may change.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'agent' },
+              { badge: 'agent', text: '+ router, + deps', tone: 'miss', ms: 1100 },
+              { say: 1 },
+              { say: 2 },
+              { send: ['human', 'contract'], label: 'approve' },
+              { send: ['contract', 'agent'], label: 'scope', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What the contract holds',
+            lines: [
+              'A goal, `allowed_files` and `forbidden_files` as **globs**, acceptance commands, a rollback.',
+              '**Forbidden files are half the contract**: otherwise "allowed" means anything.',
+              'Globs survive a rename that a raw path does not.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['contract', 'allowed'], label: 'may write' },
+              { say: 1 },
+              { send: ['contract', 'forbidden'], label: 'must not touch', curve: true },
+              { say: 2 },
+              { badge: 'allowed', text: 'globs', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the diff check',
+            lines: ['At the end, the diff is compared with the contract.'],
+            task: {
+              type: 'choose',
+              question: 'A changed file matches both an allowed glob and a forbidden glob. What happens?',
+              options: [
+                { text: 'It blocks: forbidden wins when both match' },
+                { text: 'It passes: it is in the allowed list', why: 'Forbidden wins when both match.' },
+                { text: 'It is only a warning', why: 'Warnings are for files outside the allowed globs; a forbidden match blocks.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Forbidden match → block; outside allowed → at least a warning; forbidden wins over allowed.',
+            then: [{ send: ['agent', 'diff'], label: 'diff', curve: true }, { badge: 'diff', text: 'blocked', tone: 'err' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: going out of scope',
+            lines: ['The fix seems to need a file outside the allowed globs.'],
+            task: {
+              type: 'choose',
+              question: 'What should the agent do?',
+              options: [
+                { text: 'Stop and ask' },
+                { text: 'Widen the contract itself', why: 'The agent must not widen its own contract.' },
+                { text: 'Edit the file and mention it in the summary', why: 'Going outside scope needs a human first, not an after-the-fact note.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Outside scope means stop and ask, not widen the contract.',
+            then: [{ send: ['agent', 'human'], label: 'may I?', tone: 'req', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Two levels of scope',
+            lines: [
+              'A contract bounds one task; a **backlog** file bounds the session.',
+              'The agent picks exactly one `todo` feature and marks it `in_progress`.',
+              '"At most one in progress" is a startup check, not a promise in a prompt.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'backlog' },
+              { say: 1 },
+              { send: ['backlog', 'agent'], label: 'one feature' },
+              { say: 2 },
+              { badge: 'backlog', text: '1 in progress', tone: 'ok', ms: 1100 },
+            ],
+          },
+        ],
+      },
       body: `Ask an agent to fix a login bug and it may also tidy the router, rename a helper and upgrade a dependency. Each change might be reasonable; together they make the PR impossible to review. A **scope contract** says, before work starts, what this task may change.
 
 | Field | Purpose |
@@ -385,6 +666,161 @@ export function checkScope(changed: string[], c: Contract) {
     // ---------------------------------------------------------------- 4
     {
       heading: 'Verification gates: done means checked',
+      steps: {
+        actors: [
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: '"All tests pass!"', x: 110, y: 70 },
+          { id: 'wrapper', kind: 'tool', label: 'Run wrapper', sub: 'records every run', x: 340, y: 70 },
+          { id: 'log', kind: 'data', label: 'Feedback log', sub: 'cmd, exit, tail', x: 570, y: 70 },
+          { id: 'ci', kind: 'judge', label: 'CI', sub: 'final backstop', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human', sub: 'can override a block', x: 340, y: 230 },
+          { id: 'gate', kind: 'guard', label: 'Gate', sub: 'deterministic', x: 570, y: 230 },
+          { id: 'report', kind: 'document', label: 'Gate report', sub: 'one known path', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Evidence, not the summary',
+            lines: [
+              '"All tests pass!" is the most common false claim a coding agent makes.',
+              'A **verification gate** decides "done" from evidence, not from the agent\'s summary.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'agent', text: 'trust me', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['log', 'gate'], label: 'evidence' },
+              { lit: 'gate' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Capture real feedback',
+            lines: [
+              'A wrapper records each run: command, exit code, duration, tail of output.',
+              'Truncate deterministically: keep the end, where the final error is.',
+              'Crashed before an exit code? Record `exit_code: null`. **No exit code, no progress.**',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'wrapper'], label: 'pnpm test' },
+              { send: ['wrapper', 'log'], label: 'exit 0', tone: 'ok' },
+              { say: 1 },
+              { badge: 'log', text: 'keep the tail', ms: 1000 },
+              { say: 2 },
+              { send: ['wrapper', 'log'], label: 'exit null', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a null exit code',
+            lines: ['The full suite timed out before an exit code was captured.'],
+            task: {
+              type: 'choose',
+              question: 'An acceptance command has `exit_code: null`. What does the gate do?',
+              options: [
+                { text: 'Block' },
+                { text: 'Pass, if the agent says it worked', why: 'The gate decides from evidence, never from the agent\'s summary.' },
+                { text: 'Warn and continue', why: 'A null exit code for acceptance is a block: no exit code, no progress.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Every acceptance command must run and exit 0; a null exit code blocks.',
+            then: [{ send: ['log', 'gate'], label: 'exit null', tone: 'err' }, { badge: 'gate', text: 'block', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Deterministic, not a judge',
+            lines: [
+              'Same inputs, same verdict: no LLM decides whether tests passed.',
+              'One report per task, at one known path that **CI** also reads.',
+            ],
+            script: [{ say: 0 }, { send: ['log', 'gate'], label: 'facts' }, { say: 1 }, { send: ['gate', 'report'], label: 'verdict' }, { send: ['report', 'ci'], label: 'same report', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: overriding a block',
+            lines: ['The agent is confident its change works, but the gate blocked.'],
+            task: {
+              type: 'pick',
+              question: 'Who can override the block?',
+              answer: 'human',
+              hints: {
+                agent: 'The agent cannot override a block, however confident it is.',
+                gate: 'The gate gives the same verdict on the same inputs; it does not override itself.',
+                ci: 'CI is the final backstop; it reads the same report.',
+              },
+            },
+            solved: 'Only a human can override, with a recorded reason and name.',
+            then: [{ send: ['human', 'gate'], label: 'override + reason' }],
+          },
+        ],
+      },
+      short: {
+        id: 'all-tests-pass-claim',
+        title: '"All tests pass!" Check the log',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'T-142 · the empty-password bug',
+            head: '"All tests pass." *Did they?*',
+            claims: [
+              { text: 'pnpm test tests/auth', ok: true, note: 'exit 0, 12 passed' },
+              { text: 'pnpm tsc --noEmit', ok: false, note: 'exit 2: src/auth/login.ts line 41' },
+              { text: 'pnpm test (full suite)', ok: false, note: 'exit null: killed after 300 s' },
+            ],
+            sub: 'The claim was true for the **focused tests only**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Capture real feedback',
+            head: 'A wrapper *records* every run',
+            steps: ['The exact command', 'Its exit code', 'How long it took', 'The tail of stdout and stderr'],
+            sub: 'Keep the **end** of the output, where the final error is.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'The gate checks facts',
+            head: 'Evidence, *not the summary*',
+            items: [
+              { label: 'Every acceptance command ran', keep: true },
+              { label: 'Every one exited 0', keep: true },
+              { label: 'No null exit codes', keep: true },
+              { label: 'No forbidden files in the diff', keep: true },
+              { label: 'The agent’s own summary' },
+            ],
+            keepLabel: 'EVIDENCE',
+            sub: 'No exit code, **no progress**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'After a type guard on line 41',
+            value: 94,
+            unit: 'seconds: the full suite exits 0',
+            sub: 'Now the gate **passes**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Deterministic, not a judge',
+            head: 'One report, *one path*',
+            steps: ['The agent tries to finish', 'A hook runs the gate', 'The report lands at one known path', 'CI reads the same report'],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The gate blocked, but the agent is confident its change works. Who can override?',
+            answer: 0,
+            options: [
+              { text: 'A human, with a recorded reason and name', why: 'Only a human can override, so "I’m confident" never becomes a merged regression.' },
+              { text: 'The agent, if it explains why', why: 'The agent cannot override a block, however confident it is.' },
+              { text: 'An LLM judge reviewing the diff', why: 'No LLM decides whether tests passed; the gate is deterministic.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Done means *checked*, not claimed.',
+          sub: 'Record every exit code; only a **human** can override a block.',
+        },
+      },
       body: `"All tests pass!" is the most common false claim a coding agent makes. Sometimes it never ran them, sometimes it ran a subset, sometimes it read a failure as a success. A **verification gate** decides "done" from evidence, not from the agent's summary.
 
 **Capture real feedback first.** Run every command through a small wrapper that records a line per run: the exact command, exit code, duration, and the tail of stdout and stderr. Truncate deterministically (keep the end, where the final error and summary are) so a 50 MB log cannot flood the context. If the process crashed or timed out before an exit code was captured, record \`exit_code: null\`. **No exit code, no progress.**
@@ -496,6 +932,91 @@ export function gate(acceptance: string[], log: Run[], scope: { blocked: string[
     // ---------------------------------------------------------------- 5
     {
       heading: 'The reviewer agent: a second role with a rubric',
+      steps: {
+        actors: [
+          { id: 'builder', kind: 'agent', label: 'Builder', sub: 'writes the code', x: 110, y: 70 },
+          { id: 'diff', kind: 'document', label: 'Diff', sub: 'the change', x: 340, y: 70 },
+          { id: 'reviewer', kind: 'judge', label: 'Reviewer', sub: 'read-only tools', x: 570, y: 70 },
+          { id: 'review', kind: 'document', label: 'Review report', sub: 'rubric, 0–2 each', x: 800, y: 70 },
+          { id: 'contract', kind: 'document', label: 'Task + scope', sub: 'the contract', x: 340, y: 230 },
+          { id: 'gate', kind: 'guard', label: 'Gate report', sub: 'facts', x: 570, y: 230 },
+          { id: 'human', kind: 'user', label: 'Human', sub: 'signs off risky work', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Facts vs judgment',
+            lines: [
+              'A gate says the tests passed, not whether they prove the right thing.',
+              'A **reviewer** is a separate role: its own prompt, its own inputs, **no write access**.',
+              'It reads the task, scope, diff, state, feedback log and gate report.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'gate', text: 'green', tone: 'ok', ms: 900 },
+              { say: 1 },
+              { lit: 'reviewer' },
+              { say: 2 },
+              { send: ['diff', 'reviewer'], label: 'diff' },
+              { send: ['contract', 'reviewer'], label: 'contract' },
+              { send: ['gate', 'reviewer'], label: 'facts' },
+              { send: ['reviewer', 'review'], label: 'report', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the reviewer finds a bug',
+            lines: ['A builder asked "are you sure?" mostly defends its own work.'],
+            task: {
+              type: 'choose',
+              question: 'The reviewer spots a problem in the diff. What does it do?',
+              options: [
+                { text: 'Writes it in the review report; the next builder turn fixes it' },
+                { text: 'Patches the diff itself', why: 'The reviewer never patches; mixing the roles removes the independent check.' },
+                { text: 'Asks the builder "are you sure?"', why: 'A builder asked that mostly defends its own work.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Reviewer writes, builder fixes: keeping the roles apart keeps the check independent.',
+            then: [{ send: ['reviewer', 'review'], label: 'finding' }, { send: ['review', 'builder'], label: 'fix next turn', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'A rubric keeps reviews comparable',
+            lines: [
+              'Five dimensions, 0–2 each: problem fit, scope discipline, assumptions, verification quality, handoff readiness.',
+              'Total out of 10: below 7 is a soft fail; below 5, or any dimension at 0, is a hard fail.',
+            ],
+            script: [{ say: 0 }, { lit: 'review' }, { say: 1 }, { badge: 'review', text: '8 / 10', tone: 'ok', ms: 1000 }, { badge: 'review', text: '4 / 10', tone: 'err', ms: 1000 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: read the score',
+            lines: ['Example thresholds: below 7 soft fail, below 5 or any 0 hard fail.'],
+            task: {
+              type: 'choose',
+              question: 'The total is 8/10, but scope discipline scored 0. What is the verdict?',
+              options: [
+                { text: 'Hard fail: escalate to a human' },
+                { text: 'Pass: 8 is above 7', why: 'Any dimension at 0 is a hard fail, whatever the total.' },
+                { text: 'Soft fail: fix and re-review', why: 'A soft fail is a total below 7; a 0 in any dimension is a hard fail.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Any dimension at 0 is a hard fail, so a high total cannot hide a broken dimension.',
+            then: [{ send: ['review', 'human'], label: 'escalate', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Both are needed',
+            lines: [
+              'A green gate with a reviewer score of 4 usually means the tests test the wrong thing.',
+              'The report ends with the two or three things a human should look at first.',
+            ],
+            script: [{ say: 0 }, { badge: 'gate', text: 'green', tone: 'ok', ms: 800 }, { badge: 'review', text: '4 / 10', tone: 'err', ms: 900 }, { say: 1 }, { send: ['review', 'human'], label: 'look here first' }],
+          },
+        ],
+      },
       body: `A gate tells you the tests passed. It cannot tell you whether the tests prove the right thing, whether the agent solved a nearby problem instead of the asked one, or whether the next person can pick up the work. That is a judgment call, and it needs a **reviewer**.
 
 **A separate role, not necessarily a separate model.** The same model can review, as long as the role is different: its own system prompt, its own inputs, and **no write access**. In Claude Code this fits a subagent defined with read-only tools (Read, Grep, Glob). The change in posture is what produces a different signal; a builder asked "are you sure?" mostly defends its own work.
@@ -599,6 +1120,82 @@ export function reviewVerdict(scores: Scores) {
     // ---------------------------------------------------------------- 6
     {
       heading: 'Multi-session handoff',
+      steps: {
+        actors: [
+          { id: 's1', kind: 'agent', label: 'Session 1', sub: 'context full', x: 110, y: 70 },
+          { id: 'files', kind: 'data', label: 'Repo files', sub: 'diff, log, state', x: 340, y: 70 },
+          { id: 'script', kind: 'tool', label: 'Handoff script', sub: 'builds the packet', x: 570, y: 70 },
+          { id: 'json', kind: 'document', label: 'handoff.json', sub: 'for the next agent', x: 800, y: 70 },
+          { id: 'md', kind: 'document', label: 'handoff.md', sub: 'for people', x: 570, y: 230 },
+          { id: 's2', kind: 'agent', label: 'Session 2', sub: 'reads handoff first', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Tasks outlast a session',
+            lines: [
+              'The context fills up, the laptop closes, someone else takes over.',
+              'Without a handoff, the next session re-tries failed approaches and undoes work it does not understand.',
+            ],
+            script: [{ say: 0 }, { down: 's1' }, { say: 1 }, { badge: 's2', text: 'starts blind', tone: 'err', ms: 1200 }, { down: 's1', on: false }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a real next action',
+            lines: ['Seven fields; **next action** matters most.'],
+            task: {
+              type: 'choose',
+              question: 'Which is a real next action?',
+              options: [
+                { text: 'Add a test for whitespace-only passwords in tests/auth/login.test.ts, then run pnpm test tests/auth' },
+                { text: 'Continue the auth work', why: 'Not concrete: the next session still has to work out where to start.' },
+                { text: 'A one-paragraph summary of what was done', why: 'That is the summary field; a handoff without a next action is a status report.' },
+              ],
+              answer: 0,
+            },
+            solved: 'A next action is the first concrete step: which file, what change, which command.',
+          },
+          {
+            kind: 'watch',
+            title: 'Failed attempts save the most time',
+            lines: ['"Tried bumping bcrypt to v6: breaks the Node 20 CI image" saves the next session an hour of rediscovery.'],
+            script: [{ say: 0 }, { send: ['s1', 'files'], label: 'failed attempt' }, { badge: 'files', text: 'bcrypt v6: no', tone: 'err', ms: 1200 }],
+          },
+          {
+            kind: 'watch',
+            title: 'Generate it, two forms',
+            lines: [
+              'A script builds the handoff from files that already exist: diff, feedback log, state, reports.',
+              'Markdown for people, JSON for the next agent; if they disagree, the **JSON wins**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['files', 'script'], label: 'artifacts' },
+              { say: 1 },
+              { send: ['script', 'json'], label: 'JSON', tone: 'ok' },
+              { send: ['script', 'md'], label: 'Markdown' },
+              { send: ['json', 's2'], label: 'load first', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a stale handoff',
+            lines: ['The router says: read `handoff.json` and `agent_state.json` first.'],
+            task: {
+              type: 'choose',
+              question: 'The handoff is older than the latest commit on the branch. What should the new session do?',
+              options: [
+                { text: 'Look at the diff since the handoff before acting' },
+                { text: 'Follow the next action as written', why: 'Someone changed things since; the next action may no longer fit.' },
+                { text: 'Ignore the handoff and re-read the whole codebase', why: 'The handoff is still useful; just check what changed since.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Check freshness: if newer commits exist, read that diff before acting.',
+            then: [{ send: ['files', 's2'], label: 'newer diff', curve: true }],
+          },
+        ],
+      },
       body: `Real tasks outlast a session. The context fills up, the laptop closes, a different agent or teammate takes over. Without a handoff the next session re-reads the code, re-tries approaches that already failed and sometimes undoes work it does not understand.
 
 **A handoff is a short packet with seven fields:**
@@ -727,6 +1324,99 @@ export function buildHandoff(state: State, log: Run[], diffFiles: string[], comm
     // ---------------------------------------------------------------- 7
     {
       heading: 'Permission modes: choosing how much to approve',
+      steps: {
+        actors: [
+          { id: 'plan', kind: 'guard', label: 'plan', sub: 'read + propose', x: 110, y: 70 },
+          { id: 'default', kind: 'guard', label: 'default', sub: 'asks before edits', x: 340, y: 70 },
+          { id: 'accept', kind: 'guard', label: 'acceptEdits', sub: 'edits auto-approved', x: 570, y: 70 },
+          { id: 'bypass', kind: 'guard', label: 'bypass', sub: 'bypassPermissions', x: 800, y: 70 },
+          { id: 'you', kind: 'user', label: 'You', sub: 'approve prompts', x: 110, y: 230 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'makes tool calls', x: 340, y: 230 },
+          { id: 'rules', kind: 'data', label: 'Rules', sub: 'allow · ask · deny', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A ladder of approval',
+            lines: [
+              'Every tool call is approved by you, approved by a rule, or blocked.',
+              '**plan** reads and proposes; **default** asks before edits and shell commands.',
+              '**acceptEdits** auto-approves edits; **bypassPermissions** asks nothing.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'you'], label: 'may I?', tone: 'req' },
+              { say: 1 },
+              { lit: 'plan' },
+              { lit: 'default' },
+              { say: 2 },
+              { lit: 'accept' },
+              { lit: 'bypass' },
+              { badge: 'bypass', text: 'disposable only', tone: 'err', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: choose the mode',
+            lines: ['The plan is reviewed; now comes a mechanical refactor in a git working tree.'],
+            task: {
+              type: 'pick',
+              question: 'Which mode fits?',
+              answer: 'accept',
+              hints: {
+                plan: 'plan does not edit files; the plan is already approved.',
+                default: 'default would ask before every edit; edits in a git tree can be reverted.',
+                bypass: 'bypassPermissions is only for a disposable container or VM with no secrets.',
+              },
+            },
+            solved: 'Revertible edits under an approved plan → acceptEdits; other actions still ask.',
+          },
+          {
+            kind: 'watch',
+            title: 'Rules work in every mode',
+            lines: [
+              'Allow `Bash(pnpm test:*)`, ask for `Bash(git push:*)`, deny `Read(./.env)`.',
+              '**Deny wins over allow**; hooks can block calls whatever the mode.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'rules'], label: 'pnpm test' },
+              { badge: 'rules', text: 'allow', tone: 'ok', ms: 800 },
+              { send: ['agent', 'rules'], label: 'git push' },
+              { badge: 'rules', text: 'ask', tone: 'req', ms: 800 },
+              { say: 1 },
+              { send: ['agent', 'rules'], label: 'Read(.env)' },
+              { badge: 'rules', text: 'deny', tone: 'err', ms: 900 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: blast radius',
+            lines: ['Choose by blast radius, not by impatience.'],
+            task: {
+              type: 'choose',
+              question: 'How should `git push` be handled?',
+              options: [
+                { text: 'Keep it on ask (or deny) in every mode' },
+                { text: 'Auto-approve it once in acceptEdits', why: 'acceptEdits covers file edits; a push leaves the machine and stays on ask or deny.' },
+                { text: 'Allow it to avoid prompt fatigue', why: 'Allow the safe, frequent commands (tests, lint); actions that leave the machine stay on ask.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Anything that leaves the machine or touches data stays on ask or deny, in every mode.',
+            then: [{ send: ['agent', 'you'], label: 'push?', tone: 'req' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A typical flow',
+            lines: [
+              'Allow the safe, frequent commands so the remaining prompts are rare and worth reading.',
+              '**plan** → approve → **acceptEdits** → gate and reviewer → a human approves the push.',
+            ],
+            script: [{ say: 0 }, { badge: 'rules', text: 'allow tests', tone: 'ok', ms: 900 }, { say: 1 }, { lit: 'plan' }, { send: ['plan', 'accept'], label: 'approved', curve: true }, { send: ['agent', 'you'], label: 'push?', tone: 'req' }],
+          },
+        ],
+      },
       body: `Every tool call a coding agent makes is either approved by you, approved by a rule, or blocked. Asking for everything is safe but slow; asking for nothing is fast but risky. **Permission modes** are preset points on that ladder. Claude Code's modes are a good worked example:
 
 | Mode | What happens | Good for |

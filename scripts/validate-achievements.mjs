@@ -108,7 +108,7 @@ for (let i = 0; i < 15; i++) full.studyPlan.log[localDay(new Date(2026, 0, 1 + i
 full.steps = {};
 topics.forEach((t) => t.sections.forEach((s, i) => s.steps && (full.steps[`${t.id}:${i}`] = { missed: 0, at: at(8, 10) })));
 // every from-scratch drill passed on its own; one revealed after passing still counts, one revealed first does not
-full.drills = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`d${i}`, { passedAt: at(9, 10), ...(i === 0 ? { revealedAt: at(9, 11) } : {}) }]));
+full.drills = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [`d${i}`, { passedAt: at(9, 10), ...(i === 0 ? { revealedAt: at(9, 11) } : {}) }]));
 if (A.evaluateAll({ ...structuredClone(empty), drills: { d: { revealedAt: at(9, 9), passedAt: at(9, 10) } } }, ctx)['from-scratch']?.value !== 0) fail('from-scratch: a drill passed after revealing the solution was counted');
 if (A.daysOnPace({ '2026-01-01': [0, 0], '2026-01-08': [0, 15] }) !== 0) fail('daysOnPace: a behind entry counted as on pace');
 const evFull = A.evaluateAll(full, ctx);

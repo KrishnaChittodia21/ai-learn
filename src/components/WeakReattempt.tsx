@@ -74,7 +74,7 @@ export function WeakReattempt({
         <div className="td-weak-actions">
           {sec && (
             <Link className="btn btn-primary" to={`/topic/${top.topic.id}?tab=learn&s=${sec.index}`}>
-              Revise §{sec.index + 1}
+              Revise section {sec.index + 1}
             </Link>
           )}
           {top.wrong.length > 0 ? (

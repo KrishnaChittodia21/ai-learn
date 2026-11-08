@@ -202,10 +202,218 @@ export function paragraphPack(text: string, minChars: number, maxChars: number):
           'Each Q&A pair is a natural, self-contained unit. 1,024-token or whole-page chunks blend many answers into one embedding, and 100-character cuts break pairs apart.',
       },
       source: 'Pinecone Learn — Chunking strategies for LLM applications',
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: 'Refund policy', sub: '3 sentences', x: 110, y: 150 },
+          { id: 'fixed', kind: 'chunker', label: 'Fixed-size', sub: 'every 60 chars', x: 340, y: 70 },
+          { id: 'sent', kind: 'chunker', label: 'Sentence', sub: 'pack to 60 chars', x: 340, y: 230 },
+          { id: 'emb', kind: 'embedder', label: 'Embedder', sub: 'chunk vectors', x: 570, y: 150 },
+          { id: 'query', kind: 'user', label: 'Query', sub: 'damaged item policy', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Cutting index cards',
+            lines: [
+              'You cannot hand a 200-page manual to the model for every question.',
+              'So you cut it into chunks: fixed, sentence, paragraph, recursive or by structure.',
+              'Every strategy trades **precision** (small, focused) against **context** (larger, complete).',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'doc' },
+              { say: 1 },
+              { send: ['doc', 'fixed'], label: 'cut' },
+              { send: ['doc', 'sent'], label: 'cut' },
+              { say: 2 },
+              { send: ['fixed', 'emb'] },
+              { send: ['sent', 'emb'] },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Fixed cuts land mid-word',
+            lines: [
+              'Fixed 60 chars ends chunk 1 at "…Items must be unused. Da".',
+              'Chunk 2 starts "maged items: contact support…": the query scores **0.61**.',
+              'Sentence-packed, chunk 2 is the whole 48-hour rule: it scores **0.83**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'fixed'], label: '"…unused. Da"', tone: 'miss' },
+              { say: 1 },
+              { send: ['fixed', 'emb'], label: '"maged items…"', tone: 'miss' },
+              { badge: 'fixed', text: '0.61', tone: 'miss' },
+              { say: 2 },
+              { send: ['sent', 'emb'], label: 'whole sentence', tone: 'ok' },
+              { badge: 'sent', text: '0.83', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which chunk scored 0.61?',
+            lines: ['The query is "damaged item policy".'],
+            task: {
+              type: 'pick',
+              question: 'Which chunker produced the chunk that started with "maged" and scored 0.61?',
+              answer: 'fixed',
+              hints: {
+                sent: 'Sentence-packing kept the damaged-items rule whole, so it scored 0.83.',
+                emb: 'The embedder only vectorises the chunks it is given.',
+                doc: 'The source text is fine; the cut happened later.',
+              },
+            },
+            solved: 'Fixed-size cutting splits mid-sentence and mid-word, which drags the match score down.',
+            then: [{ send: ['doc', 'fixed'], label: '"…Da" | "maged…"', tone: 'miss' }, { badge: 'fixed', text: '0.61', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When to switch strategy',
+            lines: [
+              'Use document-specific splitters when the source has reliable structure (Markdown, HTML, code).',
+              'Reach for semantic or parent-child chunking only when an eval shows the baseline failing.',
+              'Pick a strategy per document type and verify it with an eval set.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'sent' },
+              { say: 1 },
+              { badge: 'emb', text: 'eval first', tone: 'miss' },
+              { say: 2 },
+              { send: ['query', 'emb'], label: 'eval set' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the baseline',
+            lines: ['Start simple, then let an eval tell you when to change.'],
+            task: {
+              type: 'choose',
+              question: 'Which chunking setup is the standard baseline to start with?',
+              options: [
+                { text: 'Recursive splitting at ~512 tokens with ~10–15% overlap' },
+                { text: 'Semantic chunking from day one', why: 'It costs more compute; use it only when an eval shows the baseline failing.' },
+                {
+                  text: 'Fixed-size cuts every N characters',
+                  why: 'Fixed-size splits mid-sentence and mid-word; it suits uniform logs and quick baselines only.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Recursive at ~512 tokens with ~10–15% overlap is the default baseline.',
+            then: [{ send: ['doc', 'sent'] }, { send: ['sent', 'emb'], tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 2
     {
       heading: 'Chunk Size and Overlap — choosing numbers you can defend',
+      short: {
+        id: 'chunk-size-zoom-level',
+        title: 'Chunk size is a zoom level',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: '100-page handbook · 60 questions · top-k 5',
+            head: 'Recall@5 by *chunk size*',
+            rungs: [
+              {
+                label: '128 / 0',
+                amount: 0.71,
+              },
+              {
+                label: '512 / 64',
+                amount: 0.88,
+              },
+              {
+                label: '1,024 / 128',
+                amount: 0.82,
+              },
+              {
+                label: '2,048 / 256',
+                amount: 0.69,
+              },
+            ],
+            unit: 'recall@5',
+            sub: 'Size / overlap in tokens. The middle wins; both ends lose.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Zoomed in',
+            value: 128,
+            unit: 'tokens per chunk',
+            sub: 'Exact sentences, but the qualifying **"unless…"** falls into another card. Recall@5 **0.71**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Zoomed out',
+            value: 2048,
+            unit: 'tokens per chunk',
+            sub: 'Several policies blend into **one blurry vector**. Recall@5 **0.69**.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Context budget · top_k × chunk size',
+            head: 'Prompt tokens per *query*',
+            rungs: [
+              {
+                label: '128 tokens',
+                amount: 640,
+              },
+              {
+                label: '512 tokens',
+                amount: 2560,
+              },
+              {
+                label: '1,024 tokens',
+                amount: 5120,
+              },
+              {
+                label: '2,048 tokens',
+                amount: 10240,
+              },
+            ],
+            unit: 'tokens',
+            sub: '512/64 wins on recall **and** costs half the prompt tokens of 1,024.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Overlap is the tape',
+            head: 'Stop a key sentence *falling into the crack*',
+            steps: [
+              'Size 512, overlap 64',
+              'Stride 448 tokens',
+              'Neighbours share 64 tokens',
+              'Storage factor 512 / 448 ≈ 1.14×',
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Chunks of 512 tokens with 128 overlap. How much do you store?',
+            answer: 0,
+            options: [
+              {
+                text: '~1.33× the tokens',
+                why: 'Storage factor = size / (size − overlap) = 512 / 384 ≈ 1.33×.',
+              },
+              {
+                text: 'Exactly 1×',
+                why: 'Overlapping tokens are stored twice, so overlap always costs storage.',
+              },
+              {
+                text: '4×',
+                why: 'That would be size / overlap. The factor divides by the stride, size − overlap.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Choose chunk size with an *eval sweep*, not intuition.',
+          sub: 'Run **256/512/1,024** against 50–100 questions and keep the winner per document type.',
+        },
+      },
       body: `**Intuition:** chunk size is the zoom level of your search. Zoomed in (128 tokens) you find exact sentences but lose the surrounding story; zoomed out (2,000 tokens) every chunk mentions everything and the embedding becomes a blurry average. Overlap is the tape that stops a key sentence falling into the crack between two cards.
 
 **Mechanics.**
@@ -347,6 +555,122 @@ console.log(chunkBudget({ docTokens: 10_000_000, size: 512, overlap: 64, topK: 8
           'Text beyond the embedding model\'s max sequence length is silently dropped. Facts in the tail of the chunk do not influence the vector at all. Keep chunks under the model limit or switch models.',
       },
       source: 'Chroma Research 2024 — Evaluating Chunking Strategies for Retrieval; OpenAI Embeddings docs',
+      steps: {
+        actors: [
+          { id: 's128', kind: 'chunker', label: '128 / 0', sub: 'recall@5 0.71', x: 110, y: 70 },
+          { id: 's512', kind: 'chunker', label: '512 / 64', sub: 'recall@5 0.88', x: 340, y: 70 },
+          { id: 's1024', kind: 'chunker', label: '1,024 / 128', sub: 'recall@5 0.82', x: 570, y: 70 },
+          { id: 's2048', kind: 'chunker', label: '2,048 / 256', sub: 'recall@5 0.69', x: 800, y: 70 },
+          { id: 'eval', kind: 'judge', label: 'Eval set', sub: '60 questions · top-5', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Prompt budget', sub: 'top_k × chunk tokens', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Chunk size is a zoom level',
+            lines: [
+              'Zoomed in (128 tokens) you find exact sentences but lose the story.',
+              'Zoomed out (2,000 tokens) every chunk mentions everything: a blurry average vector.',
+              'Overlap is the tape that stops a key sentence falling into the crack.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 's128' },
+              { badge: 's128', text: 'no context', tone: 'miss' },
+              { say: 1 },
+              { lit: 's2048' },
+              { badge: 's2048', text: 'blurry', tone: 'miss' },
+              { say: 2 },
+              { lit: 's512' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure in tokens',
+            lines: [
+              '~4 characters ≈ 1 token only for English prose; code, URLs and JSON are denser.',
+              'Text beyond the embedding model\'s window is silently truncated.',
+              'Typical: 256–512 tokens for facts, 512–1,024 for explanations, 10–20% overlap.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 's1024', text: '~4 chars/token?', tone: 'miss' },
+              { say: 1 },
+              { badge: 's2048', text: 'truncated', tone: 'err' },
+              { say: 2 },
+              { lit: 's512' },
+              { lit: 's1024' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the storage cost',
+            lines: ['Storage grows by `size / (size − overlap)`.'],
+            task: {
+              type: 'choose',
+              question: 'You chunk at 512 tokens with 128 overlap. How many tokens do you store, relative to the source?',
+              options: [
+                { text: '~1.33×' },
+                { text: '1.25×', why: '128 is 25% of 512, but storage is 512 / (512 − 128).' },
+                { text: '2×', why: 'Only the overlap is stored twice, not the whole chunk.' },
+              ],
+              answer: 0,
+            },
+            solved: '512 / (512 − 128) ≈ 1.33× the tokens.',
+            then: [{ badge: 's512', text: '~1.33× stored' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Sweep, do not guess',
+            lines: [
+              'A 100-page handbook, 60 eval questions, top-k = 5, four configurations.',
+              'Recall@5: 0.71, **0.88**, 0.82, 0.69.',
+              'Choose per document type with an eval sweep, not intuition.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['eval', 's128'] },
+              { send: ['eval', 's512'] },
+              { send: ['eval', 's1024'] },
+              { send: ['eval', 's2048'] },
+              { say: 1 },
+              { badge: 's512', text: '0.88', tone: 'ok' },
+              { say: 2 },
+              { lit: 'eval' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the winner',
+            lines: ['Look at recall and at what each chunk carries.'],
+            task: {
+              type: 'pick',
+              question: 'Which configuration won the sweep?',
+              answer: 's512',
+              hints: {
+                s128: '128-token chunks lose qualifying sentences ("unless…"): 0.71.',
+                s1024: '0.82, and twice the prompt tokens of 512.',
+                s2048: '2,048-token chunks blend several policies into one vector: 0.69.',
+              },
+            },
+            solved: '512/64 wins on recall and costs half the prompt tokens of 1,024.',
+            then: [{ send: ['s512', 'llm'], label: '5 × 512', tone: 'ok' }, { badge: 's512', text: 'winner', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Fit the prompt budget',
+            lines: ['`top_k × chunk_tokens` must fit your prompt budget.', '8 × 512 = 4K tokens; 8 × 2,048 = 16K tokens per query.'],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { say: 1 },
+              { send: ['s512', 'llm'], label: '8 × 512', tone: 'ok' },
+              { send: ['s2048', 'llm'], label: '8 × 2,048', tone: 'miss' },
+              { badge: 'llm', text: '4K vs 16K' },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 3
     {
@@ -511,6 +835,102 @@ console.log(recursiveSplit('aaa bbb\\n\\nccc ddd eee', 8, ['\\n\\n', ' ', '']));
           'The default length is measured in characters, and English prose averages ~4 characters per token, so 1,000 characters ≈ 250 tokens.',
       },
       source: 'LangChain docs — How to recursively split text by characters',
+      steps: {
+        actors: [
+          { id: 'text', kind: 'document', label: 'Input text', sub: '1,450 chars', x: 110, y: 150 },
+          { id: 'para', kind: 'chunker', label: 'Paragraph seam', sub: 'split on "\\n\\n"', x: 340, y: 70 },
+          { id: 'sent', kind: 'chunker', label: 'Smaller seams', sub: '"\\n" → ". " → " "', x: 340, y: 230 },
+          { id: 'merge', kind: 'chunker', label: 'Merge + overlap', sub: 'up to chunkSize 500', x: 570, y: 150 },
+          { id: 'out', kind: 'data', label: '4 chunks', sub: 'none above 500', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Biggest seam first',
+            lines: [
+              'Try to split at paragraph breaks first.',
+              'A piece still too big is split at line breaks, then spaces.',
+              'Cutting through a word is the last resort, like a knife on a chocolate bar.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['text', 'para'], label: '"\\n\\n"' },
+              { say: 1 },
+              { send: ['para', 'sent'], label: 'too big', tone: 'miss' },
+              { say: 2 },
+              { send: ['sent', 'merge'] },
+              { send: ['merge', 'out'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the separators',
+            lines: ['The default `separators` list is tried in order.'],
+            task: {
+              type: 'order',
+              question: 'Put the default separators in the order the splitter tries them.',
+              items: ['"\\n\\n" (paragraph)', '"\\n" (line)', '" " (space)', '"" (character)'],
+              hint: 'Break along the biggest grooves before reaching for the knife.',
+            },
+            solved: 'Paragraph → line → space → character: big seams first.',
+            then: [{ send: ['text', 'para'] }, { send: ['para', 'sent'] }, { send: ['sent', 'merge'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Walk the example',
+            lines: [
+              'Split on "\\n\\n" → pieces of 300, 950 and 200 chars.',
+              '950 is too big and has no line breaks → split on ". " into 180, 220, 260, 290.',
+              'Merge up to 500: [300], [400], [260], [490] = 4 chunks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['text', 'para'], label: '300 · 950 · 200' },
+              { say: 1 },
+              { send: ['para', 'sent'], label: '950', tone: 'miss' },
+              { badge: 'sent', text: '4 sentences' },
+              { say: 2 },
+              { send: ['sent', 'merge'] },
+              { send: ['merge', 'out'], label: '4 chunks', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: 500 what?',
+            lines: ['`lengthFunction` decides what "size" means.'],
+            task: {
+              type: 'choose',
+              question: 'You set `chunkSize: 500` and pass no `lengthFunction`. 500 of what?',
+              options: [
+                { text: 'Characters' },
+                { text: 'Tokens', why: 'The default counts characters; pass a tokenizer-based lengthFunction (or from_tiktoken_encoder) for tokens.' },
+                { text: 'Sentences', why: 'Sentences are a separator, not the unit of size.' },
+              ],
+              answer: 0,
+            },
+            solved: 'chunkSize is characters unless you supply a token lengthFunction.',
+            then: [{ badge: 'merge', text: '500 chars' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Merge back with overlap',
+            lines: [
+              'Small pieces are merged back together up to `chunkSize`.',
+              'Each chunk starts with up to ~50 chars of the previous chunk\'s tail (`chunkOverlap`).',
+              'Every chunk ends at a sentence or paragraph boundary; fixed 500 would end two mid-word.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['sent', 'merge'], label: '180 + 220' },
+              { say: 1 },
+              { badge: 'merge', text: '~50 overlap' },
+              { say: 2 },
+              { send: ['merge', 'out'], tone: 'ok' },
+              { badge: 'out', text: 'clean edges', tone: 'ok' },
+            ],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

@@ -35,6 +35,113 @@ const topic: Topic = {
   sections: [
     {
       heading: 'GPU and Inference Optimization — prefill vs decode and the memory-bandwidth wall',
+      steps: {
+        actors: [
+          { id: 'prompt', kind: 'user', label: 'Prompt', sub: 'all tokens at once', x: 110, y: 70 },
+          { id: 'prefill', kind: 'server', label: 'Prefill', sub: 'big GEMMs (T × d)', x: 340, y: 70 },
+          { id: 'compute', kind: 'metric', label: 'Tensor cores', sub: 'the kitchen (FLOPs)', x: 570, y: 70 },
+          { id: 'hbm', kind: 'data', label: 'Weights in HBM', sub: 'every byte, per step', x: 110, y: 230 },
+          { id: 'bw', kind: 'metric', label: 'Bandwidth', sub: 'the narrow door', x: 340, y: 230 },
+          { id: 'decode', kind: 'server', label: 'Decode', sub: '1 token / seq / step', x: 570, y: 230 },
+          { id: 'batch', kind: 'user', label: 'Batch', sub: 'sequences per step', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two phases',
+            lines: [
+              '**Prefill** runs all prompt tokens at once: big GEMMs, bound by **compute**.',
+              '**Decode** makes 1 token per sequence per step and needs **every** weight carried through the door.',
+              'Prefill sets **TTFT**; decode sets inter-token latency and tokens per second.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'prefill'], label: 'T tokens' },
+              { send: ['prefill', 'compute'], label: 'FLOPs' },
+              { badge: 'compute', text: 'busy', tone: 'ok', ms: 800 },
+              { say: 1 },
+              { send: ['hbm', 'bw'], label: 'all weights' },
+              { send: ['bw', 'decode'], label: '1 token of work' },
+              { badge: 'compute', text: 'waiting', tone: 'miss', ms: 800 },
+              { say: 2 },
+              { badge: 'prefill', text: 'TTFT', ms: 900 },
+              { badge: 'decode', text: 'ITL · tok/s', ms: 900 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the bottleneck',
+            lines: ['A decode step does ~2 FLOPs per parameter but reads each bf16 parameter (2 bytes) once.'],
+            task: {
+              type: 'pick',
+              question: 'At batch 1, what limits decode speed?',
+              answer: 'bw',
+              hints: {
+                compute: 'The tensor cores mostly wait: decode is a matrix-vector product with little maths per byte.',
+                prefill: 'Prefill is the compute-bound phase, not decode.',
+                hbm: 'The weights are there; the problem is how fast they can be moved.',
+              },
+            },
+            solved: 'Decode reads every weight each step, so memory bandwidth, not FLOPs, sets the speed.',
+            then: [{ send: ['hbm', 'bw'], label: 'bytes', tone: 'err' }, { badge: 'bw', text: 'the wall', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Roofline maths',
+            lines: [
+              'Arithmetic intensity = FLOPs / bytes moved.',
+              'In decode it is ≈ the **batch size** FLOP/byte.',
+              'H100 SXM ridge point ≈ **295 FLOP/byte**: below that batch you are bandwidth-bound.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'decode' },
+              { say: 1 },
+              { send: ['batch', 'decode'], label: 'batch' },
+              { badge: 'decode', text: 'intensity ≈ batch', ms: 1000 },
+              { say: 2 },
+              { badge: 'compute', text: 'ridge ≈ 295', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Cook for many per trip',
+            lines: [
+              'Llama-3.1-8B, batch 1: each step reads 16.1 GB, so ≤ 208 tok/s.',
+              'Batch 64: the weights are still read once per step, shared by 64 sequences (plus their KV).',
+              'Per-user speed halves; total throughput rises ~31×, to ~6,400 tok/s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['hbm', 'bw'], label: '16.1 GB' },
+              { send: ['bw', 'decode'] },
+              { badge: 'decode', text: '≤ 208 tok/s', ms: 1000 },
+              { say: 1 },
+              { send: ['batch', 'decode'], label: '64 seqs', count: 3 },
+              { send: ['hbm', 'bw'], label: 'weights + KV' },
+              { say: 2 },
+              { badge: 'batch', text: '~6,400 tok/s', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the lever',
+            lines: ['First ask which phase dominates your traffic.'],
+            task: {
+              type: 'choose',
+              question: 'Your traffic is mostly decode. Which levers fit?',
+              options: [
+                { text: 'Batch more sequences per weight read and quantise weights and KV' },
+                { text: 'A GPU with more FLOPs', why: 'Decode is bandwidth-bound: the tensor cores already wait on memory.' },
+                { text: 'FlashAttention and chunked prefill', why: 'Those are prefill (FLOPs) levers; decode is about bytes.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Decode levers move fewer bytes or share each read: batching, quantisation, GQA, speculative decoding.',
+            then: [{ send: ['batch', 'decode'], count: 3, tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a GPU is a huge kitchen (compute) fed by a narrow door (memory bandwidth). During decode each new token needs *every* ingredient (all weights) carried through the door, but only a tiny bit of cooking. The cooks wait on the door, so you either carry fewer bytes or cook for many customers per trip.
 
 **Two phases:**
@@ -158,6 +265,124 @@ print(crossover_batch(8.03, 1, 1979, 3.35))   # 296
     },
     {
       heading: 'KV Cache — size formula, PagedAttention, prefix caching and KV quantisation',
+      steps: {
+        actors: [
+          { id: 'tok', kind: 'user', label: 'New token', sub: 'e.g. token 1,001', x: 110, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Model', sub: 'one decode step', x: 340, y: 70 },
+          { id: 'kv', kind: 'cache', label: 'KV cache', sub: 'past keys + values', x: 570, y: 70 },
+          { id: 'mem', kind: 'metric', label: 'GPU memory', sub: 'weights + KV', x: 800, y: 70 },
+          { id: 'req2', kind: 'user', label: 'Request B', sub: 'same system prompt', x: 110, y: 230 },
+          { id: 'prefix', kind: 'cache', label: 'Prefix cache', sub: 'blocks keyed by hash', x: 340, y: 230 },
+          { id: 'table', kind: 'data', label: 'Block table', sub: '16-token blocks', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Short-term notes',
+            lines: [
+              'In a causal model, past keys and values never change.',
+              'So each decode step processes only the **newest** token and attends over cached K/V.',
+              'Without the cache, token 1,001 would reprocess all 1,000 before it.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'kv' },
+              { say: 1 },
+              { send: ['tok', 'model'], label: 'new token' },
+              { send: ['kv', 'model'], label: 'cached K, V', tone: 'ok' },
+              { send: ['model', 'kv'], label: 'append' },
+              { say: 2 },
+              { badge: 'model', text: 'no recompute', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: size it',
+            lines: ['`bytes = layers × 2 × kv_heads × head_dim × bytes_per_value × tokens`'],
+            task: {
+              type: 'choose',
+              question: 'Llama-3-8B uses 128 KiB of fp16 KV per token. How much for one 8k-token sequence?',
+              options: [
+                { text: '1 GiB' },
+                { text: '128 KiB', why: 'That is per token; multiply by 8k tokens.' },
+                { text: '4 GiB', why: 'That is an MHA 7B with 32 KV heads; Llama-3-8B has 8.' },
+              ],
+              answer: 0,
+            },
+            solved: '128 KiB × 8k = 1 GiB per sequence, then multiply by concurrent sequences.',
+            then: [{ send: ['kv', 'mem'], label: '1 GiB / seq' }, { badge: 'mem', text: '× users' }],
+          },
+          {
+            kind: 'watch',
+            title: 'PagedAttention',
+            lines: [
+              'KV lives in fixed blocks (e.g. 16 tokens) with a per-sequence **block table**.',
+              'Blocks are allocated on demand: near-zero fragmentation.',
+              'Blocks can be **shared** between sequences.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['kv', 'table'], label: 'blocks' },
+              { badge: 'table', text: '16 tokens / block', ms: 1000 },
+              { say: 1 },
+              { send: ['model', 'table'], label: 'allocate' },
+              { say: 2 },
+              { send: ['req2', 'table'], label: 'shared blocks', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Prefix caching',
+            lines: [
+              'Each block is keyed by a hash of all tokens up to that block.',
+              'A request with the same system prompt reuses those blocks and **skips that prefill**.',
+              'So keep prompt prefixes stable.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['table', 'prefix'], label: 'hash' },
+              { lit: 'prefix' },
+              { say: 1 },
+              { send: ['req2', 'prefix'], label: 'same prefix' },
+              { badge: 'prefix', text: 'hit: skip prefill', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { badge: 'req2', text: 'stable prefix', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: skip the repeat',
+            lines: ['A support bot sends the same 3,000-token system prompt and tool schemas on every request.'],
+            task: {
+              type: 'pick',
+              question: 'What lets Request B skip prefilling those 3,000 tokens?',
+              answer: 'prefix',
+              hints: {
+                model: 'Running the model over the prefix again is the work we want to skip.',
+                table: 'The block table maps one sequence to its blocks; the hash lookup is what finds blocks to reuse.',
+                kv: 'The cache holds this sequence\'s K/V; reuse across requests needs a prefix match.',
+              },
+            },
+            solved: 'Prefix caching: in the example TTFT dropped from ~650 ms to ~180 ms.',
+            then: [{ send: ['req2', 'prefix'], label: 'hit', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Shrink and evict',
+            lines: [
+              '**FP8 KV** halves memory and decode reads, usually with minor quality impact.',
+              'Unused prefix blocks are evicted LRU or offloaded to CPU/SSD; a full pool preempts and recomputes.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'kv', text: 'FP8: half size', tone: 'ok', ms: 1000 },
+              { send: ['kv', 'mem'], label: 'fewer bytes', tone: 'ok' },
+              { say: 1 },
+              { badge: 'prefix', text: 'LRU evict / offload', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** the KV cache is the model's short-term notes. Without it, generating token 1,001 would mean re-reading and re-processing all 1,000 previous tokens; with it, the model keeps each past token's keys and values and only processes the newest token.
 
 **Why it exists:** past keys and values never change in a causal model, so each decode step does O(1) new work plus attention over cached K/V instead of recomputing all T positions.
@@ -281,6 +506,192 @@ print(max_concurrent(80, 16, 4, 32, 32, 128, 8192))      # 13  if it were MHA (3
     },
     {
       heading: 'Speculative Decoding — draft and verify, acceptance rate, EAGLE and Medusa',
+      steps: {
+        actors: [
+          { id: 'draft', kind: 'agent', label: 'Drafter', sub: 'cheap, proposes γ', x: 110, y: 70 },
+          { id: 'target', kind: 'llm', label: 'Target model', sub: 'one pass verifies', x: 340, y: 70 },
+          { id: 'out', kind: 'document', label: 'Output', sub: 'accepted tokens', x: 570, y: 70 },
+          { id: 'alpha', kind: 'metric', label: 'Acceptance α', sub: 'per-token rate', x: 340, y: 230 },
+          { id: 'batch', kind: 'metric', label: 'Batch size', sub: 'low = memory-bound', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Draft, then verify',
+            lines: [
+              'A cheap **drafter** proposes γ tokens (γ = 3–8).',
+              'The **target** checks all γ positions in one forward pass.',
+              'Decode is memory-bound, so checking 5 tokens costs about the same as generating 1.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['draft', 'target'], label: 'γ draft tokens', count: 3 },
+              { say: 1 },
+              { lit: 'target' },
+              { badge: 'target', text: 'one pass', ms: 900 },
+              { say: 2 },
+              { send: ['target', 'out'], label: 'several tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Keep the prefix, fix the first miss',
+            lines: [
+              'Accept draft token i with probability min(1, p_target / p_draft).',
+              'At the first rejection, sample a correction and stop.',
+              'All accepted? The target\'s next token comes free: a bonus token.',
+              'The output distribution is **exactly** the target\'s, so quality is unchanged.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['target', 'out'], label: 'token 1 ✓', tone: 'ok' },
+              { send: ['target', 'out'], label: 'token 2 ✓', tone: 'ok' },
+              { say: 1 },
+              { send: ['target', 'out'], label: 'token 3 ✗ → fix', tone: 'err' },
+              { say: 2 },
+              { badge: 'out', text: '+1 bonus token', tone: 'ok', ms: 1000 },
+              { say: 3 },
+              { badge: 'target', text: 'quality unchanged', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a rejection',
+            lines: ['γ = 4; the target accepts tokens 1 and 2 and rejects token 3.'],
+            task: {
+              type: 'choose',
+              question: 'What does this pass emit?',
+              options: [
+                { text: 'Tokens 1–2 plus a corrected token 3' },
+                { text: 'All 4 draft tokens', why: 'Verification stops at the first rejection.' },
+                { text: 'Nothing; the pass is wasted', why: 'The accepted prefix is kept, plus a correction sampled from the target.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Keep the accepted prefix, sample one correction, stop.',
+            then: [{ send: ['target', 'out'], label: '2 + fix', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Acceptance rate sets the payoff',
+            lines: [
+              'Expected tokens per target pass: `(1 − α^(γ+1)) / (1 − α)`.',
+              'Chat, α = 0.8, γ = 4: **3.36** tokens per pass, ≈ 2.8× speedup.',
+              'Creative writing, α = 0.55: ≈ 1.76×.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'alpha' },
+              { say: 1 },
+              { badge: 'alpha', text: 'α 0.8 → ≈ 2.8×', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { badge: 'alpha', text: 'α 0.55 → ≈ 1.76×', tone: 'miss', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: longer drafts?',
+            lines: ['Creative writing, α = 0.55, γ = 4 gives ≈ 1.76×.'],
+            task: {
+              type: 'choose',
+              question: 'Should you raise γ from 4 to 8?',
+              options: [
+                { text: 'No: long drafts are wasted when acceptance is low' },
+                { text: 'Yes: more draft tokens means more speed', why: 'At α = 0.55, γ = 8 gives ≈ 1.58×, worse than 1.76×.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Low acceptance wastes long drafts: γ = 8 drops the speedup to ≈ 1.58×.',
+            then: [{ send: ['draft', 'target'], label: 'γ = 4' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Big batches erase the win',
+            lines: [
+              'At large batch the GPU is closer to compute-bound.',
+              'Verifying rejected tokens then wastes FLOPs: at batch 128 the gain fell to ~1.1×.',
+              'So that team enables speculation only below batch 32.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'batch' },
+              { badge: 'batch', text: 'batch 128', ms: 900 },
+              { say: 1 },
+              { send: ['draft', 'target'], label: 'wasted checks', tone: 'err' },
+              { badge: 'target', text: '~1.1×', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { badge: 'batch', text: 'on when < 32', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'speculative-decoding-draft-and-verify',
+        title: 'Draft cheap, verify once',
+        beats: [
+          {
+            type: 'claims',
+            kicker: '"The capital of France is"',
+            head: 'The target checks *4 guesses* in one pass',
+            claims: [
+              { text: 'Paris', ok: true },
+              { text: '.', ok: true },
+              { text: 'It', ok: true },
+              { text: 'is', ok: false, note: 'target wants "has"' },
+            ],
+            sub: 'Emit **"Paris . It has"**: 3 accepted + 1 correction = 4 tokens for ~1 target pass.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Speculative decoding',
+            head: 'A junior drafts, a senior *edits*',
+            steps: [
+              'A cheap drafter proposes γ = 4 tokens',
+              'The target runs ONE forward pass over all 4',
+              'Keep the accepted prefix',
+              'Fix the first wrong token, or get a bonus one',
+            ],
+            sub: 'Decode is memory-bound, so checking 5 tokens costs about the same as generating 1.',
+          },
+          {
+            type: 'counter',
+            kicker: '70B target, EAGLE-style drafter',
+            value: 2.8,
+            decimals: 1,
+            suffix: '×',
+            unit: 'faster on chat traffic (α = 0.8)',
+            sub: '**3.36** tokens per target pass; ITL 40 ms → ~14 ms per token.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'It depends on acceptance and batch',
+            head: 'Same trick, *very* different gains',
+            rungs: [
+              { label: 'Chat, α = 0.8, γ = 4', amount: 2.8 },
+              { label: 'Creative, α = 0.55, γ = 4', amount: 1.76 },
+              { label: 'Creative, α = 0.55, γ = 8', amount: 1.58 },
+              { label: 'Chat at batch 128', amount: 1.1 },
+            ],
+            unit: '× speedup',
+            sub: 'Long drafts are wasted when acceptance is low; at large batch the GPU is near **compute-bound**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'At batch 128 the measured gain fell to ~1.1×. What did the team do?',
+            answer: 0,
+            options: [
+              { text: 'Enable speculation only below batch 32', why: 'It helps when decode is memory-bound, at low batch; at large batch verifying rejected tokens wastes FLOPs.' },
+              { text: 'Raise γ to 8', why: 'Longer drafts only help when acceptance is high; at α = 0.55, γ = 8 was worse than γ = 4.' },
+              { text: 'Accept lower quality for the speed', why: 'There is no quality trade: verification keeps the target\'s exact output distribution.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Guess *cheap*, verify in one pass.',
+          sub: 'Exactly the target\'s output, fewer target passes: best at **low batch**, with γ tuned to the acceptance rate.',
+        },
+      },
       body: `**Intuition:** a junior writer drafts the next few words quickly; a senior editor checks them all in one glance, keeps the correct prefix and fixes the first wrong word. Because decode is memory-bound, checking 5 tokens costs about the same as generating 1.
 
 **Mechanics:**
@@ -413,6 +824,132 @@ assert verify([1], [2, 6]) == [2]`,
     },
     {
       heading: 'Distributed Inference — tensor, pipeline and expert parallelism, and disaggregated prefill/decode',
+      steps: {
+        actors: [
+          { id: 'tp', kind: 'server', label: 'Tensor (TP)', sub: 'split each matrix', x: 110, y: 70 },
+          { id: 'pp', kind: 'server', label: 'Pipeline (PP)', sub: 'layers into stages', x: 340, y: 70 },
+          { id: 'ep', kind: 'server', label: 'Experts (EP)', sub: 'MoE experts on GPUs', x: 570, y: 70 },
+          { id: 'dp', kind: 'server', label: 'Replicas (DP)', sub: 'full copy each', x: 800, y: 70 },
+          { id: 'users', kind: 'user', label: 'Users', sub: 'streaming tokens', x: 110, y: 230 },
+          { id: 'pre', kind: 'server', label: 'Prefill pool', sub: 'compute-bound', x: 340, y: 230 },
+          { id: 'dec', kind: 'server', label: 'Decode pool', sub: 'bandwidth-bound', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Four ways to split',
+            lines: [
+              '**Tensor parallel**: several chefs cut the same onion: each matrix is split.',
+              '**Pipeline parallel**: an assembly line of layer stations.',
+              '**Expert parallel**: each token goes to its specialist station (MoE).',
+              '**Replicas**: a full copy per group, no talk between them.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'tp' },
+              { badge: 'tp', text: '2 all-reduce/layer', ms: 1000 },
+              { say: 1 },
+              { send: ['tp', 'pp'], label: 'activations' },
+              { badge: 'pp', text: 'point-to-point', ms: 900 },
+              { say: 2 },
+              { badge: 'ep', text: 'all-to-all', ms: 900 },
+              { say: 3 },
+              { badge: 'dp', text: 'no traffic', tone: 'ok', ms: 900 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what stays in the node?',
+            lines: ['NVLink inside a node: 900 GB/s on H100. InfiniBand/RoCE between nodes: ~50 GB/s per link.'],
+            task: {
+              type: 'pick',
+              question: 'Which split belongs inside one NVLink node, because it all-reduces twice per layer per step?',
+              answer: 'tp',
+              hints: {
+                pp: 'Pipeline sends point-to-point activations between stages, so it suits cross-node links.',
+                ep: 'Expert parallel is for MoE expert weights.',
+                dp: 'Replicas do not talk to each other at all.',
+              },
+            },
+            solved: 'TP within a node, PP across nodes.',
+            then: [{ lit: 'tp' }, { send: ['tp', 'pp'], label: 'across nodes', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why TP stays in the node',
+            lines: [
+              'Llama-3.1-405B in FP8 on 2 nodes of 8 × H100.',
+              'TP=16 across both nodes puts all-reduces on InfiniBand: twice per layer × 126 layers, tens of ms per token.',
+              'So: TP=8 inside each node, PP=2 across the nodes.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'tp' },
+              { say: 1 },
+              { send: ['tp', 'pp'], label: 'all-reduce', tone: 'err', count: 2 },
+              { badge: 'tp', text: '+ tens of ms', tone: 'err', ms: 1000 },
+              { say: 2 },
+              { send: ['tp', 'pp'], label: 'TP=8 → PP=2', tone: 'ok' },
+              { badge: 'pp', text: 'PP=2 across', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Prefill stalls decode',
+            lines: [
+              'Prefill is compute-bound and bursty; decode is bandwidth-bound and steady.',
+              'Co-located, a 30k-token prefill stalls every streaming user.',
+              'In the example, ITL spiked from 35 ms to 900 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'pre' },
+              { lit: 'dec' },
+              { say: 1 },
+              { send: ['users', 'pre'], label: '30k-token prompt', tone: 'err' },
+              { down: 'dec' },
+              { say: 2 },
+              { badge: 'users', text: 'ITL 900 ms', tone: 'err', ms: 1200 },
+              { down: 'dec', on: false },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Disaggregate the pools',
+            lines: [
+              'Run separate **prefill** and **decode** pools.',
+              'Transfer the KV cache between them over NVLink/RDMA.',
+              'Size each pool for its own SLO (TTFT vs ITL): ITL p99 back to 45 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['users', 'pre'], label: 'prompt' },
+              { say: 1 },
+              { send: ['pre', 'dec'], label: 'KV over RDMA', tone: 'ok' },
+              { say: 2 },
+              { send: ['dec', 'users'], label: 'tokens', tone: 'ok', curve: true },
+              { badge: 'users', text: 'p99 45 ms', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: split or copy?',
+            lines: ['The model fits on one GPU and latency is fine; you just need more throughput.'],
+            task: {
+              type: 'choose',
+              question: 'What should you do?',
+              options: [
+                { text: 'Add replicas (data parallel)' },
+                { text: 'Tensor-parallel it across 8 GPUs', why: 'Split a model only when it or its KV cache does not fit, or latency needs more bandwidth.' },
+                { text: 'Disaggregate prefill and decode', why: 'That fixes prefill stalling decode; nothing is stalling here.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Split only when it does not fit or latency needs more bandwidth; otherwise use replicas.',
+            then: [{ lit: 'dp' }, { badge: 'dp', text: 'more replicas', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** when one GPU cannot hold or serve a model fast enough, you split the work. Tensor parallelism: several chefs cut the same onion; pipeline parallelism: an assembly line of layer stations; expert parallelism: each order goes to its specialist station.
 
 | Strategy | Splits | Communication | Best for |

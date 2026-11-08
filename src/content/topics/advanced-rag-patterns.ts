@@ -34,6 +34,111 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Corrective RAG (CRAG) — grade retrieval, refine or fall back to web search',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'Node 22 fetch proxy?', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'internal docs', x: 340, y: 70 },
+          { id: 'grader', kind: 'judge', label: 'Evaluator', sub: 'upper 0.6, lower 0.3', x: 570, y: 70 },
+          { id: 'web', kind: 'tool', label: 'Web search', sub: 'keyword query', x: 800, y: 150 },
+          { id: 'refine', kind: 'chunker', label: 'Refine', sub: 'knowledge strips', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Generator', sub: 'refined knowledge', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An editor checks the pages first',
+            lines: [
+              'Before the model reads the retrieved pages, an evaluator scores each (question, document) pair.',
+              '**Correct**: refine the good pages. **Incorrect**: discard them and search the web. **Ambiguous**: do both.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'retriever'], label: 'question' },
+              { send: ['retriever', 'grader'], label: 'docs', count: 3 },
+              { lit: 'grader' },
+              { say: 1 },
+              { send: ['grader', 'refine'], label: 'correct', tone: 'ok' },
+              { send: ['grader', 'web'], label: 'incorrect', tone: 'miss' },
+              { send: ['refine', 'llm'], label: 'strips' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: grade the retrieval',
+            lines: ['Grader scores: 0.21, 0.18, 0.12, 0.09.', 'Thresholds: upper 0.6, lower 0.3.'],
+            task: {
+              type: 'choose',
+              question: 'Which action does CRAG take?',
+              options: [
+                { text: 'Incorrect: discard the docs, rewrite into keywords, search the web' },
+                {
+                  text: 'Correct: refine the internal docs',
+                  why: 'Correct needs at least one doc above the upper threshold (0.6); the best here is 0.21.',
+                },
+                {
+                  text: 'Ambiguous: combine internal and web',
+                  why: 'Ambiguous is the in-between case; all four scores are below the lower threshold (0.3).',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'All docs below the lower threshold → Incorrect → web fallback.',
+            then: [{ send: ['grader', 'web'], label: 'incorrect', tone: 'miss' }, { lit: 'web' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The fallback path',
+            lines: [
+              'Rewrite into a web query: "node 22 fetch undici proxy ProxyAgent".',
+              'Web returns 5 pages; their strips are scored and 3 are kept.',
+              'The answer cites the web strips and says the internal docs don\'t cover it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['grader', 'web'], label: 'keyword query' },
+              { say: 1 },
+              { send: ['web', 'refine'], label: '5 pages', count: 3 },
+              { badge: 'refine', text: '3 strips kept', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { send: ['refine', 'llm'], label: 'web strips', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Decompose, then recompose',
+            lines: [
+              'Split documents into small *knowledge strips* (a sentence or a few).',
+              'Score each strip, drop the low ones, concatenate the rest.',
+              '"How do I set the SDK timeout?" scores 0.91 → Correct: a 600-token chunk is refined to 2 sentences (90 tokens).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['grader', 'refine'], label: 'correct', tone: 'ok' },
+              { say: 1 },
+              { badge: 'refine', text: 'drop low strips', ms: 1300 },
+              { say: 2 },
+              { send: ['refine', 'llm'], label: '90 tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: no web allowed',
+            lines: ['An internal-only, regulated assistant. Every retrieved doc falls below the lower threshold.'],
+            task: {
+              type: 'choose',
+              question: 'What should the fallback be?',
+              options: [
+                { text: 'Say "I don\'t know"' },
+                { text: 'Search the web anyway', why: 'Avoid web fallback where external data is untrusted or prohibited.' },
+                { text: 'Answer from the low-scoring docs', why: 'Answering from irrelevant context is exactly what CRAG exists to prevent.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Where external data is untrusted or prohibited, the corrective fallback is "I don\'t know".',
+            then: [{ down: 'web' }, { badge: 'llm', text: 'I don\'t know', tone: 'miss' }, { down: 'web', on: false }],
+          },
+        ],
+      },
       body: `**Intuition:** before you let the model read the retrieved pages, a quick "editor" checks them. Good pages are trimmed to the useful sentences; useless pages are thrown out and the editor goes to the web instead; when unsure, it does both.
 
 **Mechanics (Yan et al. 2024):**
@@ -196,6 +301,109 @@ export function refineStrips(text: string, scoreFn: (s: string) => number, minSc
     },
     {
       heading: 'Self-RAG — reflection tokens: retrieve on demand, then critique',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Input', sub: 'who designed, when?', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'Generator', sub: 'reflection tokens', x: 340, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'K passages', x: 570, y: 70 },
+          { id: 'p1', kind: 'document', label: 'p1 Wikipedia', sub: 'Utzon, 1973', x: 800, y: 70 },
+          { id: 'p3', kind: 'document', label: 'p3 Blog', sub: 'opened in 1971', x: 800, y: 230 },
+          { id: 'score', kind: 'metric', label: 'Critique score', sub: 'ISREL·ISSUP·ISUSE', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A writer who checks their sources',
+            lines: [
+              '**Retrieve**: should I look this up before the next segment?',
+              '**ISREL**: is this passage relevant? **ISSUP**: is my segment supported by it?',
+              '**ISUSE**: how useful is the whole response (1–5)?',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: '[Retrieval]', ms: 1200 },
+              { send: ['llm', 'retriever'], label: 'retrieve' },
+              { say: 1 },
+              { send: ['p1', 'score'], label: 'relevant?', curve: true },
+              { say: 2 },
+              { badge: 'score', text: '[Utility:5]', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Retrieve on demand, one candidate per passage',
+            lines: [
+              'The model emits [Retrieval] (P = 0.93) → retrieve 3 passages.',
+              'It writes one candidate segment per passage, in parallel.',
+              'For "Write a haiku about rain" it emits [No Retrieval]: no wasted search.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'input' },
+              { send: ['llm', 'retriever'], label: 'P = 0.93' },
+              { send: ['retriever', 'p1'], label: 'passages' },
+              { say: 1 },
+              { send: ['p1', 'score'], label: 'candidate 1', curve: true },
+              { send: ['p3', 'score'], label: 'candidate 3' },
+              { say: 2 },
+              { badge: 'llm', text: '[No Retrieval]', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which candidate wins?',
+            lines: ['p1: [Relevant] "Jørn Utzon designed it; it opened in 1973." [Fully supported]', 'p3: [Relevant] "It opened in 1971." [No support]'],
+            task: {
+              type: 'pick',
+              question: 'Ranked by LM probability plus weighted critique scores, whose candidate wins?',
+              answer: 'p1',
+              hints: {
+                p3: 'Relevant, but its claim is not supported (ISSUP 0.10): it scores 0.38 against p1\'s 1.27.',
+                retriever: 'The retriever only supplies passages; the candidates come from p1, p2 and p3.',
+              },
+            },
+            solved: 'p1 wins (1.27 vs 0.38): the critique tokens reward the grounded segment.',
+            then: [{ send: ['p1', 'score'], label: '1.27', tone: 'ok', curve: true }, { send: ['p3', 'score'], label: '0.38', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Trained, then tunable',
+            lines: [
+              'A critic labels a corpus with reflection tokens offline; the generator learns them by next-token prediction. No RL.',
+              'At inference, critique weights are tunable without retraining.',
+              'Raise the ISSUP weight for grounded output; lower it for fluency.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { say: 1 },
+              { lit: 'score' },
+              { say: 2 },
+              { badge: 'score', text: 'ISSUP ↑ grounded', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: no weights to train',
+            lines: ['Self-RAG needs a generator trained on reflection tokens.'],
+            task: {
+              type: 'choose',
+              question: 'You only have a closed API model. How do you get Self-RAG-style behaviour?',
+              options: [
+                { text: 'Emulate it: an LLM grader for relevance and groundedness inside a LangGraph loop' },
+                {
+                  text: 'Ask the API model to emit the reflection tokens it was trained on',
+                  why: 'Closed models were not trained with Self-RAG tokens; that needs control of the weights.',
+                },
+                { text: 'You can\'t: skip grounding checks', why: 'You can still grade relevance and groundedness with a separate LLM call.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Real Self-RAG needs your own weights (open models, vLLM); with closed APIs, use grader calls in a loop.',
+            then: [{ send: ['p1', 'score'], label: 'grade', curve: true }, { badge: 'score', text: 'grounded?', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a careful writer pauses mid-paragraph — "do I need to look this up?" — checks whether the source is relevant, writes the sentence, then asks "is that sentence actually backed by the source?". Self-RAG teaches the model to do this with special tokens.
 
 **Reflection tokens (Asai et al., ICLR 2024):**
@@ -350,6 +558,186 @@ export function pickSegment(cands: Cand[], w: W): Cand | undefined {
     },
     {
       heading: 'Adaptive RAG — route by query complexity: no, single-step or multi-step retrieval',
+      short: {
+        id: 'adaptive-rag-route-by-difficulty',
+        title: 'Adaptive RAG: route by difficulty',
+        beats: [
+          {
+            type: 'grid',
+            kicker: '10,000 questions a day · product assistant',
+            head: 'Only *15%* need multi-step',
+            cells: 20,
+            hot: 3,
+            caption: 'Class C needs 3 hops; 25% need no retrieval, 60% need one',
+            sub: 'So why run the **multi-step** path for everything?',
+          },
+          {
+            type: 'race',
+            kicker: 'Average latency per route',
+            head: 'Effort should match the *question*',
+            lanes: [
+              {
+                label: 'A · LLM only',
+                seconds: 0.9,
+                tone: 'good',
+              },
+              {
+                label: 'B · 1 retrieval',
+                seconds: 1.6,
+                tone: 'ion',
+              },
+              {
+                label: 'C · 3 hops',
+                seconds: 4.8,
+                tone: 'pink',
+              },
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'Weighted average latency',
+            value: 1.9,
+            decimals: 1,
+            suffix: ' s',
+            unit: 'versus 4.8 s if every query ran multi-step',
+            sub: '0.25×0.9 + 0.60×1.6 + 0.15×4.8. Tokens: **2,650** vs 7,000.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Jeong et al., NAACL 2024',
+            head: 'Labels come *for free*',
+            steps: [
+              'Run all three strategies on training questions',
+              'Label = the simplest strategy that answered correctly',
+              'Train a small classifier (T5-large in the paper)',
+              'Escalate to a costlier path when unsure',
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Which routing error is usually the most harmful in Adaptive RAG?',
+            options: [
+              {
+                text: 'An easy question routed to multi-step',
+                why: 'It wastes time but usually still answers correctly.',
+              },
+              {
+                text: 'A multi-hop question routed to "no retrieval"',
+                why: 'Right: the model answers from memory with no evidence, often confidently wrong.',
+              },
+              {
+                text: 'A single-step question routed to multi-step',
+                why: 'Over-retrieval costs latency and money but rarely breaks correctness.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Retrieve only as much as the *question* needs.',
+          sub: 'Route A/B/C per query and escalate on low confidence: **under-retrieving** is the dangerous error.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: '10,000 a day', x: 110, y: 150 },
+          { id: 'clf', kind: 'judge', label: 'Classifier', sub: 'labels A / B / C', x: 340, y: 150 },
+          { id: 'a', kind: 'llm', label: 'A: LLM only', sub: 'no retrieval', x: 570, y: 70 },
+          { id: 'b', kind: 'retriever', label: 'B: single-step', sub: 'one lookup', x: 570, y: 230 },
+          { id: 'c', kind: 'agent', label: 'C: multi-step', sub: 'IRCoT-style', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Open the encyclopedia only when needed',
+            lines: [
+              '"What\'s 2 + 2": no lookup. "Who won the 2018 World Cup": one lookup.',
+              'A chained question needs several lookups.',
+              'A small classifier picks the effort: **A** no retrieval, **B** single-step, **C** multi-step.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'clf'], label: 'question' },
+              { send: ['clf', 'a'], label: 'A' },
+              { send: ['clf', 'b'], label: 'B' },
+              { say: 1 },
+              { send: ['clf', 'c'], label: 'C' },
+              { say: 2 },
+              { lit: 'clf' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: classify it',
+            lines: ['"Which plan includes SSO and what\'s its rate limit in EU?"'],
+            task: {
+              type: 'pick',
+              question: 'Which path should this question take?',
+              answer: 'c',
+              hints: {
+                a: 'It depends on your product\'s plans and limits; the LLM alone cannot know them.',
+                b: 'One lookup is not enough: first find the plan with SSO, then its EU rate limit.',
+              },
+            },
+            solved: 'Chained facts → C, the multi-step path (3 hops here).',
+            then: [{ send: ['clf', 'c'], label: 'C', tone: 'ok' }, { lit: 'c' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Where the labels come from',
+            lines: [
+              'Run all three strategies on each training question.',
+              'The **simplest strategy that answers correctly** becomes its label.',
+              'Questions none solve fall back to dataset bias (single-hop → B, multi-hop → C).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['clf', 'a'], label: 'try A' },
+              { send: ['clf', 'b'], label: 'try B' },
+              { send: ['clf', 'c'], label: 'try C' },
+              { say: 1 },
+              { badge: 'b', text: 'simplest correct', tone: 'ok', ms: 1400 },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: label a training question',
+            lines: ['A training question: A answers wrongly; B and C both answer correctly.'],
+            task: {
+              type: 'choose',
+              question: 'What label does it get?',
+              options: [
+                { text: 'B' },
+                { text: 'C', why: 'C also works, but the label is the simplest strategy that answers correctly.' },
+                { text: 'A', why: 'A answered wrongly, so it cannot be the label.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Simplest correct strategy wins, so easy questions never pay for multi-step loops.',
+            then: [{ send: ['clf', 'b'], label: 'B', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What it saves',
+            lines: [
+              'Traffic: 25% A (0.9 s), 60% B (1.6 s), 15% C (4.8 s).',
+              'Weighted average latency **1.9 s**, versus 4.8 s if every query ran multi-step.',
+              'Average tokens 2,650 vs 7,000. The classifier itself adds only a few milliseconds.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'a', text: '25%' },
+              { badge: 'b', text: '60%' },
+              { badge: 'c', text: '15%' },
+              { say: 1 },
+              { badge: 'clf', text: '1.9 s vs 4.8 s', tone: 'ok', ms: 1400 },
+              { say: 2 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** you don't open the encyclopedia to answer "what's 2 + 2", you open it once for "who won the 2018 World Cup", and you open it several times for "who coached the team that won the World Cup the year the Burj Khalifa opened". Adaptive RAG picks the right effort per question.
 
 **Mechanics (Jeong et al., NAACL 2024):**
@@ -502,6 +890,113 @@ export function distribution(labels: Label[]): Record<Label, number> {
     },
     {
       heading: 'Agentic RAG — retrieval as tools inside an LLM reasoning loop',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'checkout spike, 3 Mar', x: 110, y: 150 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'tool-calling loop', x: 340, y: 150 },
+          { id: 'search', kind: 'tool', label: 'search_incidents', sub: 'date, service', x: 570, y: 70 },
+          { id: 'fetch', kind: 'tool', label: 'fetch_document', sub: 'postmortem by id', x: 570, y: 230 },
+          { id: 'budget', kind: 'metric', label: 'Budget', sub: 'step / token cap', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A research assistant with tools',
+            lines: [
+              'Instead of a fixed pipeline, give the model search tools and a goal.',
+              'It plans, searches, reads, notices gaps, searches again…',
+              '…and stops when it has enough, or your loop stops it at a budget.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'agent'], label: 'goal' },
+              { say: 1 },
+              { send: ['agent', 'search'], label: 'tool call' },
+              { send: ['search', 'agent'], label: 'result' },
+              { send: ['agent', 'fetch'], label: 'tool call' },
+              { send: ['fetch', 'agent'], label: 'result' },
+              { say: 2 },
+              { lit: 'budget' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the loop',
+            lines: ['ReAct-style: the model chooses the control flow, your code runs the tools.'],
+            task: {
+              type: 'order',
+              question: 'Put the loop in order.',
+              items: [
+                'System prompt states goal, tools and stopping rules',
+                'Model emits a tool call',
+                'Your code runs it and returns the result',
+                'Loop until the model answers or the budget stops it',
+              ],
+              hint: 'The model needs to know its tools before calling one, and it only sees a result after your code has run the call.',
+            },
+            solved: 'Prompt → tool call → your code executes → loop, until `end_turn` or the budget.',
+            then: [
+              { send: ['agent', 'search'], label: 'call' },
+              { send: ['search', 'agent'], label: 'result' },
+              { send: ['agent', 'user'], label: 'answer', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Investigating the spike',
+            lines: [
+              '`search_incidents` (3 March, checkout) → INC-5120 "payment gateway timeouts".',
+              '`fetch_document` → root cause: connection pool exhaustion after a config change.',
+              '`search_incidents` (February, checkout) → INC-4977 "TLS cert expiry".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'search'], label: '2026-03-03' },
+              { send: ['search', 'agent'], label: 'INC-5120' },
+              { say: 1 },
+              { send: ['agent', 'fetch'], label: 'postmortem' },
+              { send: ['fetch', 'agent'], label: 'pool exhaustion' },
+              { say: 2 },
+              { send: ['agent', 'search'], label: '2026-02' },
+              { send: ['search', 'agent'], label: 'INC-4977' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: same root cause?',
+            lines: ['March: connection pool exhaustion after a config change. February: TLS cert expiry.'],
+            task: {
+              type: 'choose',
+              question: 'What should the agent answer?',
+              options: [
+                { text: 'Different root causes, citing both postmortems' },
+                { text: 'Same cause as February', why: 'That is what the single-shot pipeline said: it retrieved only the March incident.' },
+                { text: 'Not enough evidence yet', why: 'It has both incidents and the March postmortem: enough to answer.' },
+              ],
+              answer: 0,
+            },
+            solved: '4 model turns, 3 tool calls, ~11K input tokens, 6.2 s, and a correct "different causes".',
+            then: [{ send: ['agent', 'user'], label: 'different causes [1][2]', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Pipeline or agent?',
+            lines: [
+              'Pipeline: control flow fixed by code, one index, predictable cost.',
+              'Agentic: flow chosen by the model, many tools, variable cost (N calls).',
+              'Use agents for open-ended, multi-source questions; keep pipelines for high-QPS FAQ traffic.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'budget', text: 'predictable', ms: 1200 },
+              { say: 1 },
+              { send: ['agent', 'search'], label: 'N calls', count: 3 },
+              { say: 2 },
+              { lit: 'agent' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** instead of a fixed pipeline deciding what to search, you give a research assistant a set of search tools and a goal. It plans, searches, reads, notices gaps, searches again, and stops when it has enough — like a human analyst.
 
 **Mechanics:** the LLM runs a tool-calling loop (ReAct-style):

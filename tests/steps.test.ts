@@ -21,17 +21,17 @@ let n = 0;
 
 const withSteps = TOPICS.flatMap((t) => t.sections.flatMap((s, i) => (s.steps ? [{ t, i, s }] : [])));
 
-test('the first three step lessons ship, with cores, and pass the validator', () => {
-  assert.deepEqual(
-    withSteps.map(({ t, i }) => `${t.id}:${i}`),
-    ['prompt-fundamentals:0', 'rag-fundamentals:0', 'agent-fundamentals:2'],
-  );
+test('every section ships a step lesson, and every lesson passes the validator', () => {
+  const missing = TOPICS.flatMap((t) => t.sections.map((s, i) => (s.steps ? null : `${t.id}:${i}`))).filter(Boolean);
+  assert.deepEqual(missing, [], 'sections without a Steps lesson');
   for (const { t, i, s } of withSteps) {
-    assert.deepEqual(checkSteps(s.steps!, `${t.id} §${i + 1}`), []);
-    assert.ok(s.core && wordCount(s.core) <= CORE_MAX_WORDS);
-    assert.ok(s.body.length > s.core!.length, 'the full text is still there');
+    assert.deepEqual(checkSteps(s.steps!, `${t.id} section ${i + 1}`), []);
+    // "Read less" cores stay optional; where one exists it is short and the full text is still there
+    if (s.core) {
+      assert.ok(wordCount(s.core) <= CORE_MAX_WORDS);
+      assert.ok(s.body.length > s.core.length, 'the full text is still there');
+    }
   }
-  assert.equal(TOPICS.flatMap((t) => t.sections).filter((s) => s.core || s.steps).length, 3, 'every other section is unchanged');
 });
 
 test('validator rejects bad steps', () => {
@@ -114,7 +114,7 @@ test('Frame by Frame: sections finished in Steps view, unlocks once, never downg
   const a = achievementById['frame-by-frame'];
   const done = (keys: string[]) => emptyProgress({ steps: Object.fromEntries(keys.map((k) => [k, { missed: 0, at: '2026-11-08T10:00:00Z' }])) });
   const keys = withSteps.map(({ t, i }) => `${t.id}:${i}`);
-  assert.equal(evaluateAchievement(a, done(['rag-fundamentals:3', 'nope:0']), ctx).value, 0, 'only sections that have steps');
+  assert.equal(evaluateAchievement(a, done(['rag-fundamentals:99', 'nope:0']), ctx).value, 0, 'only sections that have steps');
   assert.equal(evaluateAchievement(a, done(keys.slice(0, 1)), ctx).tier, 'bronze');
   assert.equal(evaluateAchievement(a, done(keys), ctx).tier, 'gold');
   const stored = mergeEarned({}, newlyEarned(evaluateAll(done(keys), ctx), {}), 1);

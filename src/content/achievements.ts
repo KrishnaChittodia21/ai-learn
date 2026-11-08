@@ -547,12 +547,12 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: 'From-scratch drills passed on your own: every test green before the solution was shown.',
     group: 'practice',
     art: 'braces',
-    // fixed goals: the drill catalogue (src/content/drills) is not part of the achievement context; 10 = all of them
+    // fixed goals: the drill catalogue (src/content/drills) is not part of the achievement context; 18 = all of them
     tiers: [
       { tier: 'bronze', goal: 1 },
-      { tier: 'silver', goal: 3 },
-      { tier: 'gold', goal: 6 },
-      { tier: 'diamond', goal: 10 },
+      { tier: 'silver', goal: 5 },
+      { tier: 'gold', goal: 10 },
+      { tier: 'diamond', goal: 18 },
     ],
     measure: (p) => Object.values(p.drills ?? {}).filter((d) => d.passedAt && !(d.revealedAt && d.revealedAt < d.passedAt)).length,
     requirement: (goal) => `Pass ${plural(goal, 'from-scratch drill')} without revealing the solution first`,

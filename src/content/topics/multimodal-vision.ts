@@ -33,6 +33,117 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Multimodal AI — one model, many senses',
+      steps: {
+        actors: [
+          { id: 'text', kind: 'document', label: 'Text', sub: '~1 token / 4 chars', x: 110, y: 70 },
+          { id: 'image', kind: 'data', label: 'Image', sub: 'ViT over patches', x: 340, y: 70 },
+          { id: 'audio', kind: 'data', label: 'Audio', sub: 'spectrogram encoder', x: 570, y: 70 },
+          { id: 'video', kind: 'data', label: 'Video', sub: 'sampled frames', x: 800, y: 70 },
+          { id: 'ctx', kind: 'llm', label: 'Transformer', sub: 'one context window', x: 340, y: 230 },
+          { id: 'out', kind: 'document', label: 'Text out', sub: 'understanding', x: 570, y: 230 },
+          { id: 'pix', kind: 'data', label: 'Pixels out', sub: 'generation', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Every sense becomes vectors',
+            lines: [
+              'Each modality is encoded into a sequence of vectors.',
+              'Text → tokens; image → visual tokens from patches; audio → spectrogram tokens; video → frames.',
+              'They all share **one context window**.',
+            ],
+            script: [
+              { say: 0 },
+              { say: 1 },
+              { send: ['text', 'ctx'], label: 'tokens' },
+              { send: ['image', 'ctx'], label: 'visual tokens' },
+              { send: ['audio', 'ctx'] },
+              { send: ['video', 'ctx'], label: 'frames' },
+              { say: 2 },
+              { lit: 'ctx' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Two families',
+            lines: [
+              '**Understanding** models take mixed input and emit text.',
+              '**Generation** models (diffusion, autoregressive image models) emit pixels.',
+              'Any-to-any models do both, but in production you usually compose specialists.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ctx', 'out'], label: 'text', tone: 'ok' },
+              { say: 1 },
+              { send: ['ctx', 'pix'], label: 'pixels' },
+              { say: 2 },
+              { badge: 'ctx', text: 'compose specialists' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which family?',
+            lines: ['Insurance claim: a photo of a dented car door plus "damage happened in the car park".'],
+            task: {
+              type: 'choose',
+              question: 'You want JSON back: part, severity, consistent with the story. Which model family?',
+              options: [
+                { text: 'An understanding model: mixed input in, text out' },
+                { text: 'A generation model', why: 'Generation models emit pixels; here you need text out.' },
+                {
+                  text: 'OCR, then a text-only LLM',
+                  why: 'OCR finds nothing useful in a photo of a door; that pipeline answered "insufficient information".',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Understanding models read pixels and text together and emit text.',
+            then: [
+              { send: ['image', 'ctx'], label: 'photo' },
+              { send: ['text', 'ctx'], label: 'story' },
+              { send: ['ctx', 'out'], label: 'JSON', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Why it matters',
+            lines: [
+              'Lots of knowledge lives in non-text form: scans, dashboards, slides, photos.',
+              'OCR throws away layout, colour and spatial cues.',
+              'Multimodal input keeps them and removes brittle preprocessing.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'image' },
+              { say: 1 },
+              { send: ['image', 'ctx'], label: 'OCR text', tone: 'miss' },
+              { badge: 'ctx', text: 'layout lost', tone: 'err' },
+              { say: 2 },
+              { send: ['image', 'ctx'], label: 'pixels', tone: 'ok' },
+              { send: ['ctx', 'out'], label: 'answer', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to use it',
+            lines: ['Images cost tokens; a clean text layer is cheap.'],
+            task: {
+              type: 'choose',
+              question: 'You have a born-digital PDF with a clean text layer and no charts. What do you send?',
+              options: [
+                { text: 'The text: cheaper, faster and easier to cite' },
+                {
+                  text: 'Page images to a multimodal model',
+                  why: 'Go multimodal when the visual layout carries meaning; here clean text already exists.',
+                },
+                { text: 'Both, every time', why: 'Images dominate cost; send them only when layout carries meaning.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Multimodal when layout carries meaning (charts, forms, screenshots); text-only when clean text exists.',
+          },
+        ],
+      },
       body: `**Intuition:** a multimodal model is like a colleague who can read the email *and* look at the screenshot attached to it. Instead of a separate OCR → text → LLM chain, the model consumes pixels, audio or video and text in **one context window** and reasons across them.
 
 **Mechanics.** Every modality is turned into a sequence of vectors the transformer can attend over:
@@ -178,6 +289,110 @@ console.log(chooseInputMode({ hasTextLayer: true, textChars: 400, pages: 10, con
     },
     {
       heading: 'Vision-Language Models — encoder, projector, LLM',
+      steps: {
+        actors: [
+          { id: 'img', kind: 'data', label: 'Image', sub: '336×336 px', x: 110, y: 70 },
+          { id: 'enc', kind: 'embedder', label: 'Vision encoder', sub: 'ViT · CLIP/SigLIP', x: 340, y: 70 },
+          { id: 'proj', kind: 'tool', label: 'Projector', sub: '1024-d → 4096-d', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'reads visual tokens', x: 800, y: 70 },
+          { id: 'tiles', kind: 'data', label: 'Tiles', sub: 'thumbnail + crops', x: 110, y: 230 },
+          { id: 'text', kind: 'user', label: 'Text prompt', sub: 'the question', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three parts',
+            lines: [
+              'A **vision encoder** (a ViT) turns image patches into vectors.',
+              'A small **projector** translates them into the LLM\'s embedding space.',
+              'The **LLM** reads them as if they were very dense words.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['img', 'enc'], label: 'patches' },
+              { say: 1 },
+              { send: ['enc', 'proj'], label: 'vectors' },
+              { say: 2 },
+              { send: ['proj', 'llm'], label: 'visual tokens', tone: 'ok' },
+              { send: ['text', 'llm'], label: 'question' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: count the patches',
+            lines: ['Each patch becomes one vector.'],
+            task: {
+              type: 'choose',
+              question: 'A 336×336 image with 14-px patches gives how many patch vectors?',
+              options: [
+                { text: '576 (24 × 24)' },
+                { text: '24', why: 'That is patches per side; square it: 24 × 24.' },
+                { text: '336', why: '336 is the side in pixels; divide by the 14-px patch, then square.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Patch count = (side / patch size)² = 24² = 576.',
+            then: [{ send: ['img', 'enc'], label: 'patches' }, { badge: 'enc', text: '576 vectors', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Splicing into the text',
+            lines: [
+              'The projector maps vision dims (e.g. 1024) to LLM dims (e.g. 4096).',
+              'Visual tokens are spliced into the text sequence.',
+              'Normal self-attention lets text tokens attend to image regions.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['enc', 'proj'], label: '1024-d' },
+              { badge: 'proj', text: '→ 4096-d' },
+              { say: 1 },
+              { send: ['proj', 'llm'], label: 'visual tokens' },
+              { say: 2 },
+              { send: ['text', 'llm'], label: 'text tokens' },
+              { lit: 'llm' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: training stage 1',
+            lines: ['Training usually runs in two stages.'],
+            task: {
+              type: 'choose',
+              question: 'In the first stage, what gets trained?',
+              options: [
+                { text: 'Only the projector, on image–caption pairs' },
+                {
+                  text: 'The whole LLM from scratch',
+                  why: 'Encoder and LLM stay frozen in stage 1; stage 2 instruction-tunes the LLM (often with LoRA).',
+                },
+                { text: 'Only the vision encoder', why: 'The encoder is pre-trained contrastively and frozen here.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Stage 1 aligns via the projector; stage 2 visual instruction tuning unfreezes the LLM.',
+            then: [{ lit: 'proj' }, { badge: 'proj', text: 'trained', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'High resolution costs tokens',
+            lines: [
+              'Encoders train at fixed sizes, so big images are tiled: a thumbnail plus crops.',
+              '672×672 as 4 crops + 1 thumbnail: 5 × 576 = **2,880** visual tokens.',
+              'A 2×2 pooling projector cuts that to **720**, trading fine detail for cost.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tiles', 'enc'], label: 'crops', tone: 'req', count: 5 },
+              { say: 1 },
+              { badge: 'enc', text: '2,880 tokens', tone: 'miss' },
+              { say: 2 },
+              { send: ['enc', 'proj'] },
+              { badge: 'proj', text: '720 tokens', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a VLM is a translator bolted onto an LLM. A vision encoder "describes" the image in its own vector language; a small projector translates those vectors into the LLM's embedding space; the LLM then reads them as if they were (very dense) words.
 
 **The three parts.**
@@ -307,6 +522,186 @@ console.log(visualTokens(1344, 672, 14, 1, 672)); // 1152`,
     },
     {
       heading: 'Image Understanding — APIs, token costs, documents and charts',
+      short: {
+        id: 'image-tokens-crop-the-invoice',
+        title: 'Images cost tokens: crop them',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'One scanned A4 invoice · 1240×1754 px',
+            head: 'Every pixel is *paid for*',
+            rungs: [
+              {
+                label: 'Full page, before the cap',
+                amount: 2240,
+              },
+              {
+                label: 'Full page, downscaled to the cap',
+                amount: 1568,
+              },
+              {
+                label: 'Cropped to the line-item table',
+                amount: 1000,
+              },
+            ],
+            unit: 'tokens (Claude standard tier)',
+            sub: 'The crop is cheaper **and** the text is larger in the frame.',
+          },
+          {
+            type: 'counter',
+            kicker: 'The patch maths',
+            value: 28,
+            unit: 'px square patches',
+            sub: 'tokens ≈ ceil(w/28) × ceil(h/28): the 1100×700 crop is **40 × 25 = 1,000**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Documents and charts',
+            head: '*Transcribe* before you reason',
+            steps: [
+              'Render pages at ~150 DPI, crop margins',
+              'Image first, then a precise question and a JSON schema',
+              'Read axis labels, legend and values, then answer',
+              'Validate: totals must sum, dates must parse',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'A deterministic check',
+            value: 3,
+            suffix: '%',
+            unit: 'of extractions misread a digit',
+            sub: 'Caught by checking that **sum(lines) = total**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Your agent resends the same 1 MB base64 screenshot on each of 12 turns. Best fix?',
+            answer: 1,
+            options: [
+              {
+                text: 'Switch to OpenAI detail: "low" so it costs 85 tokens',
+                why: 'It changes token cost but may destroy legibility.',
+              },
+              {
+                text: 'Upload it once via the Files API and reference its file_id',
+                why: 'Each request resends the full history; a file id keeps the payload small.',
+              },
+              {
+                text: 'Drop the image after turn 1',
+                why: 'That loses it from context entirely.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Treat resolution like a *budget*.',
+          sub: 'Crop to the region of interest, transcribe first, then **validate** with code.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'img', kind: 'data', label: 'Image', sub: 'base64/URL/file id', x: 110, y: 70 },
+          { id: 'crop', kind: 'tool', label: 'Crop', sub: 'region of interest', x: 340, y: 70 },
+          { id: 'model', kind: 'llm', label: 'VLM', sub: 'transcribe → reason', x: 570, y: 70 },
+          { id: 'check', kind: 'judge', label: 'Validator', sub: 'totals · dates', x: 800, y: 70 },
+          { id: 'budget', kind: 'metric', label: 'Token cost', sub: 'ceil(w/28)×ceil(h/28)', x: 340, y: 230 },
+          { id: 'out', kind: 'document', label: 'JSON', sub: 'vendor, total, lines', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An image is a content block',
+            lines: ['Send an image as base64, a URL or a file id.', 'Every pixel you send is paid for in tokens.', 'Treat resolution like a budget.'],
+            script: [
+              { say: 0 },
+              { send: ['img', 'model'], label: 'image block', tone: 'req', curve: true },
+              { say: 1 },
+              { lit: 'budget' },
+              { badge: 'budget', text: 'pixels = tokens' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which source?',
+            lines: ['base64 for private one-offs, URL for public or signed links…'],
+            task: {
+              type: 'choose',
+              question: 'The same image is reused across many turns. How do you send it?',
+              options: [
+                { text: 'As a file id' },
+                { text: 'As base64 every turn', why: 'base64 suits private files and one-off calls.' },
+                { text: 'As a URL', why: 'URLs suit public/signed links and smaller requests; a file id is for reuse.' },
+              ],
+              answer: 0,
+            },
+            solved: 'base64 for one-offs, URL for public/signed links, file id for reuse across turns.',
+          },
+          {
+            kind: 'watch',
+            title: 'Crop to the region you need',
+            lines: [
+              'Claude tokens ≈ ceil(w/28) × ceil(h/28), downscaled to a per-model cap.',
+              'A full A4 invoice scan: ≈1,568 tokens. Cropped to the line-item table: **1,000**.',
+              'The text is also larger in the frame, so cropping is cheaper and more accurate.',
+            ],
+            script: [
+              { say: 0 },
+              { say: 1 },
+              { badge: 'budget', text: '≈1,568 tokens', tone: 'miss' },
+              { send: ['img', 'crop'] },
+              { send: ['crop', 'model'], label: 'table only', tone: 'ok' },
+              { badge: 'budget', text: '1,000 tokens', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the document recipe',
+            lines: ['A practical recipe for documents and charts.'],
+            task: {
+              type: 'order',
+              question: 'Put the steps in order.',
+              items: [
+                'Render pages at ~150 DPI and crop margins',
+                'Image first, then the question and a JSON schema',
+                'Transcribe labels and values',
+                'Reason to the answer',
+                'Validate: totals sum, dates parse',
+              ],
+              hint: 'Prepare the image, prompt it, have the model read before it thinks, then check deterministically.',
+            },
+            solved: 'Transcribe before you reason, then validate; on failure re-ask with a zoomed crop.',
+            then: [
+              { send: ['crop', 'model'], label: 'image + schema' },
+              { send: ['model', 'check'], label: 'JSON' },
+              { send: ['check', 'out'], label: 'valid', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Validate deterministically',
+            lines: [
+              'Checks: totals must sum, dates must parse.',
+              'On failure, re-ask with a zoomed crop.',
+              'A sum(lines) = total check caught 3% of extractions that misread a digit.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['model', 'check'], label: 'JSON' },
+              { badge: 'check', text: 'sum ≠ total', tone: 'err' },
+              { say: 1 },
+              { send: ['check', 'crop'], label: 'zoom', tone: 'req', curve: true },
+              { send: ['crop', 'model'] },
+              { send: ['model', 'check'], label: 'JSON' },
+              { badge: 'check', text: 'valid', tone: 'ok' },
+              { say: 2 },
+              { send: ['check', 'out'], label: 'stored', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** sending an image is just another content block in the message array — but every pixel you send is paid for in tokens, so treat resolution like a budget.
 
 **Three ways to send an image.**
@@ -463,6 +858,110 @@ console.log(claudeImageTokens(3840, 2160)); // <= 1568`,
     },
     {
       heading: 'Image Generation — diffusion, guidance and image APIs',
+      steps: {
+        actors: [
+          { id: 'noise', kind: 'data', label: 'Pure noise', sub: 'x_T ~ N(0, I)', x: 110, y: 70 },
+          { id: 'net', kind: 'llm', label: 'Denoiser', sub: 'U-Net or DiT', x: 340, y: 70 },
+          { id: 'latent', kind: 'data', label: 'Latent', sub: '128×128×4', x: 570, y: 70 },
+          { id: 'vae', kind: 'tool', label: 'VAE decoder', sub: 'latent → pixels', x: 800, y: 70 },
+          { id: 'prompt', kind: 'user', label: 'Prompt', sub: 'text embedding', x: 110, y: 230 },
+          { id: 'cfg', kind: 'metric', label: 'Guidance w', sub: 'CFG scale', x: 340, y: 230 },
+          { id: 'img', kind: 'document', label: 'Image', sub: '1024×1024', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A sculptor working back from static',
+            lines: [
+              'Training adds noise to real images and teaches a network to **predict that noise**.',
+              'Generation starts from pure noise and removes a little predicted noise each step.',
+              'Your prompt steers every step, for 20–50 steps.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'net' },
+              { badge: 'net', text: 'predict ε' },
+              { say: 1 },
+              { send: ['noise', 'net'] },
+              { send: ['net', 'latent'], label: 'less noise', tone: 'ok', count: 3 },
+              { say: 2 },
+              { send: ['prompt', 'net'], label: 'steer' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why a latent?',
+            lines: ['A VAE compresses 1024×1024×3 pixels to a 128×128×4 latent.'],
+            task: {
+              type: 'choose',
+              question: 'Why does Stable Diffusion run diffusion in that latent instead of on pixels?',
+              options: [
+                { text: 'About 48× fewer values to process, decoded to pixels only at the end' },
+                { text: 'Latents hold more detail than pixels', why: 'The VAE compresses; the win is fewer values, not more detail.' },
+                { text: 'It removes the need for a prompt', why: 'The prompt still steers every step.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Latent diffusion works on ~48× fewer values; that made it run on consumer GPUs.',
+            then: [{ send: ['latent', 'vae'], label: 'latent' }, { send: ['vae', 'img'], label: 'pixels', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Classifier-free guidance',
+            lines: [
+              'Run the model with and without the prompt.',
+              'Extrapolate: `ε = ε_uncond + w·(ε_cond − ε_uncond)`.',
+              'Negative prompts replace the unconditional branch.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'net'], label: 'with prompt' },
+              { send: ['noise', 'net'], label: 'without', tone: 'miss' },
+              { say: 1 },
+              { lit: 'cfg' },
+              { send: ['cfg', 'net'], label: 'w' },
+              { badge: 'net', text: 'extrapolate' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick w',
+            lines: ['At one step: ε_uncond = 0.20, ε_cond = 0.50.'],
+            task: {
+              type: 'choose',
+              question: 'Which guidance scale balances prompt adherence and image quality?',
+              options: [
+                { text: 'w ≈ 5–8' },
+                { text: 'w = 1', why: 'w = 1 gives 0.50: the prompt is followed only loosely.' },
+                { text: 'w = 15', why: 'Above ~12 you get oversaturated, artefact-heavy images: burnt colours, duplicated objects.' },
+              ],
+              answer: 0,
+            },
+            solved: 'w ≈ 5–8; at w = 7 the push is 0.20 + 7 × 0.30 = 2.30.',
+            then: [{ badge: 'cfg', text: 'w = 7', tone: 'ok' }, { send: ['cfg', 'net'], label: 'w' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Image APIs, responsibly',
+            lines: [
+              'Hosted APIs (gpt-image, Imagen, Stability) take a prompt and return base64.',
+              'Edits use **inpainting** (mask + prompt); ControlNet adds control.',
+              'Always add C2PA provenance and run output safety classification.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompt', 'net'], label: 'prompt' },
+              { send: ['vae', 'img'], label: 'base64' },
+              { say: 1 },
+              { badge: 'img', text: 'mask + prompt' },
+              { say: 2 },
+              { badge: 'img', text: 'C2PA label', tone: 'ok' },
+              { badge: 'img', text: 'safety checked', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a diffusion model is a sculptor working backwards from static. Training teaches it to recognise "how much noise is in this picture"; generation starts from pure noise and removes a little predicted noise at each step, steered by your prompt, until an image emerges.
 
 **Mechanics.**

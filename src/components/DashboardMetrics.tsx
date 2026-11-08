@@ -9,29 +9,23 @@ import {
   activityGrid,
   attemptTimeline,
   averageBest,
-  difficultyAccuracy,
   examScores,
   mcqAccuracy,
   practiceVolume,
-  ratingCounts,
 } from '../lib/metrics';
 import { CountUp } from './CountUp';
 import { ChartCard } from './charts/ChartCard';
 import { StatTile } from './charts/StatTile';
 import { BarList } from './charts/BarList';
-import { ColumnChart } from './charts/ColumnChart';
 import { LineChart } from './charts/LineChart';
-import { StackedBar } from './charts/StackedBar';
 import { Heatmap } from './charts/Heatmap';
-
-const LEVEL_LABEL: Record<string, string> = { medium: 'Medium', hard: 'Hard', expert: 'Expert' };
 
 function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /**
- * The Today page's "Study record": a row of ledger figures plus a grid of ruled chart panels. Topics covered and
+ * Track's "Study record": a row of ledger figures plus a grid of ruled chart panels. Topics covered and
  * the study streak already sit in the ledger at the top of the page, so they are not repeated here.
  */
 export function DashboardMetrics({
@@ -54,8 +48,6 @@ export function DashboardMetrics({
   const avg = averageBest(p, topics);
   const acc = mcqAccuracy(p, topics);
   const accPct = acc.seen ? Math.round((acc.correct / acc.seen) * 100) : null;
-  const levels = difficultyAccuracy(p, topics);
-  const ratings = ratingCounts(p, topics);
   const timeline = attemptTimeline(p, topics);
   const streak = studyStreak(p.activityDays, today);
   const week = activeDaysLastWeek(p.activityDays, today);
@@ -86,51 +78,9 @@ export function DashboardMetrics({
           meter={accPct ?? undefined}
           hint={acc.seen ? `${acc.correct}/${acc.seen} latest answers right` : 'answer a question to see this'}
         />
-        <StatTile
-          label="Interview Qs practised"
-          value={
-            <>
-              <CountUp value={ratings.rated} />
-              <span className="dv-stat-of">/{ratings.total}</span>
-            </>
-          }
-          meter={(ratings.rated / Math.max(1, ratings.total)) * 100}
-          hint="self-rated after answering"
-        />
       </div>
 
       <div className="dv-grid-cards">
-        <ChartCard
-          title="Exam scores"
-          subtitle={scores.length ? `Best score per exam, most recent first · line = pass mark ${passMark}%` : undefined}
-          empty={
-            scores.length ? undefined : (
-              <>
-                <p>Take your first exam to see your scores against the pass mark here.</p>
-                {takeExam}
-              </>
-            )
-          }
-          table={{
-            columns: ['Topic', 'Best', 'Last', 'Attempts', 'Passed'],
-            rows: scores.map((s) => [s.title, `${s.best}%`, `${s.last}%`, s.attempts, s.passed ? 'Yes' : 'No']),
-          }}
-        >
-          <BarList
-            seriesLabel="Best exam score per topic"
-            reference={{ value: passMark, label: `Pass mark ${passMark}%` }}
-            rows={scores.slice(0, 8).map((s) => ({
-              id: s.id,
-              label: s.title,
-              value: s.best,
-              display: `${s.best}%`,
-              detail: `last ${s.last}% · ${s.attempts} attempt${s.attempts === 1 ? '' : 's'} · ${s.passed ? 'passed' : 'not passed'}`,
-              href: `/topic/${s.id}?tab=exam`,
-            }))}
-          />
-          {scores.length > 8 && <p className="small muted">Showing the 8 most recent of {scores.length}. The table lists all.</p>}
-        </ChartCard>
-
         <ChartCard
           title="Score trend"
           subtitle={timeline.length >= 2 ? `Your last ${timeline.length} full-length exam attempts, oldest → newest` : undefined}
@@ -152,55 +102,6 @@ export function DashboardMetrics({
             reference={{ value: passMark, label: 'Pass' }}
             points={timeline.map((a, i) => ({ id: `${a.topicId}-${i}`, value: a.score, x: shortDate(a.at), label: a.title }))}
           />
-        </ChartCard>
-
-        <ChartCard
-          title="Accuracy by difficulty"
-          subtitle={levels.length ? 'Share of exam questions whose latest answer is right' : undefined}
-          empty={
-            levels.length ? undefined : (
-              <>
-                <p>Answer some exam questions to see where difficulty trips you up.</p>
-                {takeExam}
-              </>
-            )
-          }
-          table={{ columns: ['Difficulty', 'Accuracy', 'Right', 'Answered'], rows: levels.map((l) => [LEVEL_LABEL[l.level], `${l.pct}%`, l.correct, l.seen]) }}
-        >
-          <ColumnChart columns={levels.map((l) => ({ id: l.level, label: LEVEL_LABEL[l.level], value: l.pct, display: `${l.pct}%`, detail: `${l.correct} of ${l.seen} right` }))} />
-        </ChartCard>
-
-        <ChartCard
-          title="Interview self-ratings"
-          subtitle={ratings.rated ? `${ratings.rated} of ${ratings.total} interview questions rated` : undefined}
-          legend={[
-            { label: `Nailed (${ratings.nailed})`, color: 'var(--dv-ord-3)' },
-            { label: `Partial (${ratings.partial})`, color: 'var(--dv-ord-2)' },
-            { label: `Missed (${ratings.missed})`, color: 'var(--dv-ord-1)' },
-          ]}
-          empty={
-            ratings.rated ? undefined : (
-              <>
-                <p>Answer an interview question out loud, then rate yourself nailed, partial or missed. Your mix shows up here.</p>
-                <Link className="btn" to="/contents">
-                  Find interview questions
-                </Link>
-              </>
-            )
-          }
-          table={{
-            columns: ['Rating', 'Questions', 'Share'],
-            rows: (['nailed', 'partial', 'missed'] as const).map((k) => [k[0].toUpperCase() + k.slice(1), ratings[k], `${Math.round((ratings[k] / Math.max(1, ratings.rated)) * 100)}%`]),
-          }}
-        >
-          <StackedBar
-            segments={[
-              { id: 'nailed', label: 'Nailed', value: ratings.nailed, color: 'var(--dv-ord-3)', ink: 'var(--dv-ink-3)' },
-              { id: 'partial', label: 'Partial', value: ratings.partial, color: 'var(--dv-ord-2)', ink: 'var(--dv-ink-2)' },
-              { id: 'missed', label: 'Missed', value: ratings.missed, color: 'var(--dv-ord-1)', ink: 'var(--dv-ink-1)' },
-            ]}
-          />
-          <p className="small muted">Partial and missed questions count as weak areas until you re-rate them.</p>
         </ChartCard>
 
         <ChartCard

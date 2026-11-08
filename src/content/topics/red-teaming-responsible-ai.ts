@@ -43,6 +43,112 @@ const topic: Topic = {
   sections: [
     {
       heading: 'AI Red Teaming — garak, PyRIT and promptfoo in a release pipeline',
+      steps: {
+        actors: [
+          { id: 'scope', kind: 'document', label: 'Threat model', sub: 'harm taxonomy', x: 110, y: 70 },
+          { id: 'gen', kind: 'agent', label: 'Attack generator', sub: 'garak·PyRIT·promptfoo', x: 340, y: 70 },
+          { id: 'app', kind: 'server', label: 'Your app', sub: 'tools · RAG · prompts', x: 570, y: 70 },
+          { id: 'score', kind: 'judge', label: 'Scorers', sub: 'detectors + judges', x: 800, y: 70 },
+          { id: 'ci', kind: 'metric', label: 'ASR per category', sub: 'release gate in CI', x: 340, y: 230 },
+          { id: 'human', kind: 'user', label: 'Human verify', sub: 'samples of results', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A fire drill',
+            lines: [
+              'Deliberately try to make the product misbehave: leak data, act without authorisation, produce harmful content.',
+              'Find the weak spots before real users or attackers do.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['gen', 'app'], label: 'attacks', tone: 'err', count: 3 },
+              { badge: 'app', text: 'leaks?', tone: 'err' },
+              { say: 1 },
+              { send: ['app', 'score'], label: 'outputs' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: scope',
+            lines: ['Define purpose, users, assets, tools, harm categories, and what counts as a successful attack.'],
+            task: {
+              type: 'choose',
+              question: 'Where do most real findings come from?',
+              options: [
+                { text: 'The application layer: over-privileged tools, cross-tenant retrieval, leaky prompts, unsafe rendering' },
+                { text: 'The base model on its own', why: 'Scope the system, not just the model.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Red-team the whole application, with a clear threat model.',
+            then: [{ send: ['scope', 'gen'], label: 'harm taxonomy' }, { send: ['gen', 'app'], label: 'attacks', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The tools',
+            lines: [
+              '**garak**: broad scans of a model endpoint (injection, encodings, leakage, toxicity).',
+              '**PyRIT**: custom and multi-turn campaigns, such as Crescendo.',
+              '**promptfoo**: app-level tests in CI, with reports per plugin.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'gen', text: 'garak sweep' },
+              { send: ['gen', 'app'] },
+              { say: 1 },
+              { badge: 'gen', text: 'PyRIT campaign' },
+              { send: ['gen', 'app'], label: 'multi-turn', tone: 'req', count: 3 },
+              { say: 2 },
+              { badge: 'gen', text: 'promptfoo in CI' },
+              { send: ['score', 'ci'], label: 'report' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the process',
+            lines: ['Automation gives volume; people give creativity and verification.'],
+            task: {
+              type: 'order',
+              question: 'Put the red-team process in order.',
+              items: [
+                'Threat model → harm taxonomy',
+                'Automated generation at volume',
+                'Manual expert red teaming',
+                'Score, then human-verify a sample',
+                'Report ASR; fix; add regressions to CI',
+              ],
+              hint: 'You need a taxonomy to generate against, and verified scores before you report.',
+            },
+            solved: 'Every confirmed finding becomes a regression test.',
+            then: [
+              { send: ['scope', 'gen'] },
+              { send: ['gen', 'app'] },
+              { send: ['app', 'score'] },
+              { send: ['score', 'human'], label: 'sample' },
+              { send: ['score', 'ci'], label: 'ASR', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Fix the root cause, then gate',
+            lines: [
+              'Other-customer data (BOLA) failed 7%: getTransactions took accountId from the model.',
+              'Fix: bind account ids server-side. Re-run: 0 / 200.',
+              'Release gate: no category above 2% attack success rate.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['gen', 'app'], label: 'bola', tone: 'err' },
+              { badge: 'app', text: '7.0% ASR', tone: 'err' },
+              { say: 1 },
+              { badge: 'app', text: '0 / 200', tone: 'ok' },
+              { say: 2 },
+              { badge: 'ci', text: '≤ 2% per category', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** red teaming is a fire drill for your AI product. You deliberately try to make it misbehave — leak data, take unauthorised actions, produce harmful content — so you find the weak spots before real users or attackers do.
 
 **Scope the system, not just the model.** Most real findings come from the application layer: tools with too much privilege, retrieval that crosses tenants, system prompts that leak, outputs rendered unsafely. Define: purpose, users, assets, tools, harm categories, and what "success" means for an attack.
@@ -209,6 +315,101 @@ console.log(asrReport(demo));
     },
     {
       heading: 'Responsible AI — fairness tests, transparency and model cards',
+      steps: {
+        actors: [
+          { id: 'cvA', kind: 'document', label: 'CV + name A', sub: 'all else identical', x: 110, y: 70 },
+          { id: 'cvB', kind: 'document', label: 'CV + name B', sub: 'all else identical', x: 110, y: 230 },
+          { id: 'model', kind: 'llm', label: 'Screening LLM', sub: 'fit score 1–10', x: 340, y: 150 },
+          { id: 'ratio', kind: 'metric', label: 'Selection ratio', sub: 'four-fifths ≥ 0.8', x: 570, y: 150 },
+          { id: 'card', kind: 'document', label: 'System card', sub: 'tests + risks', x: 800, y: 70 },
+          { id: 'owner', kind: 'user', label: 'Named owner', sub: 'accountable', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Who could it hurt?',
+            lines: [
+              'Responsible AI asks: who could this system hurt, and how would we know?',
+              'It turns fairness, transparency and accountability into **tests, documents and owners**.',
+            ],
+            script: [{ say: 0 }, { lit: 'model' }, { say: 1 }, { send: ['ratio', 'card'], label: 'tests' }, { lit: 'owner' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A counterfactual test',
+            lines: [
+              'Hold the input fixed; swap only a protected-attribute signal, such as the name.',
+              'Compare outcomes: scores, decisions, tone, refusal rates.',
+              '500 real CVs, each run twice with the name swapped.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cvA', 'model'], label: 'name A' },
+              { send: ['cvB', 'model'], label: 'name B' },
+              { say: 1 },
+              { badge: 'model', text: 'A 6.42 · B 6.05', tone: 'miss' },
+              { say: 2 },
+              { send: ['model', 'ratio'], label: 'shortlists' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the four-fifths rule',
+            lines: ['Shortlist rate (score ≥ 7): group A 31%, group B 24%.'],
+            task: {
+              type: 'choose',
+              question: 'The selection ratio is 24 / 31 = 0.77. Does it pass?',
+              options: [
+                { text: 'No: below 0.8 fails the four-fifths rule' },
+                { text: 'Yes: the gap is only 7 points', why: 'The rule compares the ratio of rates, which must be at least 0.8.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Fix: remove names, photos and addresses and score on a rubric. Re-test: 29% vs 28%, ratio 0.97.',
+            then: [
+              { badge: 'ratio', text: '0.77', tone: 'err' },
+              { send: ['model', 'ratio'], label: 're-test' },
+              { badge: 'ratio', text: '0.97', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Transparency',
+            lines: [
+              '**Model cards**: intended use, out-of-scope use, results sliced by group, limitations.',
+              '**System cards** cover the full app: model + prompts + tools + guardrails.',
+              'Tell people they are interacting with AI, and give reasons and recourse for decisions.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'card' },
+              { say: 1 },
+              { send: ['ratio', 'card'], label: 'test results' },
+              { say: 2 },
+              { badge: 'card', text: 'AI disclosed', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when it is required',
+            lines: ['Accountability: a named owner, a risk assessment, human oversight, an incident channel.'],
+            task: {
+              type: 'choose',
+              question: 'Which system needs fairness testing and documentation before launch?',
+              options: [
+                { text: 'A CV-screening assistant used in hiring' },
+                {
+                  text: 'A low-risk internal tool',
+                  why: 'Lower-risk tools still need disclosure and basic evaluation; fairness testing is for systems affecting opportunities, access or treatment.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Hiring, lending, healthcare, education and public services need fairness tests and documentation first.',
+            then: [{ lit: 'owner' }, { send: ['owner', 'card'], label: 'signs off', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** responsible AI asks "who could this system hurt, and how would we know?" It turns values like fairness, transparency and accountability into **tests, documents and owners**.
 
 **Fairness for LLM applications.** You rarely have a single score to audit, so test behaviour:
@@ -357,6 +558,108 @@ export function equalisedOdds(records: Rec[]) {
     },
     {
       heading: 'AI Governance — NIST AI RMF, EU AI Act risk tiers and ISO 42001',
+      steps: {
+        actors: [
+          { id: 'use', kind: 'tool', label: 'Use case', sub: 'to classify', x: 110, y: 150 },
+          { id: 'eu', kind: 'guard', label: 'EU AI Act', sub: 'binding, risk tiers', x: 340, y: 70 },
+          { id: 'nist', kind: 'document', label: 'NIST AI RMF', sub: 'voluntary, US', x: 340, y: 230 },
+          { id: 'board', kind: 'user', label: 'Governance board', sub: 'owns the policy', x: 570, y: 70 },
+          { id: 'iso', kind: 'document', label: 'ISO/IEC 42001', sub: 'certifiable AIMS', x: 570, y: 230 },
+          { id: 'inv', kind: 'data', label: 'AI inventory', sub: 'owner · tier · review', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The operating system for AI',
+            lines: ['Who may build what, how risks are assessed, which controls are mandatory, and how you prove it.', 'Three frameworks dominate.'],
+            script: [{ say: 0 }, { lit: 'board' }, { send: ['use', 'board'], label: 'proposal' }, { say: 1 }, { lit: 'eu' }, { lit: 'nist' }, { lit: 'iso' }],
+          },
+          {
+            kind: 'watch',
+            title: 'NIST AI RMF',
+            lines: [
+              'Four functions: **Govern**, **Map**, **Measure**, **Manage**.',
+              'Voluntary, US: the practical risk method.',
+              'The Generative AI Profile (NIST AI 600-1) lists GenAI-specific risks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['use', 'nist'] },
+              { badge: 'nist', text: 'Govern·Map·Measure·Manage' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'nist', text: 'AI 600-1' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'EU AI Act tiers',
+            lines: [
+              'Binding law, risk-based: **prohibited**, **high-risk**, **transparency**, **minimal**.',
+              'GPAI model duties apply since 2 Aug 2025.',
+              'Fines reach up to €35M or 7% of global turnover for prohibited practices.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['use', 'eu'], label: 'classify' },
+              { badge: 'eu', text: 'which tier?' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'eu', text: '€35M or 7%', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: classify it',
+            lines: ['Three internal use cases: a code assistant, a support chatbot, CV ranking for hiring.'],
+            task: {
+              type: 'choose',
+              question: 'CV ranking for hiring falls into which EU AI Act tier?',
+              options: [
+                { text: 'High-risk (Annex III, employment)' },
+                { text: 'Transparency', why: 'Transparency covers e.g. the support chatbot: disclose AI, label generated content.' },
+                { text: 'Minimal', why: 'Minimal fits e.g. the internal code assistant.' },
+              ],
+              answer: 0,
+            },
+            solved: 'High-risk: risk management, data governance, logging, human oversight, conformity assessment.',
+            then: [{ send: ['use', 'eu'], label: 'CV ranking' }, { badge: 'eu', text: 'high-risk', tone: 'err' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which framework?',
+            lines: ['You want a certifiable AI management system that integrates with ISO 27001.'],
+            task: {
+              type: 'choose',
+              question: 'Which one?',
+              options: [
+                { text: 'ISO/IEC 42001' },
+                { text: 'NIST AI RMF', why: 'A voluntary, practical risk method, not a certification.' },
+                { text: 'EU AI Act', why: 'Binding law you classify use cases against, not a management-system certificate.' },
+              ],
+              answer: 0,
+            },
+            solved: 'NIST for the risk method, ISO 42001 for certification, the EU AI Act for mandatory controls.',
+            then: [{ lit: 'iso' }, { badge: 'iso', text: 'certified', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Keep an inventory',
+            lines: [
+              'Record owner, tier, model/vendor, last red-team date and next review.',
+              'Tiering = Map; evals and red teaming = Measure; launch gates = Manage; board + inventory = Govern.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['board', 'inv'], label: 'owner + tier' },
+              { send: ['eu', 'inv'], label: 'tier' },
+              { say: 1 },
+              { send: ['nist', 'inv'], label: 'evidence' },
+              { badge: 'inv', text: 'next review', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** governance is the operating system for AI in an organisation: who may build what, how risks are assessed, which controls are mandatory, and how you prove it. Three frameworks dominate.
 
 **NIST AI RMF 1.0 (voluntary, US).** Four functions:
@@ -509,6 +812,180 @@ console.log(reviewSchedule([
     },
     {
       heading: 'Watermarking AI text — green lists, SynthID and their limits',
+      steps: {
+        actors: [
+          { id: 'prev', kind: 'data', label: 'Previous token', sub: 'hashed each step', x: 110, y: 70 },
+          { id: 'key', kind: 'guard', label: 'Secret key', sub: 'kept server-side', x: 110, y: 230 },
+          { id: 'split', kind: 'tool', label: 'Green list', sub: 'fraction γ', x: 340, y: 150 },
+          { id: 'logits', kind: 'llm', label: 'Model logits', sub: '+δ on green', x: 570, y: 70 },
+          { id: 'det', kind: 'judge', label: 'Detector', sub: 'key + tokenizer', x: 570, y: 230 },
+          { id: 'text', kind: 'document', label: 'Generated text', sub: 'copy-paste keeps it', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A signature in the word choices',
+            lines: [
+              'A watermark is a hidden statistical signature added **while** text is generated.',
+              'It lives in the word choices, not in metadata, so copy-paste keeps it.',
+            ],
+            script: [{ say: 0 }, { send: ['logits', 'text'], label: 'tokens' }, { say: 1 }, { badge: 'text', text: 'copy-paste OK', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A green list at every step',
+            lines: [
+              'Hash the previous token with a secret key.',
+              'Split the vocabulary: a green list (fraction γ, e.g. 0.25) and a red list.',
+              'Add a small bias δ to green tokens, then sample as usual.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prev', 'split'], label: 'hash' },
+              { send: ['key', 'split'], label: 'key' },
+              { say: 1 },
+              { badge: 'split', text: 'γ = 0.25' },
+              { say: 2 },
+              { send: ['split', 'logits'], label: 'green list' },
+              { badge: 'logits', text: '+δ green' },
+              { send: ['logits', 'text'], label: 'token', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what detection needs',
+            lines: ['Detection recomputes the green lists over the text.'],
+            task: {
+              type: 'pick',
+              question: 'Which of these must the detector have?',
+              answer: 'key',
+              hints: { logits: 'Detection needs the key and the tokenizer, not the model.', prev: 'Previous tokens are read from the text itself.' },
+            },
+            solved: 'Detection needs the key (and tokenizer), not the model.',
+            then: [{ send: ['key', 'det'], label: 'key' }, { send: ['text', 'det'], label: 'text' }, { lit: 'det' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Count green, compute z',
+            lines: [
+              'Count green tokens G among T scored tokens.',
+              '`z = (G − γT) / √(T·γ·(1 − γ))`',
+              'Flag at **z > 4**: about 3 in 100,000 false positives.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['text', 'det'], label: 'T tokens' },
+              { badge: 'det', text: 'G green' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'det', text: 'z = 13.9 → flag', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a short answer',
+            lines: ['A 40-token answer from the service has 16 green tokens (γ = 0.25).'],
+            task: {
+              type: 'choose',
+              question: 'Is it flagged?',
+              options: [
+                { text: 'No: z ≈ 2.2, below 4. Short text carries too little signal' },
+                { text: 'Yes: 16 is above γT = 10', why: 'Above expectation is not enough: z must exceed 4, and z grows with √T.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Short text rarely reaches the threshold: z grows with √T.',
+            then: [{ badge: 'det', text: 'z ≈ 2.2', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Limits to design around',
+            lines: [
+              'Low-entropy text (code, lists, names) leaves few choices to bias.',
+              'Paraphrasing weakens it; translation or heavy rewriting can remove it.',
+              '"No watermark found" means **unknown**, not human-written.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'logits', text: 'few choices', tone: 'miss' },
+              { say: 1 },
+              { badge: 'text', text: 'rewritten', tone: 'miss' },
+              { send: ['text', 'det'] },
+              { say: 2 },
+              { badge: 'det', text: 'unknown' },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'watermark-in-the-word-choices',
+        title: 'A watermark hidden in the words',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'Tutoring essays · flag at z > 4',
+            head: 'Same watermark, *different z*',
+            rungs: [
+              { label: '400-token essay, as served', amount: 13.9 },
+              { label: 'Half the sentences rewritten', amount: 4.6 },
+              { label: '40-token answer', amount: 2.2 },
+              { label: 'A different vendor’s model', amount: 0 },
+            ],
+            unit: 'z-score',
+          },
+          {
+            type: 'flow',
+            kicker: 'Kirchenbauer et al. 2023',
+            head: 'A green list at *every step*',
+            steps: ['Hash the previous token with a secret key', 'Split the vocabulary: green (γ = 0.25) and red', 'Add a small bias δ to green tokens', 'Sample as usual'],
+            sub: 'It lives in the **word choices**, so copy-paste keeps it.',
+          },
+          {
+            type: 'grid',
+            kicker: 'A 40-token answer from the service',
+            head: '16 green, *10 expected*',
+            cells: 40,
+            hot: 16,
+            caption: 'z = (16 − 10) / √7.5 ≈ 2.2: not flagged',
+            sub: 'z grows with **√T**: short text carries too little signal.',
+          },
+          {
+            type: 'counter',
+            kicker: 'The detection threshold',
+            value: 4,
+            prefix: 'z > ',
+            unit: 'about 3 in 100,000 false positives',
+            sub: 'Detection needs the **key** and the tokenizer, not the model.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Limits to design around',
+            head: 'What *erodes* it',
+            items: [
+              { label: 'Copy-paste', keep: true },
+              { label: 'Paraphrasing' },
+              { label: 'Translation or heavy rewriting' },
+              { label: 'Low-entropy text: code, lists, names' },
+            ],
+            keepLabel: 'SURVIVES',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A 400-token essay shows z ≈ 0: "no watermark". What does that tell you?',
+            answer: 0,
+            options: [
+              { text: 'Unknown: only text from a model that applies this watermark carries it', why: 'An essay from a different vendor’s model also gives z ≈ 0.' },
+              { text: 'A human wrote it', why: 'No watermark means unknown, never human-written.' },
+              { text: 'The student paraphrased it', why: 'Rewriting half of a watermarked essay still gave z ≈ 4.6; z ≈ 0 says nothing about why.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'A watermark points to *our model*, never to a human.',
+          sub: 'Flag only above **z > 4**, and treat no watermark as unknown.',
+        },
+      },
       body: `**Intuition:** a watermark is a hidden statistical signature added *while the text is generated*, so whoever holds the key can later ask "did our model write this?". It lives in the word choices themselves, not in metadata, so copy-paste keeps it.
 
 **The green/red list scheme (Kirchenbauer et al. 2023).** At every decoding step:
@@ -657,6 +1134,122 @@ console.log(detect(para, KEY));                // { T: 200, green: 57, z: 1.14, 
     },
     {
       heading: 'Provenance — C2PA Content Credentials, and why AI-text detectors fail',
+      steps: {
+        actors: [
+          { id: 'gen', kind: 'llm', label: 'Generator', sub: 'signs at source', x: 110, y: 70 },
+          { id: 'manifest', kind: 'document', label: 'C2PA manifest', sub: 'assertions + claim', x: 340, y: 70 },
+          { id: 'sig', kind: 'guard', label: 'Signature', sub: 'X.509 certificate', x: 340, y: 230 },
+          { id: 'file', kind: 'data', label: 'Asset', sub: 'hard binding: hash', x: 570, y: 150 },
+          { id: 'platform', kind: 'server', label: 'Platform', sub: 'preserves & shows', x: 800, y: 70 },
+          { id: 'viewer', kind: 'user', label: 'Viewer', sub: 'sees credentials', x: 800, y: 230 },
+          { id: 'det', kind: 'judge', label: 'AI-text detector', sub: 'guesses from style', x: 110, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two questions people mix up',
+            lines: [
+              '**Detection** guesses "was this AI-made?" from the content alone.',
+              '**Provenance** records who made it, with which tool, and what changed, signed when it happened.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['file', 'det'], label: 'content' },
+              { badge: 'det', text: 'guess', tone: 'miss' },
+              { say: 1 },
+              { send: ['gen', 'manifest'], label: 'who · tool · edits', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Inside a C2PA manifest',
+            lines: [
+              'Assertions plus a claim, **signed** with the signer\'s X.509 certificate.',
+              'A **hard binding** (a hash of the asset) makes tampering evident.',
+              'Each edit can add a manifest pointing to the previous one.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['sig', 'manifest'], label: 'sign' },
+              { say: 1 },
+              { send: ['manifest', 'file'], label: 'hash' },
+              { badge: 'file', text: 'tamper-evident', tone: 'ok' },
+              { say: 2 },
+              { badge: 'manifest', text: 'edit history' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: stripped credentials',
+            lines: ['A creator\'s upload was re-saved through a tool that stripped metadata. No watermark found.'],
+            task: {
+              type: 'choose',
+              question: 'What should the listing say?',
+              options: [
+                { text: '"Origin unknown"' },
+                { text: '"Human-made"', why: 'No credentials must read as unknown, never as authentic.' },
+                { text: '"AI-generated"', why: 'Missing credentials prove nothing either way: show unknown.' },
+              ],
+              answer: 0,
+            },
+            solved: 'No credentials → "unknown", never "authentic" or "fake".',
+            then: [{ send: ['file', 'platform'], label: 'no manifest', tone: 'miss' }, { badge: 'platform', text: 'Origin unknown' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why AI-text detectors fail',
+            lines: [
+              'OpenAI withdrew its classifier in July 2023: it caught 26% of AI text and flagged 9% of human text.',
+              'Detectors labelled over half of non-native English essays as AI-written.',
+              '1% false positives on 100,000 essays is 1,000 false accusations.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'det', text: '26% caught', tone: 'err' },
+              { say: 1 },
+              { badge: 'det', text: 'biased', tone: 'err' },
+              { say: 2 },
+              { badge: 'det', text: '1,000 false', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a detector score',
+            lines: ['A third-party "AI-likelihood" score of 0.97 arrives for an upload.'],
+            task: {
+              type: 'choose',
+              question: 'What do you do with it?',
+              options: [
+                { text: 'Store it for human review only; it changes no label and triggers no ban' },
+                { text: 'Label the upload AI-generated', why: 'Style-based detectors are unreliable; at most a reason for a human to look.' },
+                { text: 'Ban the creator', why: 'Never base bans on a detector score.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Never use a detector alone for decisions; keep an appeal path.',
+            then: [{ send: ['det', 'platform'], label: '0.97', tone: 'miss' }, { badge: 'platform', text: 'review only' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What a product team does',
+            lines: [
+              '**Disclose and label** AI interaction and AI content in the UI.',
+              '**Generators**: watermark and attach signed C2PA manifests at the source.',
+              '**Platforms**: preserve credentials through uploads, verify and show them, "unknown" when absent.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'viewer', text: 'AI-generated' },
+              { say: 1 },
+              { send: ['gen', 'manifest'], label: 'sign' },
+              { send: ['manifest', 'file'] },
+              { say: 2 },
+              { send: ['file', 'platform'], label: 'credentials', tone: 'ok' },
+              { send: ['platform', 'viewer'], label: 'Content Credentials', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Two questions people mix up.** *Detection* guesses "was this AI-made?" from the content alone. *Provenance* records "who made this, with which tool, and what changed since", signed when it happened. Watermarks sit between them: a signal inside the content, readable with a key.
 
 **C2PA.** The Coalition for Content Provenance and Authenticity, founded in 2021 by Adobe, Arm, BBC, Intel, Microsoft and Truepic, publishes an open standard; the user-facing name is **Content Credentials**.

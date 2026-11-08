@@ -38,7 +38,7 @@ test('partly read topic → resume at the first unread section', () => {
   const s = nextStep(emptyProgress({ sections: { a: [0] } }), topics);
   assert.equal(s.kind, 'read');
   assert.equal(s.href, '/topic/a?tab=learn&s=1');
-  assert.match(s.title, /§2 Two/);
+  assert.match(s.title, /section 2: Two/);
 });
 
 test('after reading: code → prompt lab → interview → exam, in that order', () => {
