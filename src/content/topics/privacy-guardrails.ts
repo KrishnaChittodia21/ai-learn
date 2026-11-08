@@ -6,7 +6,7 @@ const topic: Topic = {
   order: 2,
   title: 'Data Privacy, PII Redaction, Guardrails and Output Validation',
   subtitle: 'Keep personal data out of places it should not go, and keep model output inside the lines your product needs',
-  estimatedMinutes: 52,
+  estimatedMinutes: 66,
   sources: [
     'OpenAI docs — Your data (abuse-monitoring retention, Zero Data Retention eligibility per endpoint)',
     'Anthropic Privacy Center — How long do you store personal data (API retention, ZDR agreements)',
@@ -16,8 +16,16 @@ const topic: Topic = {
     'Meta Llama Guard 4 model card — MLCommons hazard taxonomy S1–S14',
     'Zod documentation — safeParse, refinements; OpenAI Structured Outputs; Anthropic tool use / structured outputs',
     'OWASP Top 10 for LLM Applications 2025 — LLM02 Sensitive Information Disclosure, LLM05 Improper Output Handling',
+    'Dwork & Roth 2014 — The Algorithmic Foundations of Differential Privacy (definitions, Laplace and Gaussian mechanisms, composition)',
+    'Abadi et al. 2016 — Deep Learning with Differential Privacy (DP-SGD, moments accountant): https://arxiv.org/abs/1607.00133',
+    'Carlini et al. 2021 — Extracting Training Data from Large Language Models: https://arxiv.org/abs/2012.07805',
+    'Nasr et al. 2023 — Scalable Extraction of Training Data from (Production) Language Models: https://arxiv.org/abs/2311.17035',
+    'Carlini et al. 2019 — The Secret Sharer (canaries and memorisation); Kandpal et al. 2022 — Deduplicating Training Data Mitigates Privacy Risks',
+    'Li et al. 2021 — Large Language Models Can Be Strong Differentially Private Learners; Yu et al. 2021 — Differentially Private Fine-tuning of Language Models',
+    'OpenDP, Opacus (PyTorch), TensorFlow Privacy and Google differential-privacy library documentation',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 18 lesson 22 (Differential privacy for LLMs), adapted and rewritten',
   ],
-  tags: ['privacy', 'gdpr', 'pii', 'presidio', 'guardrails', 'nemo-guardrails', 'llama-guard', 'zod', 'validation'],
+  tags: ['privacy', 'gdpr', 'pii', 'presidio', 'guardrails', 'nemo-guardrails', 'llama-guard', 'zod', 'validation', 'differential-privacy', 'dp-sgd'],
   cheatSheet: [
     'Privacy questions for any LLM vendor: where is data processed (residency), how long is it kept (retention), is it used for training, who are sub-processors, is there a DPA.',
     'Major LLM APIs keep inputs/outputs for abuse monitoring (typically up to ~30 days) unless you have a Zero Data Retention agreement; some stateful endpoints are not ZDR-eligible.',
@@ -29,10 +37,89 @@ const topic: Topic = {
     'Llama Guard classifies prompts or responses against a hazard taxonomy (S1–S14 in v4); NeMo Guardrails orchestrates rails with Colang flows.',
     'Output validation: schema (zod / JSON Schema) + business rules (refine) → on failure, repair loop with the error message, max 2 retries, then fallback.',
     'Prefer native structured outputs / strict tool schemas, and still validate — semantics (dates in range, totals add up) are your job.',
+    'Differential privacy: output odds change by at most e^ε (+δ, ≪ 1/n) with or without any one person; Laplace scale = sensitivity/ε, ε adds up across releases (budget), post-processing is free; DP-SGD = clip per-example grads + Gaussian noise; covers training and aggregates, not RAG context or logs.',
   ],
   sections: [
     {
       heading: 'Data Privacy — residency, retention, training and minimisation',
+      short: {
+        id: 'samsung-code-in-chatgpt',
+        title: 'Samsung’s code in ChatGPT',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Spring 2023 · Samsung’s chip division',
+            value: 3,
+            unit: 'leaks of confidential material in about 20 days',
+            sub: 'Engineers pasted **source code** and **meeting notes** into ChatGPT to get help.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Three ordinary asks',
+            head: 'Productivity, *then* a leak',
+            steps: ['Buggy source code: find the fix', 'Defect-detection code: optimise it', 'A meeting recording: write the minutes'],
+          },
+          {
+            type: 'flow',
+            kicker: 'Where the data went',
+            head: 'Every prompt is a *data transfer*',
+            steps: [
+              'Engineer pastes internal code',
+              'It lands on the provider’s servers',
+              'Logged, and maybe used for training',
+              'The company cannot pull it back',
+            ],
+            broken: 0,
+          },
+          {
+            type: 'toggles',
+            kicker: 'May 2023 · the response',
+            head: 'Samsung *switched off* public chatbots at work',
+            items: [{ label: 'ChatGPT on company devices' }, { label: 'Other public AI chatbots' }, { label: 'Build internal AI tools', keep: true }],
+            keepLabel: 'IN HOUSE',
+          },
+          {
+            type: 'flow',
+            kicker: 'Before any prompt leaves',
+            head: 'Ask every provider *five questions*',
+            steps: [
+              'Residency: where is it processed?',
+              'Retention: how long is it kept?',
+              'Training: is it used to train?',
+              'Sub-processors: who else sees it?',
+              'Contract: is there a DPA?',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'Retention',
+            value: 30,
+            unit: 'days: a typical abuse-log retention',
+            sub: '**Zero Data Retention** is available by agreement for eligible endpoints.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'An engineer wants AI help with internal code. Best first step?',
+            answer: 1,
+            options: [
+              {
+                text: 'A free consumer chatbot, then delete the chat',
+                why: 'Deleting the chat from your view does not settle what the provider already logged.',
+              },
+              {
+                text: 'An approved endpoint with no training use and short retention',
+                why: 'Know where the data goes, how long it lives and who can use it, then send as little as possible.',
+              },
+              { text: 'Rename the variables first', why: 'The logic and any secrets still leave; minimise and pick the right endpoint instead.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Treat every prompt as data *leaving the building*.',
+          sub: 'Approve providers on residency, retention and training use, and **minimise what you send**.',
+        },
+      },
       body: `**Intuition:** every prompt is a data transfer to a processor. Privacy engineering for LLMs is mostly about knowing *where that data goes, how long it lives there, and who can use it* — then sending as little as possible.
 
 **The five questions for any model provider.**
@@ -651,6 +738,232 @@ console.log(validateCitations(
       },
       source: 'Zod docs; OpenAI Structured Outputs; OWASP LLM05',
     },
+    {
+      heading: 'Differential Privacy — ε, δ, noise and the privacy budget',
+      body: `**Intuition:** run an analysis twice, once with your record and once without. If the two outputs are statistically almost indistinguishable, nobody can learn much about *you* from the result, whatever else they already know. Differential privacy (DP) turns that into a provable bound.
+
+**The guarantee.** A randomised algorithm M is **(ε, δ)-DP** if, for any two datasets D and D′ that differ in one person, and any set of outputs S: P[M(D) ∈ S] ≤ e^ε · P[M(D′) ∈ S] + δ.
+- **ε (epsilon)** caps how much one person can shift the odds of any outcome: e^0.1 ≈ 1.11, e^1 ≈ 2.7, e^10 ≈ 22,000. Smaller ε means more privacy and more noise.
+- **δ** is a small chance the bound may fail. Keep it far below 1/n (n = people in the data); pure ε-DP has δ = 0.
+- **The unit matters.** *User-level* DP protects everything one person contributed; *example-level* DP protects one row. A user with 500 chat messages gets weak protection from example-level DP.
+
+**Mechanisms for aggregates.**
+
+| Mechanism | Noise added | Gives | Typical use |
+|---|---|---|---|
+| Laplace | scale b = Δ / ε | ε-DP | counts, bounded sums, histograms |
+| Gaussian | σ = Δ₂ · √(2 ln(1.25/δ)) / ε (classic bound, ε < 1) | (ε, δ)-DP | many queries, vectors, DP-SGD |
+
+**Sensitivity Δ** is the most one person can change the true answer. A count has Δ = 1. A sum or mean needs every value **clamped** to a fixed range first, otherwise one outlier makes Δ unbounded and no amount of noise is "calibrated".
+
+**Budget and composition.** Every answer spends privacy. Under basic composition, k releases with ε₁…ε_k cost Σεᵢ in total (and Σδᵢ). Advanced composition and Rényi-DP accountants give tighter totals over many queries, but the budget only goes down. So: set a total ε per dataset, track spend, refuse or batch queries when it runs out. **Post-processing is free:** rounding, clamping or charting a DP result never weakens it.
+
+**What DP is not.** It is not encryption or access control, and it does nothing for data you also publish raw. Its noise is absolute, so it suits large aggregates: 120,000 ± 3 is useful, 4 ± 3 is not.
+
+**In practice.** The US Census Bureau released 2020 Census data under DP; Google's RAPPOR (2014) and Apple's on-device telemetry use *local* DP, where noise is added on the device before data leaves it. Libraries: **OpenDP**, and **Google's differential-privacy library** (C++, Go, Java) — use one rather than hand-rolling noise, since floating-point sampling has known pitfalls.`,
+      example: `A hospital analytics dashboard shows "patients with condition X" per ward.
+- Whole hospital, true count 1,203, ε = 1 → Laplace scale b = 1. 95% of the noise lies within ±b·ln 20 ≈ **±3**: the published figure lands within about 1,200–1,206, perfectly usable.
+- Same query at ε = 0.1 → b = 10, ±30: still fine at hospital level, but a ward with 4 patients can now read anything from 0 to about 34. Small groups need coarser grouping, not smaller ε.
+- The dashboard has 20 such counters refreshed daily at ε = 0.1 each: 2 per day, **730 per year** under basic composition. The guarantee is meaningless. The fix: one release per month from a fixed query set, ε = 0.5 per month split across the counters, and the budget ledger shown to the privacy team.`,
+      diagram: `dataset ──▶ query (count / clamped sum) ──▶ + noise (scale Δ/ε) ──▶ release
+                                                 │
+                               budget ledger: spent ε += ε_query
+                               spent > total? ──▶ refuse / wait for next period
+release ──▶ round, clamp, chart  (post-processing: guarantee unchanged)`,
+      prosCons: {
+        pros: [
+          'A provable bound that holds whatever side information the attacker has, unlike "we removed the names".',
+          'Composes: you can add up and budget the privacy cost across every release from the same data.',
+          'Post-processing is free, so DP outputs can be rounded, charted and shared without redoing the analysis.',
+        ],
+        cons: [
+          {
+            con: 'Noise swamps small counts and small groups.',
+            fix: 'Publish coarser groupings, suppress or merge cells below a size floor, and use DP for large aggregates only.',
+          },
+          {
+            con: 'The budget runs out on dashboards and ad-hoc analysis that query the same data repeatedly.',
+            fix: 'Fix the query set and release schedule, use an accountant (RDP / advanced composition) and keep a per-dataset ε ledger.',
+          },
+          {
+            con: 'ε is hard to explain, and a large ε can make a weak guarantee look rigorous.',
+            fix: 'Always report ε with δ, the privacy unit (user vs example) and the time period, and translate it into an attacker\'s odds (e^ε).',
+          },
+        ],
+      },
+      keyPoints: [
+        'ε bounds how much one person can change the odds of any output (factor e^ε); δ is a small failure chance, ≪ 1/n.',
+        'Laplace scale = sensitivity / ε; a count has sensitivity 1; clamp values before summing.',
+        'Basic composition: ε adds up across releases; track a budget per dataset.',
+        'Post-processing never weakens DP.',
+        'User-level protection is stronger than example-level.',
+        'Use a vetted library (OpenDP, Google DP) rather than hand-rolled noise.',
+      ],
+      exercise: {
+        prompt: `Write \`privacyBudget(total, rand)\` that returns \`{ count(trueCount, epsilon), remaining() }\`:
+- \`count\` releases an ε-DP count with Laplace noise (sensitivity 1, so scale b = 1/ε), rounded and clamped at 0;
+- it spends ε from the budget (basic composition) and **throws** if the query would exceed \`total\`;
+- \`rand\` is a uniform [0, 1) source, injected so tests are repeatable.
+
+Acceptance with \`total = 1\` and draws 0.9, 0.2: \`count(1203, 0.5)\` → 1206, \`count(87, 0.5)\` → 85, \`remaining()\` → 0, and a third \`count(40, 0.1)\` throws.`,
+        hints: [
+          'Inverse CDF: with u = rand() − 0.5, noise = −b · sign(u) · ln(1 − 2|u|).',
+          'Check the budget before adding noise, and only charge ε for answers you actually release.',
+          'Rounding and clamping after the noise are post-processing, so they are allowed.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `/** Laplace(0, b) by inverse CDF; rand() is uniform in [0, 1). */
+export function laplace(b: number, rand: () => number): number {
+  const u = rand() - 0.5;
+  return -b * Math.sign(u) * Math.log(1 - 2 * Math.abs(u));
+}
+
+/** A privacy budget for one dataset. Basic composition: the ε of every answered query adds up. */
+export function privacyBudget(total: number, rand: () => number = Math.random) {
+  let spent = 0;
+  return {
+    /** ε-DP count: one person changes a count by at most 1, so the Laplace scale is 1/ε. */
+    count(trueCount: number, epsilon: number): number {
+      if (!(epsilon > 0)) throw new Error('epsilon must be > 0');
+      if (spent + epsilon > total + 1e-9) throw new Error('budget exhausted: spent ' + spent + ', asked ' + epsilon);
+      spent += epsilon;
+      // rounding and clamping are post-processing: they never weaken the guarantee
+      return Math.max(0, Math.round(trueCount + laplace(1 / epsilon, rand)));
+    },
+    remaining: () => +(total - spent).toFixed(6),
+  };
+}
+
+// fixed "random" draws so the run is repeatable
+const draws = [0.9, 0.2];
+let i = 0;
+const b = privacyBudget(1.0, () => draws[i++ % draws.length]);
+console.log(b.count(1203, 0.5)); // 1203 + 2·ln 5 ≈ 1206.2 → 1206
+console.log(b.count(87, 0.5));   // 87 − 2·ln 2.5 ≈ 85.2 → 85
+console.log(b.remaining());      // 0
+try { b.count(40, 0.1); } catch (e) { console.log((e as Error).message); } // budget exhausted: spent 1, asked 0.1`,
+        },
+        explanation:
+          'The Laplace scale is sensitivity ÷ ε, so halving ε doubles the noise. The ledger enforces basic composition: two ε = 0.5 answers use the whole ε = 1 budget, and a third query is refused rather than silently weakening the guarantee. In production use a vetted library (OpenDP, Google\'s DP library): naive floating-point Laplace sampling has known side channels, and real systems need accountants tighter than plain addition.',
+      },
+      quickCheck: {
+        question: 'A dashboard answers 10 queries on the same user table, each with ε = 0.3. Under basic composition, what total privacy loss do the users carry?',
+        options: ['ε = 0.3, because each query is private on its own', 'ε = 3', 'ε = 0.03', 'It cannot be computed without the true counts'],
+        correct: 1,
+        explanation:
+          'Under basic composition the ε values of releases on the same data add up: 10 × 0.3 = 3. Tighter accountants can report less for many queries, but never 0.3. The true counts are not needed: DP bounds depend on the mechanism, not the data.',
+      },
+      source: 'Dwork & Roth 2014 — The Algorithmic Foundations of Differential Privacy; OpenDP docs; ai-engineering-from-scratch Phase 18 · 22',
+    },
+    {
+      heading: 'Differential Privacy for LLMs — DP-SGD, memorisation and where it helps',
+      body: `**Why LLM teams care.** Models memorise training text and can be made to repeat it. Carlini et al. (2021) extracted verbatim training examples, including names, phone numbers and email addresses, from GPT-2. Nasr et al. (2023) extracted training data from production ChatGPT by prompting it to repeat a word forever until it diverged. Repeated text is memorised far more often, so **deduplicating** training data cuts the risk too (Kandpal et al. 2022). If you fine-tune on support tickets, the model may echo one customer's ticket to another.
+
+**DP-SGD (Abadi et al. 2016).** At each training step:
+1. compute a gradient **per example**, not per batch;
+2. **clip** each to L2 norm ≤ C, so no single example can pull the weights by more than C;
+3. sum, then add Gaussian noise with standard deviation σ · C;
+4. average and take the step.
+A **privacy accountant** (the moments accountant from the paper, or RDP / PRV accountants in today's libraries) turns σ, the sampling rate and the number of steps into a total (ε, δ). Libraries: **Opacus** (PyTorch) and **TensorFlow Privacy**.
+
+**The utility cost.** Per-example gradients cost memory and compute; noise costs accuracy, most on small datasets and rare patterns, which are exactly what DP hides (and can include under-represented groups). It works much better when *fine-tuning* a public pretrained model, often with few trainable parameters such as LoRA, than when training from scratch (Li et al. 2021; Yu et al. 2021), and with large batches. There is no universal "safe ε": report ε with δ, the unit (example or user) and the accountant.
+
+**Where DP helps and where it does not.**
+
+| Situation | DP? |
+|---|---|
+| Fine-tuning on user chats, tickets or notes whose outputs reach other users | **Yes:** DP-SGD (user-level if users have many rows) |
+| Usage analytics: top intents, counts per feature, per-tenant stats | **Yes:** DP counts and histograms |
+| Sharing data with a vendor or another team | **Often:** DP synthetic data — train a generator with DP, release samples (post-processing) |
+| RAG over private documents | **No:** the text is in the prompt; use access control, retrieval filters, output rails |
+| PII in prompts, logs and traces | **No:** minimisation, redaction, retention |
+| Memorisation already in the base model | **No:** DP on your fine-tune covers only your data |
+
+**Test memorisation either way.** Plant **canaries**, unique fake secrets, in the fine-tuning data and check whether the model completes them from their prefix (Carlini et al. 2019, "The Secret Sharer"). It is cheap, works with or without DP, and gives a privacy reviewer evidence instead of a promise.`,
+      example: `A team fine-tunes a reply-drafting model on 200,000 support tickets. Before release they plant 20 canaries such as "Account recovery code for Dana Whitfield: 7Q4-XK9-2MB", each repeated 5 times, and prompt the model with each prefix.
+- Plain fine-tune: 13 of 20 canaries come back verbatim, so real recovery codes and addresses would too.
+- DP-SGD on a LoRA adapter, user-level, (ε = 8, δ = 1e-6): 0 of 20 come back; the reply-quality eval drops 3 points, which the team accepts.
+- The analytics team separately wants "top 50 reasons customers contact us": a DP histogram over the same tickets, from its own ε budget.
+(Illustrative numbers; the pattern — plant canaries, compare, then decide — is the point.)`,
+      diagram: `per-example grads ─▶ clip each to ‖g‖ ≤ C ─▶ Σ ─▶ + N(0, (σ·C)²) ─▶ ÷ batch ─▶ update
+                                                         │
+                       accountant: σ, sampling rate q, steps T ─▶ total (ε, δ)`,
+      prosCons: {
+        pros: [
+          'Bounds what the model can memorise about any single example or user, with a number a reviewer can audit.',
+          'Holds against attacks not yet invented, unlike filters on known extraction prompts.',
+          'DP synthetic data lets teams share realistic data without sharing the real records.',
+        ],
+        cons: [
+          {
+            con: 'Accuracy drops, especially on small datasets and rare cases.',
+            fix: 'Fine-tune a public pretrained model with few trainable parameters (LoRA), use large batches, tune C and σ, and measure the drop on your eval set before deciding.',
+          },
+          {
+            con: 'Per-example gradients raise memory and training time.',
+            fix: 'Use Opacus or TensorFlow Privacy (vectorised per-sample gradients), train only adapters, and use gradient accumulation for large logical batches.',
+          },
+          {
+            con: 'It covers training only, so teams assume RAG context and logs are protected too.',
+            fix: 'Write down the threat model per data path: DP for training and analytics, access control and redaction for prompts, retrieval and logs.',
+          },
+        ],
+      },
+      keyPoints: [
+        'LLMs memorise and can regurgitate training text (Carlini 2021; Nasr 2023); duplicates make it worse.',
+        'DP-SGD = per-example gradients → clip to C → add Gaussian noise σ·C → average; an accountant gives (ε, δ).',
+        'DP fine-tuning of a pretrained model (often LoRA) loses far less utility than DP from scratch.',
+        'DP helps for fine-tuning on user data, aggregate analytics and synthetic data.',
+        'DP does not protect RAG context, prompts or logs.',
+        'Plant canaries to test memorisation of any fine-tune.',
+      ],
+      exercise: {
+        prompt: `Implement the aggregation step of DP-SGD: \`dpAggregate(perExample, C, sigma, gauss)\` takes per-example gradients (arrays of equal length), clips each to L2 norm ≤ C, sums them, adds \`sigma * C * gauss()\` to every coordinate and divides by the batch size. \`gauss\` returns a standard-normal draw (injected for tests).
+
+Acceptance with batch \`[[0.3, 0.4], [0.6, 0.8], [30, 40]]\` and C = 1:
+- σ = 0 → \`[0.5, 0.6667]\` (the outlier is clipped to \`[0.6, 0.8]\`);
+- σ = 1 with \`gauss = () => 1.5\` → \`[1, 1.1667]\`.`,
+        hints: [
+          'L2 norm: Math.hypot(...g). Scale by C / norm only when norm > C.',
+          'Add the noise once to the sum, not to each example.',
+          'Without clipping, the [30, 40] example alone would dominate the update, and its sensitivity would be unbounded.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `/** One DP-SGD aggregation: clip each example's gradient to L2 norm ≤ C, sum, add N(0, (σ·C)²) per coordinate, average. */
+export function dpAggregate(perExample: number[][], C: number, sigma: number, gauss: () => number): number[] {
+  const dim = perExample[0].length;
+  const sum = new Array(dim).fill(0);
+  for (const g of perExample) {
+    const norm = Math.hypot(...g);
+    const scale = norm > C ? C / norm : 1; // clipping bounds any one example's pull to C
+    g.forEach((v, j) => (sum[j] += v * scale));
+  }
+  return sum.map((s) => (s + sigma * C * gauss()) / perExample.length);
+}
+
+const batch = [[0.3, 0.4], [0.6, 0.8], [30, 40]]; // norms 0.5, 1 and 50 (an outlier)
+console.log(dpAggregate(batch, 1, 0, () => 0));   // [0.5, 0.666…]  (outlier clipped to [0.6, 0.8])
+console.log(dpAggregate(batch, 1, 1, () => 1.5)); // [1, 1.166…]    (noise 1.5 per coordinate, ÷ 3)`,
+        },
+        explanation:
+          'Clipping fixes the sensitivity: whatever one example looks like, it moves the summed gradient by at most C. Noise with standard deviation σ·C then hides whether that example was present at all, and the accountant converts σ, the sampling rate and the number of steps into (ε, δ). Opacus and TensorFlow Privacy do exactly this with vectorised per-sample gradients and a built-in accountant.',
+      },
+      quickCheck: {
+        question: 'Your support bot answers from private customer documents through RAG. The base model was fine-tuned with DP-SGD at ε = 2. Does DP stop the bot from revealing a document it retrieved?',
+        options: [
+          'Yes: DP covers everything the model outputs',
+          'No: DP bounds what the weights learned from training data; retrieved text is in the prompt, so access control and output rails must protect it',
+          'Yes, as long as ε is below 1',
+          'Only if the documents were also in the fine-tuning set',
+        ],
+        correct: 1,
+        explanation:
+          'DP-SGD limits how much the trained weights depend on any training example. Text placed in the context window at inference time is not covered at all; the model can quote it verbatim. Protect RAG with per-user retrieval filters, access control and output checks, whatever ε the fine-tune used.',
+      },
+      source: 'Abadi et al. 2016 — Deep Learning with Differential Privacy; Carlini et al. 2021 — Extracting Training Data from LLMs; Opacus docs; ai-engineering-from-scratch Phase 18 · 22',
+    },
   ],
   codeChallenges: [
     {
@@ -949,6 +1262,44 @@ export function render(el: HTMLElement, l: Listing) {
         'Claiming technical proof of vendor deletion',
       ],
     },
+    {
+      id: 'privacy-guardrails-iq-06',
+      difficulty: 'hard',
+      question: 'Legal asks: "Can we use differential privacy?" for two projects: fine-tuning a reply model on two years of customer support chats, and an analytics dashboard sold to enterprise customers. How do you answer?',
+      context: 'About 3 million chats from 400,000 customers; some customers have hundreds of chats. The reply model also uses RAG over each customer\'s account documents.',
+      whatInterviewerLooksFor: [
+        'Explains ε and δ in plain words and asks what the privacy unit is',
+        'DP-SGD for the fine-tune, with user-level accounting and a measured utility cost',
+        'DP aggregates with a budget and release schedule for the dashboard',
+        'Says clearly what DP does not cover (RAG context, logs, prompts)',
+        'Proposes an empirical check (canaries) alongside the formal bound',
+      ],
+      modelAnswer: `**What DP promises.** The output changes by at most a factor e^ε (plus a small δ) whether or not any one *person* is in the data. Smaller ε, more noise, stronger privacy. The first question is the **unit**: these customers have many chats each, so we want **user-level** DP, not per-chat.
+
+**Fine-tune: DP-SGD.**
+- Start from a public pretrained model and train a LoRA adapter with DP-SGD (Opacus): per-example gradients, clipped to C, Gaussian noise σ·C, with sampling by user so the accountant reports user-level (ε, δ). δ well below 1/400,000.
+- Deduplicate templates and signatures first; repeated text is what gets memorised.
+- Measure the cost: run the reply-quality eval for non-DP and DP adapters at a few ε values, and plant canaries (fake secrets) to measure memorisation in both. Pick the smallest ε whose quality drop the product owner accepts, and record ε, δ, unit and accountant in the model card.
+
+**Dashboard: DP aggregates.**
+- Fixed set of statistics (counts, histograms, clamped sums), released on a schedule (e.g. monthly) from a per-dataset ε budget; post-processing (rounding, charts) is free.
+- Coarsen or suppress small cells: noise of ±3 is fine on 10,000 and useless on 4.
+- No free-form querying against raw data: every ad-hoc query would spend budget.
+
+**What DP does not cover.** RAG over account documents puts the text in the prompt: that needs per-customer retrieval filters, access control and output rails. Prompts, logs and traces need minimisation, redaction and retention limits. DP on our adapter also says nothing about what the base model memorised.
+
+**Answer to legal:** yes for both, with stated ε/δ and unit, a measured utility cost and a written list of data paths DP does not protect.`,
+      followUps: [
+        { q: 'Product says the DP model is 3 points worse on the eval. What are your options?', a: 'Tune clipping and noise, use larger batches and fewer trainable parameters, add public or synthetic data, or accept a larger ε with the reasoning recorded. Alternatively skip fine-tuning on raw chats and use DP synthetic data or RAG with access control.' },
+        { q: 'Why not just remove names and emails before fine-tuning?', a: 'Redaction misses quasi-identifiers and free-text details (an order history, a rare medical issue) that still identify a person, and gives no bound on what is memorised. Do it anyway, but DP plus canary tests give the measurable guarantee.' },
+      ],
+      pitfalls: [
+        'Quoting an ε with no δ, no unit and no accountant.',
+        'Assuming a DP fine-tune protects RAG context or logs.',
+        'Running a free-form query interface against the DP dataset with no budget.',
+        'Claiming DP has no utility cost, or never measuring it.',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1184,6 +1535,50 @@ if (r.approve) await payments.refund(orderId, r.amount);`,
       correct: [0],
       explanation: 'The gap is language-specific NER coverage; a multilingual model plus deny-lists from known customer names targets it directly, and per-entity measurement verifies the fix. The chat model is unrelated to detection quality.',
       followUps: [{ q: 'Why use CRM-derived deny-lists?', a: 'Known customer names are exactly the values most likely to appear, so matching them directly lifts recall where statistical NER struggles.' }],
+    },
+    {
+      id: 'privacy-guardrails-mcq-13',
+      difficulty: 'medium',
+      question: 'You release a count of users (sensitivity 1) with the Laplace mechanism at ε = 0.5. What is the noise scale b, and what happens to it if you halve ε to 0.25?',
+      options: ['b = 0.5; it halves to 0.25', 'b = 2; it doubles to 4', 'b = 1; it stays 1 because sensitivity is 1', 'b = 0.5; it doubles to 1'],
+      correct: [1],
+      explanation: 'The Laplace scale is sensitivity ÷ ε = 1 / 0.5 = 2. Halving ε (more privacy) doubles the scale to 4, so about 95% of the noise lies within ±b·ln 20 ≈ ±12 instead of ±6.',
+      followUps: [{ q: 'How do you release a sum of purchase amounts instead of a count?', a: 'Clamp each person\'s amount to a fixed range [0, M] first; the sensitivity becomes M and the Laplace scale M / ε. Without clamping one outlier makes the sensitivity unbounded.' }],
+    },
+    {
+      id: 'privacy-guardrails-mcq-14',
+      difficulty: 'hard',
+      question: 'In which of these situations does differential privacy give real protection? Select ALL that apply.',
+      options: [
+        'Fine-tuning a model on users\' support chats with DP-SGD before the model answers other users',
+        'Publishing weekly counts of the most common user intents',
+        'Releasing a synthetic dataset sampled from a generator trained with DP',
+        'Stopping a RAG assistant from quoting a confidential document it retrieved into the prompt',
+      ],
+      correct: [0, 1, 2],
+      explanation: 'DP bounds what a trained model or released statistic reveals about any one person, and samples from a DP-trained generator inherit the guarantee through post-processing. Text placed in the prompt at inference time is outside DP entirely; RAG needs access control, retrieval filters and output rails.',
+      followUps: [{ q: 'What check would you run on a fine-tune with or without DP?', a: 'Plant canaries (unique fake secrets) in the training data and test whether the model completes them from their prefix; it measures memorisation directly.' }],
+    },
+    {
+      id: 'privacy-guardrails-mcq-15',
+      difficulty: 'expert',
+      question: 'This function releases total spend per region "with differential privacy". What is wrong with it?',
+      code: {
+        language: 'typescript',
+        code: `function privateSum(amounts: number[], epsilon: number): number {
+  const total = amounts.reduce((a, b) => a + b, 0);
+  return total + laplace(1 / epsilon); // scale = sensitivity / ε, sensitivity of a sum is 1
+}`,
+      },
+      options: [
+        'The sensitivity of an unclamped sum is not 1: one customer can change it by any amount, so the noise is far too small',
+        'Laplace noise cannot be used for sums, only for counts',
+        'It should divide by amounts.length before adding noise',
+        'Nothing; the guarantee holds as written',
+      ],
+      correct: [0],
+      explanation: 'Sensitivity is the most one person can change the result. For a count it is 1; for a sum it is the largest possible contribution, which is unbounded here (one $50,000 order). Clamp each amount to [0, M] and use scale M / ε. Laplace works for any bounded-sensitivity numeric query.',
+      followUps: [{ q: 'How do you pick the clamp M?', a: 'From domain knowledge or a small, separately budgeted DP quantile, not from the raw maximum of the data, which would itself leak information about the largest contributor.' }],
     },
   ],
 };

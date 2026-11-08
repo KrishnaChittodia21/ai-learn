@@ -36,6 +36,76 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Embeddings — turning meaning into coordinates',
+      short: {
+        id: 'embeddings-meaning-as-coordinates',
+        title: 'Embeddings: meaning as coordinates',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'text-embedding-3-small',
+            value: 1536,
+            unit: 'numbers for any text, 3 words or 3 pages',
+            sub: 'A fixed-length **vector**: a GPS coordinate for meaning.',
+          },
+          {
+            type: 'retrieve',
+            kicker: 'Search by meaning',
+            head: '*No shared words*, still the top match',
+            query: 'I want my money back for a broken kettle',
+            chunks: [
+              { text: 'Refunds: damaged items can be returned within 30 days', score: 0.62 },
+              { text: 'Shipping takes 3–5 working days', score: 0.31 },
+              { text: 'Our office is open 9am–5pm', score: 0.14 },
+            ],
+            k: 1,
+            sub: 'Cosine similarity. Exact values **vary by model**.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Keyword vs meaning',
+            head: 'Keyword search scores the refund entry *zero*',
+            rungs: [{ label: 'Embeddings', amount: 0.62 }, { label: 'Keyword (BM25)', amount: 0 }],
+            unit: 'score',
+            sub: '"Money back" and "refund" share **no words**, only meaning.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Bi-encoder',
+            head: 'Embed the corpus *once*',
+            steps: ['Embed every document offline', 'Store the vectors', 'At query time, embed only the query', 'Find its nearest neighbours'],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Weak spots',
+            head: 'Where embeddings *struggle*',
+            items: [
+              { label: 'Exact IDs like SKU AB-1234' },
+              { label: 'Negation: "not cancel"' },
+              { label: 'Rare jargon' },
+              { label: 'Pair with keyword search', keep: true },
+            ],
+            keepLabel: 'HYBRID',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'You re-embed the documents with a new model but not the queries. What happens?',
+            answer: 0,
+            options: [
+              {
+                text: 'Search breaks: both sides must use the same model',
+                why: 'Each model places meaning differently, so distances across two models mean nothing.',
+              },
+              { text: 'Nothing, a vector is a vector', why: 'Same length or not, vectors from two models are not comparable.' },
+              { text: 'Search gets faster', why: 'Speed is not the issue; the similarity scores stop meaning anything.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Close vectors mean *similar meaning*.',
+          sub: 'Embed documents once and the query at search time, with the **same model**, and pair it with keyword search for exact IDs.',
+        },
+      },
       body: `**Intuition:** an embedding is a GPS coordinate for meaning. A model reads a piece of text and returns a list of numbers (a *vector*), and texts that mean similar things get coordinates that sit close together, even when they share no words. "How do I get my money back?" lands next to "Refund policy", far from "Office opening hours".
 
 **Mechanics.** An embedding model is a transformer encoder trained with *contrastive learning*: it sees millions of (question, matching answer) pairs and is pushed to place matching pairs close and non-matching pairs far apart. The output is a fixed-length vector (384, 768, 1024, 1536 or 3072 numbers) regardless of whether you feed it 3 words or 3 pages.

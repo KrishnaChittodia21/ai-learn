@@ -7,7 +7,7 @@ const topic: Topic = {
   title: 'Cost Optimization, Semantic Caching and Prompt Caching',
   subtitle:
     'Cut LLM spend 50–90% without hurting quality: model tiering, token budgets, batch APIs, semantic caches that do not lie, and provider prompt caching done right.',
-  estimatedMinutes: 44,
+  estimatedMinutes: 56,
   sources: [
     'Anthropic docs — Prompt caching (cache_control, TTLs, pricing multipliers, minimum lengths, usage fields): https://platform.claude.com/docs/en/build-with-claude/prompt-caching',
     'Anthropic docs — Message Batches API: https://platform.claude.com/docs/en/build-with-claude/batch-processing',
@@ -17,8 +17,10 @@ const topic: Topic = {
     'GPTCache (Zilliz) — semantic cache design and similarity evaluation: https://github.com/zilliztech/GPTCache',
     'Chen, Zaharia, Zou 2023 — FrugalGPT: How to Use LLMs While Reducing Cost and Improving Performance (model cascades): https://arxiv.org/abs/2305.05176',
     'Ong et al. 2024 — RouteLLM: Learning to Route LLMs with Preference Data: https://arxiv.org/abs/2406.18665',
+    'FinOps Foundation — FinOps for AI (unit economics, allocation, showback/chargeback): https://www.finops.org/wg/finops-for-ai-overview/',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 17 lesson 27 (FinOps for LLMs), adapted and rewritten',
   ],
-  tags: ['llmops', 'cost', 'caching', 'semantic-cache', 'prompt-caching', 'batch-api', 'model-routing'],
+  tags: ['llmops', 'cost', 'caching', 'semantic-cache', 'prompt-caching', 'batch-api', 'model-routing', 'finops', 'unit-economics'],
   cheatSheet: [
     'Cost = calls × (input tokens × input price + output tokens × output price); output tokens often cost 4–8× input tokens, so cap and shorten outputs first.',
     'Biggest levers in order: right-size the model (tiering/routing), cut tokens (context, history, max_tokens), cache (prompt + semantic), batch non-urgent work (~50% off).',
@@ -30,6 +32,7 @@ const topic: Topic = {
     'Cache-friendly layout: static first (tools, system, few-shot, documents), variable last (user turn, timestamps, user name). One dynamic token early in the prompt invalidates everything after it.',
     'Measure cache hit rate and cost per request per feature; a cache that hits 5% may cost more (writes, embeddings, lookups) than it saves.',
     'Never optimise blind: every cost change must pass the same eval suite as a quality change.',
+    'FinOps: report cost per successful task (retries, judges and human fallback included), tag tenant/feature/user/route at request creation, budget ladder = rate limit → 80% alert → degrade → hard cap → anomaly pause; showback before chargeback.',
   ],
   sections: [
     {
@@ -495,6 +498,169 @@ console.log(cacheSavings({ prefixTokens: 40000, suffixTokens: 100, callsWithinTt
       },
       source: 'Anthropic docs — Prompt caching; OpenAI docs — Prompt caching',
     },
+    {
+      heading: 'LLM FinOps — unit economics, attribution, budgets and forecasts',
+      body: `**Intuition:** a bakery does not track the price of flour per gram; it tracks the cost of each loaf it *sells*, burnt loaves included. LLM FinOps does the same: report $ per useful outcome, owned by a team, with a budget and a forecast.
+
+**1. Unit economics.** Pick the unit the business sells or saves: a resolved ticket, a generated report, a merged PR, a completed agent task.
+- **Cost per task** = feature spend ÷ tasks attempted.
+- **Cost per successful task** = feature spend ÷ tasks that succeeded. Failed attempts, retries, judge calls, guardrails, embeddings and tool calls all land in the numerator.
+- Compare it with the **value per task** (price charged, human minutes saved) to get a margin. A cheaper model that lowers the success rate can *raise* cost per success, and the total cost once human fallback is counted.
+
+**2. Attribution and tagging.** Stamp \`tenant_id\`, \`feature\` / \`task_id\`, \`user_id\`, route (model) and prompt version **when the request is created** (at the gateway) and carry them through every agent step. Split tokens by layer (system prompt, retrieved context or memory, tool results, output) so you can see *what* grew. Tagging after the fact always leaves an "unattributed" bucket. (Ledger mechanics: Observability → Token Usage Tracking.)
+
+**3. Budgets and alerts: an enforcement ladder.**
+
+| Rung | Trigger (example) | Action |
+|---|---|---|
+| Rate limit | requests or tokens per minute per tenant | 429 with Retry-After |
+| Soft budget | 80% of daily/monthly budget | alert the owning team |
+| Degrade | 90% | cheaper model, defer work to batch |
+| Hard cap | 100% | block, or require an override |
+| Anomaly | spend far above the tenant's own baseline (e.g. z-score > 4) | pause and page on-call: likely an agent loop, abuse or a bug |
+
+**4. Forecasting.** Forecast from drivers, not from last month's invoice: active users × tasks per user × calls per task × tokens per call × price. Each moves for its own reasons (growth, agent loop depth, context creep, price cuts, model migrations). Watch **tokens per task** weekly; it drifts upward silently as prompts and retrieved context grow.
+
+**5. Levers, in FinOps terms.** Routing/tiering and batch APIs (section 1) cut the price per call; caching (sections 2–3) cuts tokens; capping agent iterations cuts calls per task. Steady, predictable traffic can justify reserved or provisioned capacity; spiky traffic stays on pay-as-you-go.
+
+**6. Showback → chargeback.** *Showback* reports each team's or tenant's cost back to them; *chargeback* bills it to their budget or the customer invoice. Start with showback, and move to chargeback only once nearly all spend is attributed and teams trust the numbers.`,
+      example: `Support assistant, one month: 200,000 conversations, $24,000 of LLM spend, 70% resolved without a human; each human hand-off costs about $4.
+- Cost per conversation: $24,000 / 200,000 = **$0.12**. Cost per resolved conversation: $24,000 / 140,000 = **$0.171**.
+- All-in cost: $24,000 + 60,000 hand-offs × $4 = **$264,000**.
+A team swaps to a model 40% cheaper. LLM spend drops to $14,400, but resolution falls to 55%.
+- Cost per resolved: $14,400 / 110,000 = $0.131 (looks better).
+- All-in: $14,400 + 90,000 × $4 = **$374,400**, which is $110,400 a month *worse*.
+The token bill went down, the business cost went up. Only a cost-per-successful-task view, with the human fallback included, shows it.`,
+      diagram: `request ─▶ gateway: stamp tenant / feature / user / route / prompt_version
+              │
+              ▼
+        LLM + tools + judges ──usage──▶ cost ledger (per call, tagged)
+                                             │
+              outcomes (resolved? merged?) ──┤ join on task_id
+                                             ▼
+        cost per successful task · per tenant margin · forecast by driver
+                                             │
+              ┌──────────────────────────────┼──────────────────────────┐
+              ▼                              ▼                          ▼
+     budgets + alerts ladder        showback → chargeback      lever choice (route,
+     (80% alert, cap, anomaly)      reports to each owner      cache, batch, caps)`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'unit-economics.ts — cost per task and per successful task, per feature',
+          code: `type LedgerRow = { feature: string; taskId: string; costUsd: number };
+type Outcome = { taskId: string; success: boolean };
+
+/** Every call counts toward its task: retries, judges, embeddings, tool calls. */
+export function unitEconomics(rows: LedgerRow[], outcomes: Outcome[]) {
+  const ok = new Map(outcomes.map((o) => [o.taskId, o.success]));
+  const byFeature = new Map<string, { spend: number; tasks: Set<string>; wins: Set<string> }>();
+  for (const r of rows) {
+    const f = byFeature.get(r.feature) ?? { spend: 0, tasks: new Set<string>(), wins: new Set<string>() };
+    f.spend += r.costUsd;
+    f.tasks.add(r.taskId);
+    if (ok.get(r.taskId)) f.wins.add(r.taskId);
+    byFeature.set(r.feature, f);
+  }
+  return [...byFeature].map(([feature, f]) => ({
+    feature,
+    spend: +f.spend.toFixed(4),
+    costPerTask: +(f.spend / f.tasks.size).toFixed(4),
+    successRate: +(f.wins.size / f.tasks.size).toFixed(3),
+    costPerSuccess: f.wins.size ? +(f.spend / f.wins.size).toFixed(4) : Infinity,
+  }));
+}
+
+const rows: LedgerRow[] = [
+  { feature: 'support', taskId: 't1', costUsd: 0.02 },
+  { feature: 'support', taskId: 't1', costUsd: 0.01 }, // judge call on the same task
+  { feature: 'support', taskId: 't2', costUsd: 0.04 }, // retried twice, still failed
+  { feature: 'support', taskId: 't3', costUsd: 0.03 },
+];
+console.log(unitEconomics(rows, [
+  { taskId: 't1', success: true }, { taskId: 't2', success: false }, { taskId: 't3', success: true },
+]));
+// [{ feature: 'support', spend: 0.1, costPerTask: 0.0333, successRate: 0.667, costPerSuccess: 0.05 }]`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Cost per successful task ties spend to an outcome, so cost and quality trade-offs are argued in one number.',
+          'Tagging at request creation gives per-tenant margins, per-feature owners and a clean base for chargeback.',
+          'A budget ladder turns a surprise invoice into an alert, a downgrade or a paused tenant within minutes.',
+          'Driver-based forecasts explain *why* spend will change, not just that it will.',
+        ],
+        cons: [
+          {
+            con: 'Success is hard to define for open-ended features, so cost per success becomes a guess.',
+            fix: 'Use a proxy you can measure per task (resolved without hand-off, accepted suggestion, merged PR, thumbs-up) and review the definition with the product owner each quarter.',
+          },
+          {
+            con: 'Hard caps can break a paying customer mid-workflow.',
+            fix: 'Degrade before blocking (cheaper model, batch), alert the account owner at the soft limit, and give contracted tenants an override path.',
+          },
+          {
+            con: 'Chargeback on untrusted numbers starts arguments instead of savings.',
+            fix: 'Run showback first, publish the unattributed share, and switch to chargeback only once it is small and stable.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Report cost per successful task, not $ per million tokens.',
+        'Count every call in a task: retries, judges, guardrails, embeddings.',
+        'Tag tenant, feature, user, route and prompt version at request creation.',
+        'Ladder: rate limit → soft alert → degrade → hard cap → anomaly pause.',
+        'Forecast from drivers; watch tokens per task drift.',
+        'Showback first, chargeback once attribution is trusted.',
+      ],
+      exercise: {
+        prompt: `Write \`enforce(t)\` for one tenant-day \`{ spendToday, dailyBudget, baselineMean, baselineStd }\` that returns \`'allow' | 'alert' | 'downgrade' | 'block' | 'pause'\`:
+- **pause** if spend is more than 4 standard deviations above the tenant's own baseline (checked first: an anomaly beats every budget rule),
+- **block** at ≥ 100% of the budget, **downgrade** at ≥ 90%, **alert** at ≥ 80%, otherwise **allow**.
+
+Acceptance with \`{ dailyBudget: 100, baselineMean: 40, baselineStd: 20 }\`: spend 50 → allow, 82 → alert, 92 → downgrade, 100 → block, 130 → pause. A tenant with \`baselineStd: 0\` must not crash.`,
+        hints: [
+          'z = (spendToday − baselineMean) / baselineStd; treat a zero std as z = 0 rather than dividing by zero.',
+          'Check the anomaly first, then the budget thresholds from highest to lowest.',
+          '130 is above the budget too, but z = 4.5 > 4, so it must return pause.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Action = 'allow' | 'alert' | 'downgrade' | 'block' | 'pause';
+type TenantDay = { spendToday: number; dailyBudget: number; baselineMean: number; baselineStd: number };
+
+export function enforce(t: TenantDay): Action {
+  const z = t.baselineStd > 0 ? (t.spendToday - t.baselineMean) / t.baselineStd : 0;
+  if (z > 4) return 'pause';                                    // anomaly: loop, abuse or bug
+  if (t.spendToday >= t.dailyBudget) return 'block';            // hard cap: 429 with Retry-After
+  if (t.spendToday >= 0.9 * t.dailyBudget) return 'downgrade';  // cheaper model or defer to batch
+  if (t.spendToday >= 0.8 * t.dailyBudget) return 'alert';
+  return 'allow';
+}
+
+const base = { dailyBudget: 100, baselineMean: 40, baselineStd: 20 };
+const cases: [number, Action][] = [[50, 'allow'], [82, 'alert'], [92, 'downgrade'], [100, 'block'], [130, 'pause']];
+for (const [spendToday, want] of cases) console.assert(enforce({ ...base, spendToday }) === want, spendToday);
+console.log(enforce({ ...base, baselineStd: 0, spendToday: 10 })); // allow`,
+        },
+        explanation:
+          'Budget rungs protect against steady overspend; the z-score rung catches sudden spikes relative to the tenant\'s own history, which is what an agent stuck in a loop or a leaked key looks like. Checking the anomaly first means a runaway tenant is paused and someone is paged, not just silently capped. In production the inputs come from the cost ledger, the check runs at the gateway before each call, and the thresholds are per contract.',
+      },
+      quickCheck: {
+        question:
+          'Feature A costs $0.05 per task with a 50% success rate. Feature B costs $0.08 per task with a 90% success rate. Which is cheaper per successful task?',
+        options: [
+          'A: $0.05 is less than $0.08',
+          'B: about $0.089 per success against A\'s $0.10',
+          'They cost the same per success',
+          'You cannot tell without token counts',
+        ],
+        correct: 1,
+        explanation:
+          'Cost per success = cost per task ÷ success rate: A = 0.05 / 0.5 = $0.10, B = 0.08 / 0.9 ≈ $0.089. The pricier-per-call feature is cheaper per outcome, before even counting what each failure costs downstream. Token counts are not needed once spend and outcomes are joined.',
+      },
+      source: 'FinOps Foundation — FinOps for AI; ai-engineering-from-scratch Phase 17 · 27 (FinOps for LLMs)',
+    },
   ],
   codeChallenges: [
     {
@@ -853,6 +1019,42 @@ Note: retrieved context changes per query, so in RAG the cacheable prefix is mos
         'Putting retrieved context before static instructions',
       ],
     },
+    {
+      id: 'cost-caching-iq-6',
+      difficulty: 'hard',
+      question: 'The CFO says LLM spend tripled this quarter and nobody can explain why. You own the platform for a multi-tenant SaaS with five AI features. What do you put in place?',
+      context: 'One provider invoice, one shared API key, ~40 enterprise tenants on flat per-seat pricing, agents that call tools in loops.',
+      whatInterviewerLooksFor: [
+        'Attribution at request creation, not reverse-engineered from the invoice',
+        'A unit metric tied to outcomes (cost per successful task), not $/M tokens',
+        'Budgets with graded actions and anomaly detection',
+        'Driver-based forecasting and showback before chargeback',
+        'Pricing / margin consequences per tenant',
+      ],
+      modelAnswer: `**1. Explain the past quarter quickly.** Split the shared key into per-feature keys or route everything through a gateway now; for history, join whatever request logs exist on timestamps and model names to estimate the split, and label the remainder "unattributed".
+
+**2. Attribute every call from now on.** The gateway stamps \`tenant_id\`, \`feature\`/\`task_id\`, \`user_id\`, route (model) and prompt version, and propagates them through every agent step and tool call. The cost ledger stores the token breakdown by layer (system, retrieved context/memory, tool results, output) and the computed cost. Target: under ~5% of spend unattributed.
+
+**3. Switch the unit.** Per feature, join cost to outcomes: **cost per successful task** (resolved ticket, accepted draft, completed workflow), including retries, judges and embeddings. Per tenant: cost per seat against the seat price, i.e. margin.
+
+**4. Find the driver.** Spend = users × tasks/user × calls/task × tokens/call × price. Tripling usually comes from one or two drivers: agent loops getting deeper, context creep from bigger retrieval or memory, a model upgrade, or a few heavy tenants. The layer breakdown and per-tenant view show which.
+
+**5. Guardrails.** Per-tenant rate limits; daily/monthly budgets with an alert at 80%, a degrade step (cheaper model, defer to batch) at 90% and a hard cap; an anomaly rule (spend far above the tenant's own baseline) that pauses and pages; a cap on agent iterations per task.
+
+**6. Forecast and report.** A driver-based forecast per feature reviewed monthly with finance; showback dashboards to each feature team and account owner. Chargeback (or usage-based pricing tiers for heavy tenants) once the numbers are trusted.
+
+**7. Then optimise** with the usual levers (routing, caching, batch, output caps), each gated by evals, and measure the effect in cost per successful task.`,
+      followUps: [
+        { q: 'Two tenants pay the same per seat but one costs 6× more to serve. What are your options?', a: 'Find the driver first (bigger documents, heavier agent use, abuse). Then: per-tenant budgets and degraded tiers, usage-based add-ons or fair-use limits in the next contract, and targeted optimisation (caching their stable corpus, routing their easy traffic). Raise it with the account owner, not by silently throttling.' },
+        { q: 'Why not just alert when the daily bill goes over a fixed number?', a: 'A global threshold fires late and does not say who or what. Per-tenant, per-feature budgets plus an anomaly rule against each tenant\'s own baseline catch a runaway agent in minutes and point to the owner.' },
+      ],
+      pitfalls: [
+        'Reporting $ per million tokens as the success metric.',
+        'Trying to attribute cost retroactively from the invoice only.',
+        'Hard-blocking paying tenants without a degrade step or an alert to the account owner.',
+        'Cutting cost without re-running evals and checking cost per successful task.',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1168,6 +1370,64 @@ models.sort((a, b) => costPerCall(a, 2000) - costPerCall(b, 2000));`,
           q: 'How would you rebuild the cache without a cold-start cost spike?',
           a: 'Re-embed stored queries with the new model in a background job (cheap: queries are short) and swap the index once complete, keeping answers and metadata.',
         },
+      ],
+    },
+    {
+      id: 'cost-caching-mcq-13',
+      difficulty: 'medium',
+      question: 'Which unit metric best supports deciding whether an LLM support feature is worth its cost?',
+      options: [
+        'Total tokens per month',
+        'Average $ per million tokens across models',
+        'Cost per resolved conversation, including retries, judge calls and human hand-offs',
+        'Number of API calls per user',
+      ],
+      correct: [2],
+      explanation: 'A unit metric should tie spend to the outcome the business values. Tokens, blended token prices and call counts measure activity; cost per resolved conversation (with failures and fallback included) can be compared directly with the value of a resolution.',
+      followUps: [
+        { q: 'Why include human hand-offs?', a: 'A cheaper model that resolves fewer conversations shifts cost to human agents; without the hand-off cost the change looks like a saving when the total cost went up.' },
+      ],
+    },
+    {
+      id: 'cost-caching-mcq-14',
+      difficulty: 'hard',
+      question: 'Which practices make LLM cost attribution reliable in a multi-tenant product? Select ALL that apply.',
+      options: [
+        'Stamp tenant, feature, user, model route and prompt version at the gateway when the request is created',
+        'Propagate the same tags to every agent step, tool call and judge call within a task',
+        'Reconstruct the tenant split at month end from the provider invoice line items',
+        'Break tokens down by layer (system prompt, retrieved context, tool results, output)',
+      ],
+      correct: [0, 1, 3],
+      explanation: 'Attribution only works if tags are attached when the call is made and carried through the whole task; the layer breakdown shows what grew. Provider invoices do not carry your tenant or feature, so reconstructing it afterwards leaves a large unattributed bucket and guesses.',
+      followUps: [
+        { q: 'What share of unattributed spend is acceptable?', a: 'Aim for a small, stable share (a few percent) before using the data for chargeback; publish the number so teams know how much to trust the reports.' },
+      ],
+    },
+    {
+      id: 'cost-caching-mcq-15',
+      difficulty: 'hard',
+      question: 'This budget check runs before every LLM call. What is wrong with it?',
+      code: {
+        language: 'typescript',
+        code: `function decide(spendToday: number, budget: number, mean: number, std: number) {
+  if (spendToday >= budget) return 'block';
+  if (spendToday >= 0.8 * budget) return 'alert';
+  const z = (spendToday - mean) / std;
+  if (z > 4) return 'pause-and-page';
+  return 'allow';
+}`,
+      },
+      options: [
+        'An anomaly above the budget is only blocked, never paged, and a tenant with std = 0 divides by zero',
+        'The 0.8 threshold should be 0.5',
+        'z-scores cannot be used for spend data',
+        'Nothing; the order of checks does not matter',
+      ],
+      correct: [0],
+      explanation: 'Checks run top to bottom, so a runaway tenant that blew through the budget gets a silent block and nobody is paged; the anomaly rule only fires below 80% of budget. With std = 0 (a new or perfectly steady tenant) z becomes Infinity or NaN. Check the anomaly first and guard the zero std. The exact soft threshold is a policy choice.',
+      followUps: [
+        { q: 'What baseline would you use for a brand-new tenant?', a: 'A cohort baseline (similar plan size and features) until the tenant has a couple of weeks of history, plus the contract budget as a hard cap.' },
       ],
     },
   ],

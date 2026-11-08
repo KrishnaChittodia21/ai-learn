@@ -2,9 +2,12 @@ import {
   Award,
   BadgeCheck,
   BookOpen,
+  Braces,
+  Bookmark,
   Calculator,
   CalendarCheck,
   CircleCheck,
+  Clapperboard,
   CodeXml,
   Coffee,
   Cpu,
@@ -15,6 +18,9 @@ import {
   Gem,
   GraduationCap,
   Hammer,
+  Gauge,
+  Route,
+  Film,
   Lock,
   MessageSquare,
   Mic,
@@ -36,6 +42,8 @@ import type { EarnedTier } from '../../content/achievements';
 /** glyph keys used by src/content/achievements.ts → lucide icons */
 const ART: Record<string, LucideIcon> = {
   sparkles: Sparkles,
+  clapper: Clapperboard,
+  bookmark: Bookmark,
   terminal: Terminal,
   zap: Zap,
   check: CircleCheck,
@@ -63,6 +71,10 @@ const ART: Record<string, LucideIcon> = {
   coffee: Coffee,
   rocket: Rocket,
   hammer: Hammer,
+  gauge: Gauge,
+  route: Route,
+  film: Film,
+  braces: Braces,
 };
 
 export type BadgeSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';

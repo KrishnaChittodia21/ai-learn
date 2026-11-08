@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, MAX_LIMIT, MIN_LIMIT, SCENARIO_LABELS, THREAD_ID, simulate, type Decision, type EdgeId, type Msg, type NodeId, type Params, type ScenarioId } from './sim';
 
 const short = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
@@ -65,6 +66,7 @@ export default function LangGraphExecutionViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Choice<ScenarioId>

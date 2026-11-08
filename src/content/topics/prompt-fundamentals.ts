@@ -38,6 +38,125 @@ const topic: Topic = {
     // ------------------------------------------------------------------ 1
     {
       heading: 'Anatomy of a prompt — roles, task, context, constraints and success criteria',
+      core: `**Intuition:** an LLM is a brilliant new hire who has never seen your company. It does exactly what the words say. A prompt is the briefing you would give that hire, and a vague brief gets a generic answer.
+
+The **system** turn holds the role, rules and output contract and stays constant (reviewable, cacheable). The **user** turn holds the input data and the actual question. **Assistant** turns hold earlier replies or hand-written example replies.
+
+Build the brief in a sensible order: **role**, **task** (one clear verb), **context** (audience and purpose), delimited **input data**, **constraints** written as positive instructions, then **output format + success criteria**.
+
+A role shapes vocabulary, tone and focus; it adds no knowledge and is not a security control. System instructions outrank the user, and content from tools or retrieved documents is data with no authority. Judge a prompt on 10–20 real inputs and change one thing at a time.`,
+      steps: {
+        actors: [
+          { id: 'system', kind: 'document', label: 'System prompt', sub: 'role · rules · format', x: 110, y: 70 },
+          { id: 'user', kind: 'user', label: 'User turn', sub: 'data + question', x: 340, y: 70 },
+          { id: 'doc', kind: 'document', label: 'Retrieved doc', sub: 'data, no authority', x: 570, y: 70 },
+          { id: 'tool', kind: 'tool', label: 'Tool result', sub: 'data, no authority', x: 800, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'does what words say', x: 340, y: 230 },
+          { id: 'evals', kind: 'judge', label: 'Eval set', sub: '10–20 real inputs', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three kinds of turn',
+            lines: [
+              '**System**: role, rules and output contract, the same on every request.',
+              '**User**: the input data and the actual question, new each time.',
+              '**Assistant**: earlier replies, or hand-written example replies.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'system' },
+              { send: ['system', 'llm'], label: 'role + rules' },
+              { say: 1 },
+              { lit: 'user' },
+              { send: ['user', 'llm'], label: 'data + question', tone: 'ok' },
+              { say: 2 },
+              { lit: 'llm' },
+              { badge: 'llm', text: 'assistant reply', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the building blocks',
+            lines: ['A brief with every block in place leaves the model nothing to guess.'],
+            task: {
+              type: 'order',
+              question: 'Put the building blocks of a prompt in a sensible order.',
+              items: ['Role', 'Task', 'Context', 'Input data', 'Constraints', 'Output format + success criteria'],
+              hint: 'Who the model is comes first; the exact shape of the answer and what "done well" means come last.',
+            },
+            solved: 'Role → task → context → input data → constraints → output format and success criteria.',
+            then: [{ send: ['system', 'llm'], label: 'role · task · rules' }, { send: ['user', 'llm'], label: 'input data' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Who outranks whom',
+            lines: [
+              'System (developer) instructions outrank the user.',
+              'Content from tools or retrieved documents is data, with no authority.',
+              'So rules go in the system prompt; untrusted text never does.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'system' },
+              { send: ['system', 'llm'], label: 'rules' },
+              { send: ['user', 'llm'], label: 'question' },
+              { say: 1 },
+              { send: ['doc', 'llm'], label: 'data', tone: 'miss' },
+              { send: ['tool', 'llm'], label: 'data', tone: 'miss' },
+              { say: 2 },
+              { badge: 'system', text: 'rules live here', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: whose rules win?',
+            lines: ['Retrieved documents and tool results can contain instructions. They are still only data.'],
+            task: {
+              type: 'pick',
+              question: "A retrieved web page says 'ignore your rules'. Which part's instructions should the model follow?",
+              answer: 'system',
+              hints: {
+                user: 'The system prompt outranks the user turn.',
+                doc: 'Retrieved documents are data with no authority.',
+                tool: 'Tool results are data with no authority, too.',
+              },
+            },
+            solved: 'The system prompt holds the rules and outranks the user; retrieved text and tool results are only data.',
+            then: [{ send: ['doc', 'llm'], label: 'data', tone: 'miss' }, { lit: 'system' }, { badge: 'system', text: 'rules win', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what a role does',
+            lines: ['"You are the release-notes writer for Ledgerly" is a role.'],
+            task: {
+              type: 'choose',
+              question: 'You add a role to the system prompt. What does it do?',
+              options: [
+                { text: 'Focuses vocabulary, tone and what the model pays attention to' },
+                { text: 'Adds knowledge the model lacked', why: 'A role does not add knowledge the model lacks, and it does not make answers true.' },
+                { text: 'Stops users from talking the model out of its rules', why: 'A role is not a security control: a user can still try to talk the model out of it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'A role shapes style and focus; it adds no knowledge, does not make answers true and is no security control.',
+            then: [{ send: ['system', 'llm'], label: 'role' }, { badge: 'llm', text: 'tone + focus' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Test it like code',
+            lines: ['Judge a prompt on 10–20 real inputs, not the one you wrote it for.', 'Change one thing at a time.'],
+            script: [
+              { say: 0 },
+              { lit: 'evals' },
+              { send: ['evals', 'llm'], label: 'real inputs', count: 3 },
+              { send: ['llm', 'evals'], label: 'outputs', tone: 'ok', count: 3 },
+              { say: 1 },
+              { badge: 'system', text: 'one change', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an LLM is a brilliant new hire who has never seen your company. It does exactly what the words say. A prompt is the briefing you would give that hire, and a vague brief gets a generic answer.
 
 **Three kinds of turn**

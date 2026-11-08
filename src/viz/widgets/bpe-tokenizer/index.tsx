@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { BASE_VOCAB, CORPUS, DEFAULT_PARAMS, MAX_MERGES, MIN_MERGES, TEXTS, encode, simulate, train, type Params, type TextChoice } from './sim';
 
 const FILLS = ['var(--accent-soft)', 'var(--good-soft)', 'var(--warn-soft)'];
@@ -47,6 +48,7 @@ export default function BpeTokenizerViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Choice<TextChoice>

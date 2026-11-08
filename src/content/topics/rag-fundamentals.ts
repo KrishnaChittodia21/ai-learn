@@ -46,6 +46,232 @@ const topic: Topic = {
   sections: [
     {
       heading: 'RAG Fundamentals — the end-to-end pipeline from documents to cited answers',
+      core: `**Intuition:** an LLM is a brilliant student who studied until its training cut-off and has never seen your company wiki. RAG is an *open-book exam*: before answering, you hand it the three or four pages most likely to contain the answer and ask it to answer *from those pages* and say which page it used.
+
+It runs in two phases. **Indexing** (offline, on ingest or document change): load → parse → chunk (300–800 tokens) → embed → upsert into a vector store with metadata. **Query** (online, every request): embed the query → top-k similarity search → build a prompt with numbered sources → generate → return the answer with citations.
+
+The prompt is the *contract* between retriever and generator: numbered chunks, an instruction to answer only from them, a required citation format and a refusal path. Use RAG when answers come from a corpus that is private, large or changing; fine-tuning teaches style and format, not facts that change weekly.`,
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'Documents', sub: 'PDFs, wiki, docs', x: 110, y: 70 },
+          { id: 'chunker', kind: 'chunker', label: 'Chunker', sub: '300–800 tokens', x: 340, y: 70 },
+          { id: 'embedder', kind: 'embedder', label: 'Embedder', sub: 'bi-encoder', x: 570, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Vector store', sub: 'text + vector + meta', x: 800, y: 70 },
+          { id: 'user', kind: 'user', label: 'User', sub: 'question', x: 110, y: 230 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'top-k search', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'answer from sources', x: 570, y: 230 },
+          { id: 'check', kind: 'judge', label: 'Citation check', sub: 'validate cited ids', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two phases, one contract',
+            lines: [
+              '**Indexing** runs offline: documents are chunked, embedded and stored.',
+              '**Query** runs online, on every request: retrieve, then generate.',
+              'The prompt is the contract between the retriever and the generator.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'chunker'], label: 'parse' },
+              { send: ['chunker', 'embedder'], label: 'chunks', count: 3 },
+              { send: ['embedder', 'store'], label: 'vectors', count: 3 },
+              { say: 1 },
+              { send: ['user', 'retriever'], label: 'question', tone: 'ok' },
+              { send: ['retriever', 'llm'], label: 'top-k' },
+              { say: 2 },
+              { lit: 'llm' },
+              { badge: 'llm', text: '[1] [2] [3]', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Indexing, step by step',
+            lines: [
+              'Load and parse each document.',
+              'Split it into chunks of 300–800 tokens.',
+              'Embed each chunk and upsert text + vector + metadata (doc id, version, ACL).',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'docs' },
+              { send: ['docs', 'chunker'], label: 'parse' },
+              { say: 1 },
+              { lit: 'chunker' },
+              { send: ['chunker', 'embedder'], label: 'chunks', count: 3 },
+              { say: 2 },
+              { lit: 'embedder' },
+              { send: ['embedder', 'store'], label: 'upsert', count: 3 },
+              { lit: 'store' },
+              { badge: 'store', text: 'doc id · ACL', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where does a chunk live?',
+            lines: ['Every chunk is kept with its text, its vector and its metadata, so answers can be cited and filtered.'],
+            task: {
+              type: 'pick',
+              question: 'Which part stores the text, vector and metadata of every chunk?',
+              answer: 'store',
+              hints: {
+                chunker: 'The chunker splits documents into chunks; it does not keep them.',
+                embedder: 'The embedder turns text into vectors and hands them on.',
+                retriever: 'The retriever searches at query time; it does not own the data.',
+              },
+            },
+            solved: 'The vector store keeps text + vector + metadata (doc id, version, ACL) for every chunk.',
+            then: [{ send: ['embedder', 'store'], label: 'upsert', count: 3 }, { lit: 'store' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Query: embed, search, top-k',
+            lines: [
+              'The question is embedded, as the chunks were.',
+              'A top-k similarity search fetches the closest chunks.',
+              'They go into the prompt as numbered sources.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'embedder'], label: 'question' },
+              { send: ['embedder', 'retriever'], label: 'query vector' },
+              { say: 1 },
+              { send: ['retriever', 'store'], label: 'top-k' },
+              { send: ['store', 'retriever'], label: 'chunks', tone: 'ok', count: 3 },
+              { say: 2 },
+              { send: ['retriever', 'llm'], label: '[1] [2] [3]' },
+              { lit: 'llm' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the query phase',
+            lines: ['This runs on every request, in this order.'],
+            task: {
+              type: 'order',
+              question: 'Put the query phase in order.',
+              items: ['Embed the query', 'Top-k similarity search', 'Build prompt with numbered sources', 'Generate', 'Return answer + citations'],
+              hint: 'The search needs the query vector first, and the model needs the numbered sources before it can cite them.',
+            },
+            solved: 'Embed → search → prompt with numbered sources → generate → answer with citations, on every request.',
+            then: [
+              { send: ['user', 'retriever'], label: 'question' },
+              { send: ['retriever', 'llm'], label: 'top-k' },
+              { send: ['llm', 'check'], label: 'answer', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Answer, cite, or refuse',
+            lines: [
+              'The model answers only from the numbered sources.',
+              'It cites them, and the cited ids are validated.',
+              'With no answer in the sources, it takes the refusal path.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { send: ['llm', 'check'], label: 'answer [1] [2]' },
+              { say: 1 },
+              { lit: 'check' },
+              { badge: 'check', text: 'ids valid', tone: 'ok' },
+              { say: 2 },
+              { badge: 'llm', text: "I don't know", tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: RAG or fine-tuning?',
+            lines: ['Fine-tuning teaches style and format; RAG brings in facts at query time.'],
+            task: {
+              type: 'choose',
+              question: 'The facts in your policy docs change every week. What fits best?',
+              options: [
+                { text: 'RAG over the policy docs, re-indexing a doc when it changes' },
+                { text: 'Fine-tune the model on the docs every week', why: 'Fine-tuning teaches style and format; it is a poor way to inject facts that change weekly.' },
+                { text: 'Just ask the model; it knows company policy', why: 'The model studied until its training cut-off and has never seen your company wiki.' },
+              ],
+              answer: 0,
+            },
+            solved: 'RAG gives freshness (re-index a doc in seconds), provenance (citations), access control at query time and lower cost.',
+            then: [{ send: ['docs', 'chunker'], label: 're-index' }, { send: ['chunker', 'embedder'] }, { send: ['embedder', 'store'], tone: 'ok' }],
+          },
+        ],
+      },
+      short: {
+        id: 'rag-in-90-seconds',
+        title: 'RAG in 90 seconds',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'An open-book exam',
+            value: 18400,
+            unit: 'chunks from 1,200 HR policy PDFs',
+            sub: 'Indexed **once, offline**: parse, chunk (~500 tokens), embed, store.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Two phases',
+            head: 'Index offline, *answer* online',
+            steps: ['Offline: load, chunk, embed, store', 'Online: embed the question', 'Find the nearest chunks', 'Answer only from them, with citations'],
+          },
+          {
+            type: 'retrieve',
+            kicker: 'Top-k search',
+            head: 'The question finds its *pages*',
+            query: 'How many days of parental leave do contractors get?',
+            chunks: [
+              { text: 'parental-leave-2025.pdf §3', score: 0.82 },
+              { text: 'contractor-handbook.pdf §7', score: 0.79 },
+              { text: 'holiday-calendar.pdf', score: 0.61 },
+              { text: 'expenses-policy.pdf', score: 0.4 },
+            ],
+            k: 3,
+            sub: 'The top 3 go into the prompt as **[1] [2] [3]**, about 1,600 tokens.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Cited answer',
+            head: 'Every sentence *names its source*',
+            claims: [
+              { text: 'Contractors get no paid parental leave; up to 10 days unpaid [2]', ok: true, note: 'contractor-handbook §7' },
+              { text: 'Employee leave is 16 weeks [1]', ok: true, note: 'parental-leave-2025 §3' },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Why not fine-tune?',
+            head: 'Facts that change *weekly*',
+            items: [
+              { label: 'Re-index a changed doc in seconds', keep: true },
+              { label: 'Citations users can check', keep: true },
+              { label: 'Retrain whenever a policy changes' },
+            ],
+            keepLabel: 'RAG',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Your HR policies change every week. What fits best?',
+            answer: 0,
+            options: [
+              { text: 'RAG over the policy documents', why: 'Re-indexing a document takes seconds and every answer cites its source.' },
+              {
+                text: 'Fine-tune the model every week',
+                why: 'Fine-tuning shapes style and format; it is a poor way to inject facts that change weekly.',
+              },
+              {
+                text: 'Paste every policy into each prompt',
+                why: '1,200 PDFs do not fit a context window, and you would pay for all of them on every call.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'RAG: *retrieve*, then answer from what you retrieved.',
+          sub: 'Index offline, search online, and make the model **cite or refuse**.',
+        },
+      },
       body: `**Intuition:** an LLM is a brilliant student who studied until its training cut-off and has never seen your company wiki. RAG is an *open-book exam*: before answering, you hand it the three or four pages most likely to contain the answer and ask it to answer *from those pages* and say which page it used.
 
 **Mechanics (two phases):**

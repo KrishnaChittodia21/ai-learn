@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Lock, LockOpen } from 'lucide-react';
-import type { Topic } from '../types';
+import type { TopicMeta } from '../types';
 import type { Progress } from '../lib/progress';
 import { localDay } from '../lib/progress';
 import { studyStreak } from '../lib/streak';
@@ -43,7 +43,7 @@ export function DashboardMetrics({
   firstExamHref,
 }: {
   p: Progress;
-  topics: Topic[];
+  topics: TopicMeta[];
   readiness: number;
   companyTotal: number;
   companyUnlocked: boolean;

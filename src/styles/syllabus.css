@@ -1,5 +1,5 @@
 /* ======================================================================
-   Syllabus (/contents): "The GenAI universe". A galaxy hero (three rotating orbits, phases as
+   Syllabus (/contents): "The GenAI universe". A galaxy hero (three static orbits since M9, phases as
    planets: passed glow ion, the current ones breathe pulsar, the rest stay dark) around a
    "% covered" core; one glass panel per level with glowing phase meters; then the full index:
    level → phase (collapsible) → topic table with status, best exam and links into each tab.
@@ -126,24 +126,15 @@
   border-radius: 50%;
   border: 1px dashed color-mix(in srgb, var(--lv) 45%, transparent);
   transform: translate(-50%, -50%);
-  animation: syl-spin var(--dur-orbit, 60s) linear infinite;
 }
 .syl-orbit.o-1 {
   --lv: var(--c-ion);
 }
 .syl-orbit.o-2 {
   --lv: var(--c-pulsar);
-  --dur-orbit: 90s;
-  animation-direction: reverse;
 }
 .syl-orbit.o-3 {
   --lv: var(--c-solar);
-  --dur-orbit: 120s;
-}
-/* hold still while a hand is near the planets */
-.syl-sky:hover .syl-orbit,
-.syl-sky:hover .syl-planet > span {
-  animation-play-state: paused;
 }
 .syl-planet {
   position: absolute;
@@ -163,13 +154,6 @@
 }
 .syl-planet:hover {
   scale: 1.18;
-}
-/* the number counter-rotates so it stays upright */
-.syl-planet > span {
-  animation: syl-spin-self var(--dur-orbit, 60s) linear infinite reverse;
-}
-.syl-orbit.o-2 .syl-planet > span {
-  animation-direction: normal;
 }
 .p-passed {
   width: 38px;
@@ -977,16 +961,6 @@ a.syl-tool-title {
 }
 
 /* ---------- motion ---------- */
-@keyframes syl-spin {
-  to {
-    transform: translate(-50%, -50%) rotate(360deg);
-  }
-}
-@keyframes syl-spin-self {
-  to {
-    transform: rotate(360deg);
-  }
-}
 @keyframes syl-breathe {
   0%,
   100% {
@@ -997,8 +971,6 @@ a.syl-tool-title {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .syl-orbit,
-  .syl-planet > span,
   .p-now {
     animation: none !important;
   }

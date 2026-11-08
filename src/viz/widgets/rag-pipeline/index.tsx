@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { ANSWER_RESERVE, BUDGETS, CHUNKS, CORRECT, DEFAULT_PARAMS, QUESTION, QUESTION_TOKENS, SYSTEM_TOKENS, simulate, type Params, type Stage } from './sim';
 
 const STEPS = ['Index', 'Query', 'Embed', 'Retrieve', 'Rerank', 'Pack', 'LLM', 'Answer'];
@@ -38,6 +39,7 @@ export default function RagPipelineViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Slider label="top-k" value={params.topK} min={2} max={6} onChange={(topK) => setParams((p) => ({ ...p, topK }))} />

@@ -1,8 +1,11 @@
-import type { ReactNode } from 'react';
-import { Check, Compass, Database, Palette, Target, Timer } from 'lucide-react';
-import { resetProgress, setSettings, useProgress, type Accent, type Settings } from '../lib/progress';
+import { useRef, useState, type ReactNode } from 'react';
+import { Check, Compass, Database, Download, HardDriveDownload, Palette, Target, Timer, Upload } from 'lucide-react';
+import { getProgress, replaceProgress, resetProgress, setSettings, useProgress, type Accent, type Progress, type Settings } from '../lib/progress';
 import { saveUiPrefs, useUiPrefs } from '../lib/uiPrefs';
 import { openTour } from '../lib/guide';
+import { MAX_FILE_BYTES, mergeProgress, parseBackup, summarize, type BackupSummary } from '../lib/backup';
+import { exportNow } from '../lib/exportNow';
+import { showToast } from '../lib/toast';
 
 // stored ids stay vermilion/pine/ink/plum so saved settings keep working; the names follow Neural Aurora
 const ACCENTS: { id: Accent; label: string }[] = [
@@ -41,9 +44,9 @@ function Row({ label, htmlFor, labelId, help, children }: { label: string; htmlF
   );
 }
 
-function Group({ id, title, icon, children, danger }: { id: string; title: string; icon: ReactNode; children: ReactNode; danger?: boolean }) {
+function Group({ id, title, icon, children, danger, guide }: { id: string; title: string; icon: ReactNode; children: ReactNode; danger?: boolean; guide?: string }) {
   return (
-    <section className={`set-group ${danger ? 'danger' : ''}`} aria-labelledby={`set-${id}`}>
+    <section className={`set-group ${danger ? 'danger' : ''}`} aria-labelledby={`set-${id}`} data-guide={guide}>
       <h2 id={`set-${id}`} className="set-group-title">
         <span className="set-group-icon" aria-hidden>
           {icon}
@@ -143,7 +146,7 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="appearance" title="Appearance" icon={<Palette size={16} />}>
+      <Group id="appearance" title="Appearance" icon={<Palette size={16} />} guide="settings-appearance">
         <Row label="Theme" labelId="set-theme-label">
           <Segmented labelledBy="set-theme-label" value={s.theme} options={THEMES} onChange={(v) => setSettings({ theme: v })} />
         </Row>
@@ -166,11 +169,21 @@ export default function SettingsPage() {
             })}
           </div>
         </Row>
+        <Row
+          label="Depth effects"
+          htmlFor="set-depth"
+          help="Earned badges tilt towards the mouse pointer. Off on touch screens and when your system asks for reduced motion."
+        >
+          <input id="set-depth" className="set-switch" type="checkbox" checked={!!prefs.depthEffects} onChange={(e) => saveUiPrefs({ depthEffects: e.target.checked })} />
+        </Row>
       </Group>
 
-      <Group id="guide" title="Guide" icon={<Compass size={16} />}>
+      <Group id="guide" title="Guide" icon={<Compass size={16} />} guide="settings-guide">
         <Row label="Coach tips" htmlFor="set-tips" help="A short tip the first time you open each kind of tab.">
           <input id="set-tips" className="set-switch" type="checkbox" checked={tipsOn} onChange={(e) => saveUiPrefs({ coachTips: e.target.checked })} />
+        </Row>
+        <Row label="Glossary definitions in lessons" htmlFor="set-gloss" help="A dotted underline on the first mention of a glossary term in each section; hover, focus or tap it for a one-line definition.">
+          <input id="set-gloss" className="set-switch" type="checkbox" checked={prefs.glossaryHovers !== false} onChange={(e) => saveUiPrefs({ glossaryHovers: e.target.checked })} />
         </Row>
         <Row
           label="Welcome tour"
@@ -193,7 +206,9 @@ export default function SettingsPage() {
         </Row>
       </Group>
 
-      <Group id="data" title="Data" icon={<Database size={16} />} danger>
+      <BackupGroup />
+
+      <Group id="data" title="Data" icon={<Database size={16} />} danger guide="settings-reset">
         <Row label="Reset progress" help="Clears exam results, read markers, ratings and drafts. Settings are kept. This cannot be undone.">
           <button
             className="btn btn-danger btn-sm"
@@ -207,5 +222,123 @@ export default function SettingsPage() {
         </Row>
       </Group>
     </div>
+  );
+}
+
+const fmtDate = (iso?: string) => (iso && !Number.isNaN(Date.parse(iso)) ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'unknown date');
+
+function Counts({ s }: { s: BackupSummary }) {
+  return (
+    <dl className="set-counts">
+      <div>
+        <dt>Topics passed</dt>
+        <dd>{s.topicsPassed}</dd>
+      </div>
+      <div>
+        <dt>Sections read</dt>
+        <dd>{s.sectionsRead}</dd>
+      </div>
+      <div>
+        <dt>Saved items</dt>
+        <dd>{s.saved}</dd>
+      </div>
+      <div>
+        <dt>Labs done</dt>
+        <dd>{s.labs}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/** Export / Import: the file is validated first, previewed, then merged or used to replace this browser's data. */
+function BackupGroup() {
+  const p = useProgress();
+  const prefs = useUiPrefs();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState<{ name: string; progress: Progress; summary: BackupSummary } | null>(null);
+
+  const pick = async (file: File | undefined) => {
+    setError('');
+    setPending(null);
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setError('This file is too large to be an ai-learn backup. Nothing was changed.');
+      return;
+    }
+    const res = parseBackup(await file.text());
+    if (!res.ok) setError(`${res.error} Nothing was changed.`);
+    else setPending({ name: file.name, progress: res.progress, summary: res.summary });
+  };
+  const apply = (mode: 'merge' | 'replace') => {
+    if (!pending) return;
+    if (mode === 'replace' && !window.confirm('Replace all progress in this browser with the backup? Export first if you want to keep it.')) return;
+    replaceProgress(mode === 'merge' ? mergeProgress(getProgress(), pending.progress) : pending.progress);
+    setPending(null);
+    showToast(mode === 'merge' ? 'Backup merged' : 'Backup restored', mode === 'merge' ? 'Both sides kept: nothing you learned was dropped.' : 'This browser now holds the backup.', 4000, 'good', { kicker: 'Import' });
+  };
+
+  return (
+    <Group id="backup" title="Backup" icon={<HardDriveDownload size={16} />}>
+      <Row
+        label="Export"
+        help={
+          <>
+            Everything lives in this browser only. Download a backup file to keep it safe or to move to another device.{' '}
+            {prefs.lastExportAt ? `Last export: ${fmtDate(prefs.lastExportAt)}.` : 'Not exported yet.'}
+          </>
+        }
+      >
+        <button type="button" className="btn btn-sm" onClick={exportNow} data-guide="export">
+          <Download size={15} aria-hidden /> Export backup
+        </button>
+      </Row>
+      <Row label="Import" help="Pick a backup file. You will see what is in it and choose to merge it or replace this browser's data.">
+        <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => {
+          void pick(e.target.files?.[0]);
+          e.target.value = '';
+        }} />
+        <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()} data-guide="import">
+          <Upload size={15} aria-hidden /> Import backup…
+        </button>
+      </Row>
+      {error && (
+        <p className="set-import-error" role="alert">
+          {error}
+        </p>
+      )}
+      {pending && (
+        <section className="set-import" aria-labelledby="set-import-h">
+          <h3 id="set-import-h">
+            {pending.name} · exported {fmtDate(pending.summary.exportedAt)}
+          </h3>
+          <div className="set-import-cols">
+            <div>
+              <p className="set-import-k">In the backup</p>
+              <Counts s={pending.summary} />
+            </div>
+            <div>
+              <p className="set-import-k">In this browser now</p>
+              <Counts s={summarize(p)} />
+            </div>
+          </div>
+          <p className="set-help">
+            <strong>Merge</strong> keeps both: read sections, done items and saved items are combined, best scores kept, and this browser&apos;s
+            settings stay. <strong>Replace</strong> makes this browser match the backup exactly.
+          </p>
+          <div className="set-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => apply('merge')}>
+              Merge
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => apply('replace')}>
+              Replace
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setPending(null)}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+    </Group>
   );
 }

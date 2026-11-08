@@ -166,9 +166,6 @@
   --glow: light-dark(rgb(124 92 255 / 0.34), rgb(34 228 255 / 0.45));
   --ink: light-dark(#2a1f6b, #ffffff);
 }
-:is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-diamond::before {
-  animation: na-spin 6s linear infinite;
-}
 :is(.ach-page, .ach-shelf, .ach-cel) .ach-orb.ach-diamond .ach-orb-core {
   background:
     radial-gradient(circle at 32% 26%, color-mix(in srgb, #7ef0ff 45%, transparent), transparent 55%),
@@ -1322,4 +1319,28 @@
   .ach-page .ach-card:hover {
     transform: none;
   }
+}
+
+/* ---------- M9 opt-in 3D: earned-badge tilt (TiltBadge.tsx) ---------- */
+.tilt {
+  position: relative;
+  display: inline-block;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.tilt-glare-clip {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.tilt-glare {
+  position: absolute;
+  left: -50%;
+  top: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 50% 50%, rgb(255 255 255 / 0.35), transparent 40%);
+  mix-blend-mode: soft-light;
 }

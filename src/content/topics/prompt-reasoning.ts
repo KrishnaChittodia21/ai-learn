@@ -201,6 +201,75 @@ export function splitCot(output: string): { answer: string | null; reasoning: st
     },
     {
       heading: 'Self-consistency — sample several reasoning paths, then vote',
+      short: {
+        id: 'self-consistency-ask-five-times',
+        title: 'Self-consistency: ask five times',
+        beats: [
+          {
+            type: 'grid',
+            kicker: 'Same prompt, 5 samples',
+            head: 'Right answers *agree*, mistakes scatter',
+            cells: 5,
+            hot: 3,
+            caption: '3 APPROVE · 1 REJECT · 1 NEEDS_RECEIPT',
+            sub: 'Keep the answer **most paths reach**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'The algorithm',
+            head: 'Vote in *code*, not in the prompt',
+            steps: [
+              'One chain-of-thought prompt, strict answer tag',
+              'Call it N times with sampling on',
+              'Parse and normalise each answer',
+              'Majority vote',
+              'Abstain on a tie or a weak majority',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: '400 labelled expense claims',
+            head: 'Voting *lifts accuracy*',
+            rungs: [{ label: '1 call', amount: 86 }, { label: '5 calls, vote', amount: 92 }, { label: 'Vote + abstain', amount: 97 }],
+            unit: '%',
+            sub: 'With abstain, 97% is accuracy on the claims it decides; **7% go to a human**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'The bill',
+            value: 5,
+            suffix: '×',
+            unit: 'output tokens for 5 samples',
+            sub: 'In parallel, latency is the **slowest sample**, not 5×. Stopping early when 3 agree brings cost to about 3.4×.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Limits',
+            head: 'Where voting *cannot* help',
+            items: [
+              { label: 'Free-form essays: nothing to compare' },
+              { label: 'An error the model makes every time' },
+              { label: 'Exactly comparable answers', keep: true },
+            ],
+            keepLabel: 'VOTE',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Five samples split 2 APPROVE, 2 REJECT, 1 UNSURE. What now?',
+            answer: 0,
+            options: [
+              { text: 'Abstain and send it to a human', why: 'A tie says the case is ambiguous under the policy; more votes will not fix it.' },
+              { text: 'APPROVE, because it came first', why: 'Sample order means nothing; a tie should abstain.' },
+              { text: 'Raise the temperature and vote again', why: 'Noisier samples do not resolve a genuinely ambiguous case.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Sample several paths, *vote in code*.',
+          sub: 'Abstain on ties and weak majorities, and **log the split**: 5–0 and 3–2 deserve different trust.',
+        },
+      },
       body: `**Intuition:** ask five careful colleagues to solve the same problem independently. Right answers tend to agree; mistakes tend to scatter across *different* wrong answers. Self-consistency (Wang et al. 2022) does this with one model: sample several chain-of-thought paths and keep the answer most of them reach.
 
 **The algorithm:**
@@ -841,6 +910,70 @@ export function parseReactStep(text: string, toolNames: string[]): Step {
     },
     {
       heading: 'Self-critique, tree of thoughts and PAL — verify, search and execute',
+      short: {
+        id: 'beyond-the-first-answer',
+        title: 'Beyond the first answer',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'Game of 24 · GPT-4 · Yao et al. 2023',
+            head: 'The first answer is *not* the best it can do',
+            rungs: [{ label: 'One chain of thought', amount: 4 }, { label: 'Tree of thoughts, beam 5', amount: 74 }],
+            unit: '%',
+            sub: 'Same model, same puzzles. The difference is **extra compute plus a checker**.',
+          },
+          {
+            type: 'toggles',
+            kicker: '"Are you sure?"',
+            head: 'Re-asking *without new information*',
+            items: [{ label: 'Adds no new evidence' }, { label: 'Can flip right answers to wrong' }, { label: 'An external verifier', keep: true }],
+            keepLabel: 'CHECKER',
+            sub: 'On reasoning tasks, plain self-critique often does not help (Huang et al. 2023). **Tests, a compiler or sources** do.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Three ways past the first answer',
+            head: 'Pick the checker your task *has*',
+            steps: [
+              'Short comparable answer: sample N, vote (self-consistency)',
+              'Checkable answer: PAL, code runs the maths',
+              'Dead ends to explore: tree of thoughts',
+              'Prose: critique rubric plus a judge',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'The bill · branching 3, depth 3, beam 2',
+            value: 30,
+            unit: 'calls for one tree-of-thoughts question',
+            sub: 'Versus **1** for chain-of-thought, over **6** sequential rounds. Use it offline, not on a chat path.',
+          },
+          {
+            type: 'counter',
+            kicker: 'PAL · word problem',
+            value: 42.0,
+            decimals: 1,
+            prefix: '$',
+            unit: 'printed by the interpreter, exact',
+            sub: 'Chain-of-thought in text drifted to **$42.02** through rounding. Code does the arithmetic.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A generated SQL query returns the wrong rows. Which loop is most likely to fix it?',
+            answer: 0,
+            options: [
+              { text: 'Run it on a test database and feed the error back', why: 'Execution is an external verifier: it brings new information each round.' },
+              { text: 'Ask "are you sure?" three times', why: 'No new information; it can flip a right query to a wrong one.' },
+              { text: 'Tree of thoughts with no evaluator', why: 'Search without a cheap, reliable evaluator just multiplies the calls.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'More compute needs a *checker*.',
+          sub: 'Vote on comparable answers, **execute** what can run, and search only with a cheap evaluator.',
+        },
+      },
       body: `Three ways to spend more compute on a hard problem, each with a different "checker".
 
 **1. Self-critique (critique-and-revise).** Generate a draft, ask for specific feedback, revise; repeat until good enough. Self-Refine (Madaan et al. 2023) reported ~20% average improvement across seven tasks such as code readability and dialogue. The catch: on **reasoning** tasks, asking the same model "are you sure?" without new information often does not help and can flip right answers to wrong ones (Huang et al. 2023). Self-critique works when the critique is grounded in an **external verifier**: unit tests, a compiler, code execution, a schema validator, retrieved sources, a policy checker. Rules: a fixed max number of rounds, stop as soon as the verifier passes, keep the best version so far, and stop if a round makes things worse.

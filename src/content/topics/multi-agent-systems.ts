@@ -7,7 +7,7 @@ const topic: Topic = {
   title: 'Agentic Workflows, Multi-Agent Systems & Orchestration',
   subtitle:
     'The five workflow patterns, when (and when not) to split work across agents, and how to orchestrate them with state, checkpoints and budgets',
-  estimatedMinutes: 44,
+  estimatedMinutes: 77,
   sources: [
     'Anthropic Engineering — Building effective agents (Dec 2024)',
     'Anthropic Engineering — How we built our multi-agent research system (Jun 2025)',
@@ -16,6 +16,12 @@ const topic: Topic = {
     'LangGraph JS docs — Graph API: StateGraph, Send, Command, checkpointers',
     'Cognition — Don\'t Build Multi-Agents (Jun 2025)',
     'Cemri et al. 2025 — Why Do Multi-Agent LLM Systems Fail? (MAST taxonomy)',
+    'Du et al. 2023 — Improving Factuality and Reasoning in Language Models through Multiagent Debate, arXiv:2305.14325 (ICML 2024)',
+    'Wang et al. 2022 — Self-Consistency Improves Chain of Thought Reasoning in Language Models',
+    'Castro & Liskov 1999 — Practical Byzantine Fault Tolerance (OSDI)',
+    'Hayes-Roth 1985 — A Blackboard Architecture for Control (Artificial Intelligence journal)',
+    'Park et al. 2023 — Generative Agents: Interactive Simulacra of Human Behavior, arXiv:2304.03442 (UIST 2023)',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 16 lessons 07, 13–15, 17 and 23, adapted and rewritten',
   ],
   tags: ['agents', 'workflows', 'multi-agent', 'orchestration', 'langgraph', 'supervisor', 'handoffs'],
   cheatSheet: [
@@ -481,6 +487,396 @@ assert.equal(route({ ...base, steps: 20, findings: 0 }), 'abort');`,
       },
       source: 'LangGraph JS docs — Graph API (Send, reducers, retry policies, persistence)',
     },
+    {
+      heading: 'Debate, voting and consensus — when several answers beat one',
+      body: `**Intuition:** ask one expert and you get their blind spots. Ask three who must defend their answers to each other and errors get caught — unless all three went to the same school and share the same blind spot.
+
+**Three ways to combine answers (cheapest first):**
+1. **Self-consistency** (Wang et al. 2022): sample one model N times at temperature > 0 and take the majority answer. Cheap and strong on questions with one checkable answer, but the samples share the model's biases, so gains flatten as N grows.
+2. **Multi-agent debate** (Du et al. 2023): N agents answer; for R rounds each one reads the others' answers and reasoning and revises; then take a majority vote. The paper found both more agents and more rounds helped on reasoning and factuality tasks. Cost is roughly N × R calls, with context growing every round.
+3. **Consensus with a threshold:** group equivalent answers ("4.2%" and "4.2 percent" are the same), weight each group (by count, or by calibrated confidence), accept the top group only if it clears a threshold (e.g. ≥ 60% of the weight), otherwise **escalate** to a stronger model, a tool check or a human.
+
+**Why debate fails (and fixes):**
+- **Conformity** — agents drift toward the most confident voice, even when it is wrong. Fix: keep rounds to 2–3, make one agent argue the opposite position, and let a separate judge decide from the arguments, not the headcount.
+- **Correlated errors** — copies of one model agree on the same mistake. Fix: **heterogeneity** — different models, prompts, retrieved sources or tools. A different model usually adds more than one more copy of the same model.
+- **Budget** — studies of debate variants report that at equal compute, simple self-consistency is often as good. Measure against it before shipping debate.
+
+**A note on classic consensus.** Distributed-systems protocols such as PBFT (Castro and Liskov 1999) tolerate f faulty nodes out of n ≥ 3f + 1, but they assume faults are **independent** and that agreement equals correctness. LLM agents built on the same model break both: they can be honestly and identically wrong. Agreement is evidence, not proof — pair it with verification (tests, retrieval, a calculator) whenever one exists.
+
+**When to use:** questions with a checkable answer and a real cost of being wrong (medical coding, financial extraction, hard maths). Skip it for open-ended writing — the agents just converge on the blandest draft — and for easy questions where one call is already right.`,
+      example: `**Extracting the "termination notice period" from 400 contracts.**
+
+| Method | Calls per contract | Accuracy on a 400-contract labelled set |
+|---|---|---|
+| One call | 1 | 88% |
+| Self-consistency, N = 5, majority | 5 | 91% |
+| Debate, 3 agents (2 models), 2 rounds + judge | 7 | 94% |
+| Consensus ≥ 0.6, else human review | 5 + 9% to humans | 99% on auto-accepted, 9% escalated |
+
+The team shipped the last row: the threshold made the system say "not sure" on exactly the clauses with odd wording, and humans handled those. Illustrative numbers; the shape — cheap voting plus escalation beats expensive debate on everything — is common.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Bounded debate with heterogeneous agents, then a separate judge',
+          code: `type Agent = (prompt: string) => Promise<string>;
+
+export async function debate(question: string, agents: Agent[], judge: Agent, rounds = 2) {
+  let answers = await Promise.all(agents.map((a) => a('Question: ' + question + '\\nAnswer with reasoning, final line "ANSWER: ..."')));
+  for (let r = 1; r < rounds; r++) {
+    answers = await Promise.all(
+      agents.map((a, i) => {
+        const others = answers.filter((_, j) => j !== i).map((x, k) => '<answer id="' + k + '">' + x + '</answer>').join('\\n');
+        // re-state the question every round to limit drift
+        return a('Question: ' + question + '\\nOther agents said:\\n' + others +
+          '\\nCheck their reasoning. Change your answer only if you find a concrete error. Final line "ANSWER: ...".');
+      }),
+    );
+  }
+  return judge('Question: ' + question + '\\nCandidate answers:\\n' + answers.join('\\n---\\n') +
+    '\\nPick the best-supported answer, judging the reasoning, not how many agents agree.');
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Catches individual mistakes when agents are diverse.',
+          'A threshold turns disagreement into a useful "not sure" signal for escalation.',
+          'Works with any model; no training needed.',
+        ],
+        cons: [
+          { con: 'Cost grows with agents × rounds and context grows each round.', fix: 'Cap rounds at 2–3, run debate only when a cheap first pass is uncertain, and compare against self-consistency at the same budget.' },
+          { con: 'Agents conform to the loudest or most confident peer.', fix: 'Assign a devil\'s-advocate role, hide agent identities, and let an independent judge decide on reasoning.' },
+          { con: 'Agents sharing a base model agree on the same wrong answer.', fix: 'Mix models, prompts and evidence sources, and verify with tools (tests, calculators, retrieval) when possible.' },
+        ],
+      },
+      keyPoints: [
+        'Self-consistency: one model, N samples, majority vote — the baseline to beat.',
+        'Debate: N agents, R rounds of reading each other, then vote or judge.',
+        'Consensus = cluster equivalent answers, weight them, accept above a threshold, else escalate.',
+        'Diversity beats headcount; agreement is evidence, not proof.',
+        'Cap rounds to limit conformity and cost.',
+      ],
+      exercise: {
+        prompt: `Write **\`consensus(answers, threshold)\`**.
+
+**Acceptance:**
+- \`answers\`: \`{ text, confidence }[]\` with confidence in [0, 1].
+- Normalise text for grouping: lower-case, trim, collapse whitespace, drop a trailing period.
+- The weight of a group is the sum of its confidences. If the top group's share of the total weight is ≥ \`threshold\`, return \`{ status: 'accept', answer, share }\`; otherwise \`{ status: 'escalate', share }\`.
+- An empty list or zero total weight → \`{ status: 'escalate', share: 0 }\`.`,
+        hints: [
+          'Use a Map from normalised text to { weight, original }.',
+          'share = top weight / total weight.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Ans = { text: string; confidence: number };
+const norm = (s: string) => s.toLowerCase().trim().replace(/\\s+/g, ' ').replace(/\\.$/, '');
+
+export function consensus(answers: Ans[], threshold = 0.6) {
+  const groups = new Map<string, { weight: number; answer: string }>();
+  let total = 0;
+  for (const a of answers) {
+    const k = norm(a.text);
+    const g = groups.get(k) ?? { weight: 0, answer: a.text.trim() };
+    g.weight += a.confidence;
+    groups.set(k, g);
+    total += a.confidence;
+  }
+  if (total <= 0) return { status: 'escalate' as const, share: 0 };
+  const top = [...groups.values()].sort((a, b) => b.weight - a.weight)[0];
+  const share = top.weight / total;
+  return share >= threshold ? { status: 'accept' as const, answer: top.answer, share } : { status: 'escalate' as const, share };
+}
+
+console.log(consensus([{ text: '90 days', confidence: 0.9 }, { text: '90 Days.', confidence: 0.7 }, { text: '60 days', confidence: 0.6 }]));
+// accept '90 days', share ≈ 0.73`,
+        },
+        explanation:
+          'Grouping equivalent answers and weighting them is what makes a vote meaningful; the threshold is what makes it safe. In production replace string normalisation with a canonicaliser (parse numbers and units) or embedding similarity, and calibrate the confidences on a labelled set.',
+      },
+      quickCheck: {
+        question: 'Five copies of the same model debate and unanimously agree on an answer. What can you conclude?',
+        options: [
+          'The answer is correct, since unanimity beats any threshold',
+          'Only that the model is consistent; shared training means they can be wrong together, so verify independently if it matters',
+          'The debate needs more rounds until someone disagrees',
+          'Unanimity proves no prompt injection happened',
+        ],
+        correct: 1,
+        explanation:
+          'Copies of one model have correlated errors. Unanimity shows consistency, not correctness. Diverse models, sources or a tool-based check give real independent evidence.',
+      },
+      source: 'Du et al. 2023 — Improving Factuality and Reasoning in Language Models through Multiagent Debate (arXiv:2305.14325); Wang et al. 2022 — Self-Consistency',
+    },
+    {
+      heading: 'Shared state and simulations — blackboard architecture and generative agents',
+      body: `**Intuition:** a hospital ward whiteboard. Specialists do not message each other one by one; each reads the board, adds what they know ("bloods back: low potassium"), and the next specialist reacts. Nobody owns the whole plan, but the board holds it.
+
+**Blackboard architecture.** An old AI pattern (Hearsay-II speech understanding in the 1970s; formalised by Hayes-Roth in 1985) that fits LLM agents well:
+- **Blackboard** — shared, structured state, usually split into sections or topics (\`facts\`, \`hypotheses\`, \`open_questions\`, \`draft\`).
+- **Knowledge sources** — specialist agents that watch sections they care about and post contributions.
+- **Control** — decides which agent acts next (a scheduler, a supervisor model, or simple subscriptions).
+
+Compared with a group chat where everyone reads everything, agents read only the sections they subscribe to, so context stays small as agents are added.
+
+**The big risk: poisoning.** One agent writes a hallucinated "42%" instead of "4.2%", and every downstream agent treats it as fact. Defences:
+- **Provenance on every write** — author, time, sources cited.
+- **Append-only entries** — a correction is a new entry that supersedes the old one, so history is auditable.
+- **Versioned writes** — reject a write based on a stale version (optimistic concurrency) to avoid two agents overwriting each other.
+- **A read-only verifier** — an agent that re-checks entries against their sources and reports to a separate channel, never back onto the board.
+
+**Generative agents** (Park et al. 2023) used a related idea for *simulation*: 25 agents living in a small town ("Smallville"), each with
+- a **memory stream** of observations, retrieved by recency, importance and relevance (see Agent Memory & Tools);
+- **reflection** — periodically turning recent memories into higher-level beliefs ("Klaus is passionate about his research");
+- **planning** — a day plan broken into hourly and finer actions, revised when observations conflict.
+
+Seeded with one agent wanting to throw a Valentine's Day party, the others spread invitations, and several showed up at the right time — coordination nobody scripted. Ablations in the paper showed removing observation, reflection or planning made behaviour less believable. Known problems: agents breaking physical or social norms (entering closed shops), reflections that invent facts, and memory costs that grow with run length.
+
+**When to use:** a blackboard for many specialists working on one evolving artefact (research reports, incident analysis). Generative-agent architectures for simulations, game characters and user-behaviour prototypes — treating results as hypotheses, not as real user data.`,
+      example: `**Incident-analysis board for a production outage.**
+
+Sections: \`signals\` (log, metrics and trace agents post findings), \`hypotheses\` (a reasoning agent proposes causes), \`checks\` (a verifier posts pass/fail per hypothesis), \`report\`.
+
+- The metrics agent posts "p99 latency 4.1 s from 10:02, source: dashboard link". The log agent posts "connection pool exhausted, 10:01:57".
+- The reasoning agent posts H1 "DB pool exhaustion after deploy 4812" citing both entries.
+- The verifier (read-only on the board) re-queries the pool metric, confirms, and posts to \`checks\`. A second hypothesis, citing a log line that does not exist, is marked failed.
+- Only verified hypotheses flow into \`report\`.
+
+Seven agents, but each one's context holds only its sections: about 6K tokens instead of 40K+ in a shared group chat.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Append-only blackboard with provenance, versions and topic subscriptions',
+          code: `interface Entry { id: number; topic: string; author: string; text: string; sources: string[]; supersedes?: number; at: number }
+type Listener = (e: Entry) => void;
+
+export class Blackboard {
+  private entries: Entry[] = [];
+  private subs = new Map<string, Listener[]>();
+
+  version(topic: string) { return this.entries.filter((e) => e.topic === topic).length; }
+
+  post(e: Omit<Entry, 'id' | 'at'>, expectedVersion: number) {
+    if (this.version(e.topic) !== expectedVersion) return { ok: false as const, reason: 'stale version: re-read ' + e.topic };
+    const entry = { ...e, id: this.entries.length + 1, at: Date.now() };
+    this.entries.push(entry);                       // never mutate old entries
+    for (const fn of this.subs.get(e.topic) ?? []) fn(entry);
+    return { ok: true as const, id: entry.id };
+  }
+
+  // current view: entries not superseded by a later one
+  read(topic: string) {
+    const replaced = new Set(this.entries.map((e) => e.supersedes).filter(Boolean));
+    return this.entries.filter((e) => e.topic === topic && !replaced.has(e.id));
+  }
+
+  subscribe(topic: string, fn: Listener) { this.subs.set(topic, [...(this.subs.get(topic) ?? []), fn]); }
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Agents stay decoupled: add a specialist by subscribing it to a section.',
+          'Each agent reads only relevant sections, keeping context small.',
+          'Provenance and append-only entries make the reasoning auditable.',
+        ],
+        cons: [
+          { con: 'One hallucinated entry spreads to every reader.', fix: 'Require cited sources on writes, add a read-only verifier that re-checks entries, and let only verified entries reach the final output.' },
+          { con: 'Concurrent writers overwrite or contradict each other.', fix: 'Use versioned writes (reject stale versions), topic ownership, or a single writer that serialises updates.' },
+          { con: 'Generative-agent simulations look convincing but may not match real people.', fix: 'Use them to generate hypotheses, validate against real user data, and log memory retrieval so invented reflections can be traced.' },
+        ],
+      },
+      keyPoints: [
+        'Blackboard = shared structured state + specialist knowledge sources + control.',
+        'Subscriptions keep each agent\'s context small.',
+        'Provenance, append-only entries, versions and a read-only verifier stop poisoning.',
+        'Generative agents: memory stream + reflection + planning produced unscripted coordination.',
+        'Simulation output is a hypothesis, not user evidence.',
+      ],
+      exercise: {
+        prompt: `Add **\`verifyEntry(board, id, check)\`** to the blackboard idea, as a standalone function over an entries array.
+
+**Acceptance:**
+- \`check(entry)\` is async and returns \`{ ok, note }\` (e.g. re-fetches the cited sources).
+- Entries without sources fail immediately with note \`'no sources'\`, without calling \`check\`.
+- Results go to a **separate** \`verdicts\` map (id → { ok, note }); the entries array must not change.
+- Return the verdict.`,
+        hints: [
+          'Find the entry by id; return a failing verdict if it does not exist.',
+          'Do not push anything onto the entries array — that is the point of a read-only verifier.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `interface Entry { id: number; topic: string; author: string; text: string; sources: string[] }
+type Verdict = { ok: boolean; note: string };
+
+export async function verifyEntry(
+  entries: readonly Entry[],
+  verdicts: Map<number, Verdict>,
+  id: number,
+  check: (e: Entry) => Promise<Verdict>,
+): Promise<Verdict> {
+  const e = entries.find((x) => x.id === id);
+  const v: Verdict = !e ? { ok: false, note: 'no such entry' }
+    : !e.sources.length ? { ok: false, note: 'no sources' }
+    : await check(e);
+  verdicts.set(id, v); // separate channel, never written back to the board
+  return v;
+}`,
+        },
+        explanation:
+          'If the verifier wrote onto the board, a poisoned board could poison the verifier\'s own inputs. Keeping verdicts in a separate channel, and refusing unsourced claims outright, is what makes the check independent.',
+      },
+      quickCheck: {
+        question: 'In Park et al.\'s generative agents, what does reflection do?',
+        options: [
+          'It deletes old memories to save space',
+          'It periodically turns recent memories into higher-level beliefs that are stored back in the memory stream',
+          'It lets one agent read another agent\'s memories',
+          'It fine-tunes the model on the day\'s events',
+        ],
+        correct: 1,
+        explanation:
+          'Reflections are new, more abstract memories ("Klaus cares about his research") created from many observations and retrieved like any other memory. They shape later plans; nothing is fine-tuned.',
+      },
+      source: 'Hayes-Roth 1985 — A Blackboard Architecture for Control; Park et al. 2023 — Generative Agents: Interactive Simulacra of Human Behavior (UIST 2023)',
+    },
+    {
+      heading: 'Why multi-agent systems fail — the MAST taxonomy and what to do about each',
+      body: `**Intuition:** most failed projects with several people fail on unclear briefs, miscommunication and nobody checking the work — not because one person was incompetent. Multi-agent LLM systems fail the same way.
+
+**MAST** (Multi-Agent System failure Taxonomy, Cemri et al. 2025, "Why Do Multi-Agent LLM Systems Fail?") was built by annotating execution traces from several open-source multi-agent frameworks. It groups **14 failure modes** into **3 categories**:
+
+**1. Specification and system design** — the setup was wrong before any agent spoke:
+- disobeying the task specification; disobeying the role specification;
+- step repetition; loss of conversation history;
+- not knowing when to stop (unaware of termination conditions).
+
+**2. Inter-agent misalignment** — agents work against each other:
+- conversation reset; failing to ask for clarification; task derailment;
+- withholding information another agent needed; ignoring another agent's input;
+- reasoning that does not match the action taken.
+
+**3. Task verification and termination** — nobody checks properly:
+- premature termination; no or incomplete verification; incorrect verification.
+
+**Lessons from the paper:** failures spread across all three categories, so no single fix (a better model, a bigger prompt) removes them. Simple interventions — clearer role prompts, better orchestration — helped only partly; the authors argue for structural fixes. They also built an LLM-as-judge annotator to label traces at scale.
+
+**Mitigation map**
+
+| Category | Structural fixes |
+|---|---|
+| Specification | Role contracts that say what each agent does **and does not** do; explicit acceptance criteria per task; explicit stop conditions and budgets in code |
+| Misalignment | Typed hand-offs (schemas, not prose); a clarify-or-proceed rule; shared state with provenance; keep the original goal in every agent's context |
+| Verification | An independent verifier with its own tools (tests, retrieval); "done" decided by checks in code, not by an agent saying so; outcome-based evals |
+
+**Make it a routine:** sample traces every release, label failures with MAST (by hand at first, then with an LLM judge you have checked against your labels), count by category, fix the biggest bucket, repeat. Also watch slow-failure signals that do not crash anything: rising message counts, falling agreement, repeated tool calls.
+
+**When to use:** whenever you debug or review a multi-agent design. If you cannot point to a mitigation for each category, the design is not ready — and often a single agent with good tools would fail less.`,
+      example: `**Coding crew (planner, coder, tester, reviewer) — 120 failed traces labelled with MAST.**
+
+| Failure mode (category) | Count |
+|---|---|
+| Unaware of termination: reviewer kept requesting style changes (spec) | 26 |
+| Disobeyed role: coder also "tested" and reported pass (spec) | 18 |
+| Ignored other agent's input: coder skipped tester's failing case (misalignment) | 21 |
+| No or incomplete verification: tests never actually run (verification) | 31 |
+| Premature termination (verification) | 24 |
+
+Fixes: the harness, not an agent, runs the test suite and decides "done"; the reviewer gets a 2-round cap and a checklist; the coder's tools no longer include the test runner. The next 300 runs failed 38% less often, with the remaining failures mostly in hard tasks rather than coordination.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'MAST labels for trace review, with a fix per category',
+          code: `export const MAST = {
+  specification: ['disobey-task-spec', 'disobey-role-spec', 'step-repetition', 'loss-of-history', 'unaware-of-termination'],
+  misalignment: ['conversation-reset', 'no-clarification', 'task-derailment', 'information-withholding', 'ignored-input', 'reasoning-action-mismatch'],
+  verification: ['premature-termination', 'no-or-incomplete-verification', 'incorrect-verification'],
+} as const;
+
+export const FIRST_FIX: Record<keyof typeof MAST, string> = {
+  specification: 'tighten role contracts, acceptance criteria and code-enforced stop conditions',
+  misalignment: 'typed hand-offs, shared state with provenance, clarify-or-proceed rule',
+  verification: 'independent verifier with its own tools; harness decides "done"',
+};
+
+// a trace review record: one trace can have several labels
+export interface TraceLabel { traceId: string; modes: string[]; note?: string }`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'A shared vocabulary turns "the agents got confused" into countable categories.',
+          'Points to structural fixes instead of endless prompt tweaks.',
+          'Works as a design checklist before launch and a triage tool after.',
+        ],
+        cons: [
+          { con: 'Labelling traces by hand is slow.', fix: 'Label a seed set by hand, then use an LLM judge checked against those labels for the rest, and re-check agreement each release.' },
+          { con: 'Modes overlap, so labels are subjective.', fix: 'Allow several labels per trace, write short definitions with examples, and measure agreement between two reviewers.' },
+          { con: 'Silent failures (plausible but wrong output) never appear in error logs.', fix: 'Add outcome evals on golden tasks and track drift signals such as message counts and verifier pass rates.' },
+        ],
+      },
+      keyPoints: [
+        'MAST: 14 failure modes in 3 categories — specification, inter-agent misalignment, verification/termination.',
+        'Failures come from setup and coordination, not only model capability.',
+        'Prompt tweaks help partly; structural fixes (contracts, typed hand-offs, independent verification) matter more.',
+        'Let code, not an agent\'s claim, decide when a task is done.',
+        'Label traces regularly and fix the biggest category first.',
+      ],
+      exercise: {
+        prompt: `Write **\`mastReport(labels)\`** for a release review.
+
+**Acceptance:**
+- Input: \`{ traceId, modes: string[] }[]\` using the mode names from the code above.
+- Output: \`{ byCategory, unknown, top }\` where \`byCategory\` counts **traces** per category (a trace with two specification modes counts once for specification), \`unknown\` lists mode names not in MAST, and \`top\` is the category with the most traces (ties: first in the order specification, misalignment, verification).`,
+        hints: [
+          'Build a mode → category lookup from the MAST object first.',
+          'Use a Set of categories per trace so each trace counts once per category.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `const MAST = {
+  specification: ['disobey-task-spec', 'disobey-role-spec', 'step-repetition', 'loss-of-history', 'unaware-of-termination'],
+  misalignment: ['conversation-reset', 'no-clarification', 'task-derailment', 'information-withholding', 'ignored-input', 'reasoning-action-mismatch'],
+  verification: ['premature-termination', 'no-or-incomplete-verification', 'incorrect-verification'],
+} as const;
+type Cat = keyof typeof MAST;
+const CATS = Object.keys(MAST) as Cat[];
+const CAT_OF = new Map<string, Cat>(CATS.flatMap((c) => MAST[c].map((m) => [m, c] as [string, Cat])));
+
+export function mastReport(labels: { traceId: string; modes: string[] }[]) {
+  const byCategory: Record<Cat, number> = { specification: 0, misalignment: 0, verification: 0 };
+  const unknown = new Set<string>();
+  for (const t of labels) {
+    const cats = new Set<Cat>();
+    for (const m of t.modes) {
+      const c = CAT_OF.get(m);
+      if (c) cats.add(c); else unknown.add(m);
+    }
+    for (const c of cats) byCategory[c]++;
+  }
+  const top = CATS.reduce((a, b) => (byCategory[b] > byCategory[a] ? b : a));
+  return { byCategory, unknown: [...unknown], top };
+}`,
+        },
+        explanation:
+          'Counting traces (not labels) per category tells you how many runs a fix could save. Reporting unknown labels keeps the taxonomy honest when reviewers invent new names, and the top category tells you where to spend the next sprint.',
+      },
+      quickCheck: {
+        question: 'A "reviewer" agent declares the task complete without running the tests, and the bug ships. Which MAST category is this?',
+        options: [
+          'Specification and system design',
+          'Inter-agent misalignment',
+          'Task verification and termination',
+          'It is a model capability failure outside MAST',
+        ],
+        correct: 2,
+        explanation:
+          'Declaring success without checking is a verification failure (no or incomplete verification, often with premature termination). The structural fix is a harness-run test suite that decides "done".',
+      },
+      source: 'Cemri et al. 2025 — Why Do Multi-Agent LLM Systems Fail? (arXiv:2503.13657)',
+    },
   ],
   codeChallenges: [
     {
@@ -801,6 +1197,41 @@ Workers are isolated by design, so they reach different conclusions from differe
         'Non-idempotent PR creation on retry',
       ],
     },
+    {
+      id: 'multi-agent-systems-iq-6',
+      difficulty: 'hard',
+      question: 'A four-agent research system (planner, two researchers, writer) produces confident reports that sometimes contain wrong numbers, and runs occasionally loop until the budget is gone. How do you diagnose and fix it?',
+      context: 'Agents share one group chat. The writer decides when the report is finished. All agents use the same model.',
+      whatInterviewerLooksFor: [
+        'Uses a failure taxonomy (MAST) on real traces instead of guessing',
+        'Separates specification, coordination and verification problems',
+        'Addresses shared-state poisoning with provenance and an independent verifier',
+        'Moves termination and "done" decisions into code; adds diversity where voting is used',
+      ],
+      modelAnswer: `**Diagnose first.** Pull ~100 failing traces and label them with MAST. My expectation from the symptoms:
+- *Wrong numbers* → a verification failure plus poisoning of shared state: one researcher misreads "4.2%" as "42%", the writer copies it, nobody re-checks.
+- *Loops* → specification failure: unaware of termination; the writer decides "done" with no cap.
+
+**Fix specification.** Each agent gets a role contract (does / does not do), the planner emits typed tasks with acceptance criteria, and the harness enforces caps (messages, tokens, time) and records the stop reason.
+
+**Fix coordination.** Replace the open group chat with a **blackboard**: researchers post findings to a \`facts\` section with the source URL and quote; entries are append-only and versioned; the writer reads only \`facts\` and \`outline\`, keeping its context small.
+
+**Fix verification.** Add a **read-only verifier** that re-fetches each cited source and checks the quoted number; only verified facts can reach the report. "Done" = all report claims map to verified facts, checked in code.
+
+**Diversity where it helps.** If the researchers vote on ambiguous figures, use different models or sources so their errors are not correlated, and escalate on disagreement.
+
+**Measure.** Outcome evals on golden topics (numeric accuracy against references), failures by MAST category per release, and cost per report.`,
+      followUps: [
+        { q: 'Why not just add a third researcher and vote?', a: 'Copies of the same model share errors, so a vote can confidently agree on the wrong number. An independent check against the source is cheaper and more reliable.' },
+        { q: 'Would a single agent be better here?', a: 'Possibly. If the tasks are sequential and the context fits, one agent with search and a verification step avoids most coordination failures; I would benchmark it against the multi-agent version on the same evals.' },
+      ],
+      pitfalls: [
+        'Adding agents or rounds without labelling failures',
+        'Letting an agent declare its own work done',
+        'A verifier that writes back into the shared state it checks',
+        'Voting among identical models and treating agreement as proof',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1047,6 +1478,51 @@ return draft;`,
       correct: [1],
       explanation: 'Returning all messages defeats context isolation: the supervisor\'s context fills with raw search results, raising cost and degrading attention. Return a capped final answer and write a descriptive tool description. Invoking agents in tools is a supported pattern, and serialisation speed is irrelevant.',
       followUps: [{ q: 'What would a good description for this tool say?', a: 'What it does, when to use it and what it returns, e.g. "Research one company or question on the web; call in parallel for several; returns ≤ 400 words with source URLs."' }],
+    },
+    {
+      id: 'multi-agent-systems-mcq-13',
+      difficulty: 'medium',
+      question: 'Your debate setup uses three copies of one model for 5 rounds and accuracy is no better than simple majority voting. Which change is most likely to help?',
+      options: [
+        'Increase to 10 rounds so the agents fully converge',
+        'Use different models or evidence sources, keep 2–3 rounds and add an independent judge',
+        'Let the most confident agent overrule the others',
+        'Lower the temperature to zero for every agent',
+      ],
+      correct: [1],
+      explanation:
+        'Copies of one model have correlated errors and long debates encourage conformity. Heterogeneous agents, bounded rounds and a judge that weighs reasoning address both; more rounds or deferring to confidence make conformity worse.',
+      followUps: [{ q: 'What baseline must debate beat before you ship it?', a: 'Self-consistency with the same model at the same total budget (same number of calls or tokens), measured on a labelled set.' }],
+    },
+    {
+      id: 'multi-agent-systems-mcq-14',
+      difficulty: 'hard',
+      question: 'Which measures reduce memory poisoning on a shared blackboard used by several agents? Select ALL that apply.',
+      options: [
+        'Record author and cited sources on every entry',
+        'Make entries append-only, with corrections superseding old entries',
+        'Let the verifier agent overwrite entries it thinks are wrong',
+        'Keep a read-only verifier that re-checks entries against their sources and reports elsewhere',
+      ],
+      correct: [0, 1, 3],
+      explanation:
+        'Provenance, append-only history and an independent read-only verifier contain bad entries and keep an audit trail. A verifier that writes to the board becomes another writer that can itself be wrong or poisoned.',
+      followUps: [{ q: 'How do you stop two agents overwriting each other\'s updates?', a: 'Versioned writes with optimistic concurrency: each write states the version it read, and a stale write is rejected so the agent re-reads and retries.' }],
+    },
+    {
+      id: 'multi-agent-systems-mcq-15',
+      difficulty: 'medium',
+      question: 'In the MAST taxonomy, a coder agent ignores the tester agent\'s report of a failing case and carries on. Which category does this fall under?',
+      options: [
+        'Specification and system design',
+        'Inter-agent misalignment',
+        'Task verification and termination',
+        'Infrastructure failure',
+      ],
+      correct: [1],
+      explanation:
+        'Ignoring another agent\'s input is an inter-agent misalignment mode. Typed hand-offs, where a failing test result blocks the next step in code, fix it better than a prompt asking the coder to pay attention.',
+      followUps: [{ q: 'What are the other two MAST categories?', a: 'Specification and system design (bad roles, tasks or stop conditions) and task verification and termination (missing, wrong or premature checks).' }],
     },
   ],
 };

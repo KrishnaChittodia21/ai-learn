@@ -7,24 +7,25 @@ import { CodeBlock, CodeEditor, Markdown } from './ui';
 import { normalizeLang } from '../lib/highlight';
 
 /** Practice-first extras rendered under every Learn section: worked example, pros/cons with fixes, a coding exercise and a quick check. */
-export function SectionPractice({ topicId, index, section }: { topicId: string; index: number; section: Section }) {
+export function SectionPractice({ topicId, index, section, folded }: { topicId: string; index: number; section: Section; folded?: boolean }) {
   const id = `${topicId}-s${index}`;
   return (
     <>
-      {section.example && (
+      {/* a section with a core shows its example and pros/cons inside Learn more (ReadViewLearn.tsx) */}
+      {section.example && !folded && (
         <section className="tp-example" aria-label="Worked example">
           <div className="tp-kicker ion">Worked example</div>
           <Markdown>{section.example}</Markdown>
         </section>
       )}
-      {section.prosCons && <ProsConsTable pc={section.prosCons} />}
+      {section.prosCons && !folded && <ProsConsTable pc={section.prosCons} />}
       {section.exercise && <ExerciseCard id={`${id}-ex`} ex={section.exercise} />}
       {section.quickCheck && <QuickCheckCard id={`${id}-qc`} qc={section.quickCheck} />}
     </>
   );
 }
 
-function ProsConsTable({ pc }: { pc: ProsCons }) {
+export function ProsConsTable({ pc }: { pc: ProsCons }) {
   return (
     <div className="tp-pc">
       <section className="tp-pc-col tint-ion" aria-label="Pros">
@@ -148,7 +149,7 @@ function QuickCheckCard({ id, qc }: { id: string; qc: QuickCheck }) {
   const answered = picked !== null;
   const right = picked === qc.correct;
   return (
-    <section className="tp-qc" aria-label="Quick check">
+    <section className="tp-qc" aria-label="Quick check" data-guide="quick-check">
       <div className="tp-kicker solar">Quick check</div>
       <p className="tp-qc-q">{qc.question}</p>
       <div className="tp-qc-options" role="radiogroup" aria-label={qc.question}>

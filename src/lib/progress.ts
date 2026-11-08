@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { mergeEarned, type EarnedNow, type StoredAchievement } from '../content/achievements';
+import { mergeEarned, type EarnedNow, type StoredAchievement } from '../content/achievements.ts';
 
 export type Rating = 'nailed' | 'partial' | 'missed';
 
@@ -33,6 +33,51 @@ export interface PromptLabRecord {
   revealedAt?: string;
 }
 
+/** one Short's state (src/components/ShortPlayer.tsx) */
+export interface ShortRecord {
+  /** first time the end card was reached (the quiz answered on the way) */
+  watchedAt?: string;
+  /** first time the quiz was answered right */
+  answeredAt?: string;
+  /** whether that first right answer was the first pick */
+  firstTry?: boolean;
+}
+
+/** Study plan (pace maths in src/lib/pace.ts). Days are local YYYY-MM-DD. */
+export interface StudyPlan {
+  dailyMinutes: number;
+  /** 3–7; study days run Monday onwards (5 = Mon–Fri) */
+  daysPerWeek: number;
+  /** 'all', 'level:<id>', 'phase:<id>', 'topic:<id>' or 'role:<id>' (see goalTopics in pace.ts) */
+  goal: string;
+  startedAt: string;
+  /** the pacer counts from here; moved to today whenever the pace changes or the finish date is moved */
+  baselineAt: string;
+  /** the pacer's minutes on baselineAt (= covered when the date is moved; kept when only the pace changes) */
+  baselineCovered: number;
+  /** "add N min a day until <day>" chosen from the behind-schedule warning */
+  catchUp?: { extraMinutes: number; until: string };
+  warningsOff?: boolean;
+  /** end-of-day [covered, expected] minutes by day: draws the past curve and backs the plan badge (last PLAN_LOG_MAX days) */
+  log?: Record<string, [number, number]>;
+}
+export const PLAN_LOG_MAX = 400;
+
+/** a section finished in Steps view (M7): Your-turn steps missed in the latest run */
+export interface StepsRecord {
+  missed: number;
+  /** ISO time of the latest finish */
+  at: string;
+}
+
+/** one from-scratch drill (C4, src/pages/Drills.tsx); its code draft lives in drafts[`drill:<id>`] */
+export interface DrillRecord {
+  /** first time every test passed */
+  passedAt?: string;
+  /** first time the solution was shown before a pass ("Show solution") */
+  revealedAt?: string;
+}
+
 export interface Settings {
   passMark: number;
   secondsPerQuestion: number;
@@ -46,6 +91,20 @@ export interface Settings {
 }
 
 export type Accent = 'vermilion' | 'pine' | 'ink' | 'plum';
+
+/** What a ☆ Save can point at ('short' is used from M5). */
+export type SavedKind = 'topic' | 'section' | 'interview' | 'code' | 'prompt-lab' | 'drill' | 'short';
+export const SAVED_KINDS: SavedKind[] = ['topic', 'section', 'interview', 'code', 'prompt-lab', 'drill', 'short'];
+/** "Saved for later": `ref` is a topic id, `<topic id>:<section index>`, or a question / lab / drill / Short id. */
+export interface SavedItem {
+  kind: SavedKind;
+  ref: string;
+  topicId: string;
+  /** ISO time */
+  addedAt: string;
+  doneAt?: string;
+}
+export const SAVED_MAX = 500;
 
 export interface Progress {
   tests: Record<string, TestRecord>;
@@ -68,6 +127,20 @@ export interface Progress {
   achievements?: Record<string, StoredAchievement>;
   /** Prompt Lab drafts and scores by lab id. Optional: saves from before Prompt Lab load without it. */
   promptLabs?: Record<string, PromptLabRecord>;
+  /** Saved for later, oldest first (max SAVED_MAX). Optional: older saves load without it. */
+  saved?: SavedItem[];
+  /** Shorts watched and quizzes answered, by Short id. Optional: older saves load without it. */
+  shorts?: Record<string, ShortRecord>;
+  /** the study plan (M6). Optional: no plan until one is started. */
+  studyPlan?: StudyPlan;
+  /** sections finished in Steps view, by `<topic id>:<section index>` (M7). Optional. */
+  steps?: Record<string, StepsRecord>;
+  /** from-scratch drills passed / revealed, by drill id (C4). Optional. */
+  drills?: Record<string, DrillRecord>;
+  /** the role learning path being followed (src/content/roles.ts, C4). Optional. */
+  rolePath?: string;
+  /** the name printed on path certificates (C4). Optional; asked once. */
+  certName?: string;
   settings: Settings;
 }
 
@@ -89,17 +162,21 @@ const DEFAULT: Progress = {
   settings: { passMark: 70, secondsPerQuestion: 90, shuffle: true, theme: 'system', mockMinutes: 45, studyLock: 'exam' },
 };
 
+/** A saved (or imported) record → a full, migrated Progress. */
+export function normalize(parsed: Partial<Progress>): Progress {
+  // migrations are judged from what was saved, not from the defaults merged in
+  // `achievements` stays undefined for saves from before badges existed (no default merged in)
+  return migrate(
+    { ...DEFAULT, ...parsed, achievements: parsed.achievements, settings: { ...DEFAULT.settings, ...parsed.settings } },
+    parsed.migrations ?? [],
+  );
+}
+
 function load(): Progress {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT;
-    const parsed = JSON.parse(raw) as Partial<Progress>;
-    // migrations are judged from what was saved, not from the defaults merged in
-    // `achievements` stays undefined for saves from before badges existed (no default merged in)
-    return migrate(
-      { ...DEFAULT, ...parsed, achievements: parsed.achievements, settings: { ...DEFAULT.settings, ...parsed.settings } },
-      parsed.migrations ?? [],
-    );
+    return normalize(JSON.parse(raw) as Partial<Progress>);
   } catch {
     return DEFAULT;
   }
@@ -291,6 +368,130 @@ export function setSettings(s: Partial<Settings>) {
 
 export function resetProgress() {
   update((p) => ({ ...DEFAULT, settings: p.settings }), false);
+}
+
+/** Swap in a whole record (Import → Replace / Merge). The caller validated and normalized it. */
+export function replaceProgress(next: Progress) {
+  update(() => next, false);
+}
+
+// ---------- Saved for later ----------
+const same = (a: { kind: SavedKind; ref: string }, kind: SavedKind, ref: string) => a.kind === kind && a.ref === ref;
+
+/** Saved and not yet done. */
+export const isSaved = (p: Progress, kind: SavedKind, ref: string) => !!p.saved?.some((s) => same(s, kind, ref) && !s.doneAt);
+
+/**
+ * Add an item (pure). Re-saving a done item moves it back to the list. At the cap the oldest done items make
+ * room; when every item is still to do, nothing is dropped and `full` is returned instead.
+ */
+export function addSavedItem(list: SavedItem[], item: SavedItem): { list: SavedItem[]; full?: true } {
+  const at = list.findIndex((s) => same(s, item.kind, item.ref));
+  if (at >= 0) {
+    if (!list[at].doneAt) return { list };
+    const { doneAt: _drop, ...back } = list[at];
+    return { list: list.map((s, i) => (i === at ? back : s)) };
+  }
+  let next = list;
+  while (next.length >= SAVED_MAX) {
+    const oldestDone = next.reduce<number>((o, s, i) => (s.doneAt && (o < 0 || s.doneAt < next[o].doneAt!) ? i : o), -1);
+    if (oldestDone < 0) return { list, full: true };
+    next = next.filter((_, i) => i !== oldestDone);
+  }
+  return { list: [...next, item] };
+}
+
+/** ☆ Save. Returns false (and changes nothing) when Saved is full. Not a study action. */
+export function saveItem(kind: SavedKind, ref: string, topicId: string, now = new Date()): boolean {
+  const res = addSavedItem(state.saved ?? [], { kind, ref, topicId, addedAt: now.toISOString() });
+  if (res.full) return false;
+  update((p) => ({ ...p, saved: res.list }), false);
+  return true;
+}
+
+/** Remove an item; returns it (for Undo) or undefined if it was not saved. */
+export function removeSaved(kind: SavedKind, ref: string): SavedItem | undefined {
+  const item = state.saved?.find((s) => same(s, kind, ref));
+  if (item) update((p) => ({ ...p, saved: (p.saved ?? []).filter((s) => !same(s, kind, ref)) }), false);
+  return item;
+}
+
+/** Put a removed item back exactly as it was (Undo), keeping the list in added order. */
+export function restoreSaved(item: SavedItem): boolean {
+  const res = addSavedItem(state.saved ?? [], item);
+  if (res.full) return false;
+  update((p) => ({ ...p, saved: [...res.list].sort((a, b) => a.addedAt.localeCompare(b.addedAt)) }), false);
+  return true;
+}
+
+export function setSavedDone(kind: SavedKind, ref: string, done: boolean, now = new Date()) {
+  update(
+    (p) => ({
+      ...p,
+      saved: (p.saved ?? []).map((s) => {
+        if (!same(s, kind, ref)) return s;
+        if (done) return { ...s, doneAt: now.toISOString() };
+        const { doneAt: _drop, ...rest } = s;
+        return rest;
+      }),
+    }),
+    false,
+  );
+}
+
+// ---------- Shorts ----------
+/** The quiz of a Short was answered right; only the first answer is kept. A study action. */
+export function recordShortQuiz(id: string, firstTry: boolean, now = new Date()) {
+  if (state.shorts?.[id]?.answeredAt) return;
+  update((p) => ({ ...p, shorts: { ...p.shorts, [id]: { ...p.shorts?.[id], answeredAt: now.toISOString(), firstTry } } }));
+}
+
+/** A Short reached its end card; the first time is kept. A study action. */
+export function markShortWatched(id: string, now = new Date()) {
+  if (state.shorts?.[id]?.watchedAt) return;
+  update((p) => ({ ...p, shorts: { ...p.shorts, [id]: { ...p.shorts?.[id], watchedAt: now.toISOString() } } }));
+}
+
+// ---------- Study plan (M6) ----------
+/** Save or remove the plan. Not a study action. */
+/** Follow a role path (or stop: undefined). Not a study action. */
+export function setRolePath(id: string | undefined) {
+  update((p) => {
+    const { rolePath: _old, ...rest } = p;
+    return id ? { ...rest, rolePath: id } : rest;
+  }, false);
+}
+
+export function setCertName(name: string) {
+  update((p) => ({ ...p, certName: name.trim().slice(0, CERT_NAME_MAX) }), false);
+}
+export const CERT_NAME_MAX = 80;
+
+export function setStudyPlan(plan: StudyPlan | undefined) {
+  update((p) => {
+    const { studyPlan: _old, ...rest } = p;
+    return plan ? { ...rest, studyPlan: plan } : rest;
+  }, false);
+}
+
+// ---------- From-scratch drills (C4) ----------
+/** Every test passed (a study action) or the solution was revealed (not one); the first time of each is kept. */
+export function markDrill(id: string, what: 'passedAt' | 'revealedAt', now = new Date()) {
+  if (state.drills?.[id]?.[what]) return;
+  update((p) => ({ ...p, drills: { ...p.drills, [id]: { ...p.drills?.[id], [what]: now.toISOString() } } }), what === 'passedAt');
+}
+
+// ---------- Step lessons (M7) ----------
+/** Steps finished: the section is read, and the latest run's misses are kept for Weak areas. A study action. */
+export function recordSteps(topicId: string, index: number, missed: number, now = new Date()) {
+  update((p) => {
+    const read = new Set(p.sections[topicId] ?? []).add(index);
+    return {
+      ...p,
+      sections: { ...p.sections, [topicId]: [...read].sort((a, b) => a - b) },
+      steps: { ...p.steps, [`${topicId}:${index}`]: { missed, at: now.toISOString() } },
+    };
+  });
 }
 
 /** Store newly earned badges / tier-ups (never a study action, never downgrades). */

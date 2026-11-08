@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, HUB_CAPACITY, LOAD_MAX, LOAD_MIN, REQUESTS, SPOKES, simulate, type Params, type RequestType, type SpokeId } from './sim';
 
 const POS: Record<string, { x: number; y: number }> = {
@@ -32,6 +33,7 @@ export default function HubAndSpokeViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<RequestType>

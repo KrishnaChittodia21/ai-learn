@@ -6,7 +6,7 @@ const topic: Topic = {
   order: 2,
   title: 'Audio, Speech and Video',
   subtitle: 'Turn sound into text, text into sound, and long videos into something an LLM can reason over',
-  estimatedMinutes: 52,
+  estimatedMinutes: 74,
   sources: [
     'OpenAI docs — Speech to text (whisper-1, gpt-4o-transcribe, gpt-4o-transcribe-diarize, chunking_strategy)',
     'OpenAI docs — Text to speech (gpt-4o-mini-tts, voices, streaming response formats)',
@@ -16,6 +16,9 @@ const topic: Topic = {
     'pyannote.audio — speaker diarization pipeline',
     'Google Gemini docs — Video understanding (frame sampling, tokens per frame)',
     'NIST — Word Error Rate scoring (sclite)',
+    'Pipecat docs (docs.pipecat.ai) — pipelines, frames, processors, interruptions, Pipecat Flows',
+    'LiveKit Agents docs (docs.livekit.io/agents) — AgentSession, turn detection, workers, telephony',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 14 lesson 22 and Phase 6 lesson 14, adapted and rewritten',
   ],
   tags: ['audio', 'speech', 'stt', 'tts', 'whisper', 'voice-agents', 'video', 'diarization'],
   cheatSheet: [
@@ -611,6 +614,288 @@ console.log(frameBudget(60, 1, 258, 100_000));  // 1`,
       },
       source: 'Google Gemini docs — Video understanding',
     },
+    {
+      heading: 'Voice agent frameworks — Pipecat and LiveKit Agents',
+      body: `**Intuition:** the text-to-speech section showed the cascade (VAD → STT → LLM → TTS) and its latency budget. Building it for real means streaming audio both ways over an unreliable network, cancelling work the moment the caller speaks, and swapping vendors without rewriting everything. Two open-source frameworks handle that plumbing.
+
+**Pipecat** (Python, started by Daily). Everything is a **frame** — audio chunks, transcripts, LLM tokens, TTS audio, control signals — flowing through a **pipeline of processors**:
+
+transport input → VAD → STT → user-context aggregator → LLM → TTS → transport output → assistant-context aggregator
+
+- Each processor handles the frames it understands and passes the rest on, so you can insert your own (a profanity filter, a metrics logger, a RAG lookup) anywhere.
+- Frames normally flow **downstream**; control frames can travel **upstream** (e.g. an error).
+- **Interruptions:** when the user starts speaking, an interruption frame tells every processor to drop queued LLM tokens and TTS audio, so the bot goes quiet quickly.
+- Many STT, LLM, TTS and speech-to-speech services behind one interface; transports for WebRTC (Daily, LiveKit, plain WebRTC), WebSockets and telephony.
+- **Pipecat Flows** adds structured conversations (states such as "verify identity → collect symptoms → book").
+
+**LiveKit Agents** (Python and Node). Built on LiveKit's open-source WebRTC server: your agent **joins a room as a participant**, like another caller.
+- An **AgentSession** wires together VAD, STT, LLM and TTS plugins — or a realtime speech-to-speech model — and an **Agent** holds instructions and tools; agents can hand off to each other.
+- A **turn-detection model** that uses the words being said, not only silence, to decide whether the user has finished.
+- **Workers** register with the server and are dispatched to rooms, which handles scaling many concurrent calls; **SIP** connects phone numbers.
+
+**Choosing**
+
+| Need | Lean towards |
+|---|---|
+| Full control of the processing chain, unusual transports, custom processors | Pipecat |
+| WebRTC infrastructure, rooms, scaling and telephony from one vendor (self-host or cloud) | LiveKit Agents |
+| No voice team; want hosted phone agents fast | a managed platform built on such stacks — accept less control |
+
+Both are vendor-neutral on models, so the bigger long-term choices are the transport and how you evaluate calls.
+
+**Production checklist:** measure time-to-first-audio per stage at p95, keep an STT transcript and the assistant text for every turn, run tool calls with filler speech ("let me check"), set a max call duration, and record which processor was active when a call failed.`,
+      example: `**Clinic booking line, 300 calls a day.**
+
+- *Pipecat prototype in a week:* Twilio phone audio over a WebSocket transport → Silero VAD → streaming STT → LLM with \`find_slots\` / \`book_slot\` tools → streaming TTS. A custom processor logs per-stage latency; p95 time-to-first-audio was 1.3 s, mostly LLM time-to-first-token.
+- *Moved the web widget to LiveKit Agents:* the same prompt and tools, but browser callers join a LiveKit room over WebRTC (better jitter handling than WebSockets) and the semantic turn detector cut "agent spoke while I was still thinking" complaints from 9% to 3% of calls.
+- The phone line stayed on Pipecat. Shared pieces: the tool functions, prompts and a call-eval set of 50 recorded scenarios replayed against both stacks before every release.`,
+      code: [
+        {
+          language: 'python',
+          title: 'Pipecat: the pipeline shape (service classes vary by vendor; check current docs)',
+          code: `from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.task import PipelineTask, PipelineParams
+from pipecat.pipeline.runner import PipelineRunner
+
+# transport, stt, llm, tts and context_aggregator are created from your chosen services
+pipeline = Pipeline([
+    transport.input(),               # caller audio frames in
+    stt,                             # audio -> transcription frames
+    context_aggregator.user(),       # add user text to the LLM context
+    llm,                             # context -> streamed text frames (and tool calls)
+    tts,                             # text -> audio frames
+    transport.output(),              # audio frames out to the caller
+    context_aggregator.assistant(),  # record what the bot said
+])
+
+task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+await PipelineRunner().run(task)`,
+        },
+        {
+          language: 'python',
+          title: 'LiveKit Agents: an AgentSession with plugins (1.x API shape; check current docs)',
+          code: `from livekit import agents
+from livekit.agents import Agent, AgentSession
+from livekit.plugins import deepgram, openai, cartesia, silero
+
+class Receptionist(Agent):
+    def __init__(self):
+        super().__init__(instructions="You book clinic appointments. Short sentences, no lists.")
+
+async def entrypoint(ctx: agents.JobContext):
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=deepgram.STT(),
+        llm=openai.LLM(model="gpt-4o-mini"),
+        tts=cartesia.TTS(),
+    )
+    await session.start(room=ctx.room, agent=Receptionist())
+    await session.generate_reply(instructions="Greet the caller and ask how you can help.")
+
+if __name__ == "__main__":
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Streaming, interruptions and transports come built in instead of hand-written audio plumbing.',
+          'Swap STT, LLM or TTS vendors with a one-line change and compare them on the same calls.',
+          'Room/worker models (LiveKit) and pluggable processors (Pipecat) scale from prototype to many concurrent calls.',
+        ],
+        cons: [
+          { con: 'More moving parts: transports, workers and several vendors per call.', fix: 'Log per-stage latency and errors per call, keep a replayable call-eval set, and pin plugin versions.' },
+          { con: 'Framework APIs change quickly.', fix: 'Keep prompts, tools and business logic in plain modules and limit framework code to the pipeline wiring.' },
+          { con: 'WebSocket phone transports suffer from jitter and lost packets.', fix: 'Prefer WebRTC for browser and app clients, use the provider\'s media streaming with a jitter buffer for phone calls, and colocate services in one region.' },
+        ],
+      },
+      keyPoints: [
+        'Pipecat: Python pipeline of frame processors; interruptions flush queued frames.',
+        'LiveKit Agents: agent joins a WebRTC room; AgentSession wires VAD/STT/LLM/TTS or a realtime model.',
+        'Both are model-vendor neutral; the transport is the bigger commitment.',
+        'Keep tools, prompts and call evals outside the framework.',
+        'Measure p95 time-to-first-audio per stage.',
+      ],
+      exercise: {
+        prompt: `Build a tiny **frame pipeline with interruptions** in TypeScript.
+
+**Acceptance:**
+- Frames are \`{ type: 'text' | 'audio' | 'interrupt', data?: string }\`.
+- \`Pipeline\` has an output \`queue: Frame[]\` (audio waiting to play) and \`push(frame)\`.
+- \`text\` frames become \`audio\` frames (\`data: 'tts(' + text + ')'\`) appended to the queue.
+- An \`interrupt\` frame clears every queued audio frame and returns how many were dropped.
+- \`play()\` removes and returns the first queued frame (or \`undefined\`).`,
+        hints: [
+          'Return a number from push for interrupts and undefined otherwise.',
+          'Clearing the queue is just queue.length = 0 after counting.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Frame = { type: 'text' | 'audio' | 'interrupt'; data?: string };
+
+export class Pipeline {
+  queue: Frame[] = [];
+
+  push(f: Frame): number | undefined {
+    if (f.type === 'interrupt') {
+      const dropped = this.queue.length;
+      this.queue.length = 0; // the bot must stop talking now
+      return dropped;
+    }
+    if (f.type === 'text') this.queue.push({ type: 'audio', data: 'tts(' + f.data + ')' });
+    else this.queue.push(f);
+    return undefined;
+  }
+
+  play() { return this.queue.shift(); }
+}
+
+const p = new Pipeline();
+p.push({ type: 'text', data: 'Your appointment is on Monday.' });
+p.push({ type: 'text', data: 'Would you like a reminder?' });
+console.log(p.play());                        // first sentence plays
+console.log(p.push({ type: 'interrupt' }));   // 1 frame dropped`,
+        },
+        explanation:
+          'Barge-in is mostly about queues: by the time the user interrupts, several sentences of audio are usually already synthesised. Dropping them everywhere at once is what an interruption frame does in Pipecat; the next section covers fixing the conversation history afterwards.',
+      },
+      quickCheck: {
+        question: 'In LiveKit Agents, how does the agent connect to a caller using a web browser?',
+        options: [
+          'It polls a REST endpoint for audio files',
+          'It joins the same WebRTC room as a participant and exchanges audio tracks in real time',
+          'The browser uploads a recording when the user stops talking',
+          'It requires a SIP phone number for every call',
+        ],
+        correct: 1,
+        explanation:
+          'LiveKit Agents run as room participants on LiveKit\'s WebRTC server, streaming audio both ways. SIP is used to bring phone calls into a room, not for browser callers.',
+      },
+      source: 'Pipecat docs — Pipelines, frames and processors; LiveKit Agents docs — AgentSession, turn detection, telephony',
+    },
+    {
+      heading: 'Turn-taking and interruptions — endpointing, backchannels and what the caller actually heard',
+      body: `**Intuition:** good human conversation has three skills: knowing when the other person has *finished* (not just paused), not stopping every time they say "mm-hm", and remembering that if you were cut off, they did not hear the rest of your sentence. Voice agents need all three in code.
+
+**1. Endpointing — has the user finished?**
+- **Silence-based:** VAD says "no speech" for N ms. Short N (~300 ms) feels snappy but cuts off people who pause to think ("my account number is… 4 4 7…"); long N (~800 ms+) feels sluggish.
+- **Semantic turn detection:** a small model looks at the transcript so far — "I'd like to book for" is clearly unfinished — and extends or shortens the wait. Combine both: a short silence plus "looks complete" ends the turn; "looks incomplete" waits longer.
+- **Context-aware waits:** when the agent just asked for a long number or address, allow a longer pause.
+
+**2. Interruptions — real barge-in vs backchannel.**
+- Keep VAD and STT running while the agent speaks.
+- Not every sound is an interruption: "mm-hm", "yeah", a cough or the agent's own voice leaking through a speakerphone. Require a **minimum speech duration** (e.g. 300–500 ms) or a couple of transcribed words before stopping, and use **echo cancellation** so the agent does not interrupt itself.
+- On a real interruption: stop audio output immediately, cancel the LLM stream and queued TTS, and listen.
+
+**3. History truncation — keep only what was heard.** If the agent planned to say "Your refund of $40 was approved and will arrive in 5 days" but was cut off after "Your refund of $40", the conversation history must contain only the part that was **played**, not the full generated text. Otherwise the model later believes it told the user about the 5 days. Use TTS word timestamps (or bytes played) to cut the text at the interruption point.
+
+**4. Keep the conversation alive.**
+- For slow tool calls, say a short filler ("let me check that") — but only after a delay, so fast tools do not trigger it.
+- If the user is silent for a long time, prompt once, then end politely.
+- Let the user say "stop", "repeat" or "agent" at any point.
+
+**Metrics to track:** time-to-first-audio (p50/p95), **interruption latency** (user starts speaking → agent silent, aim for a few hundred ms), **false-interruption rate** (agent stopped for a backchannel or noise), **cut-off rate** (agent replied while the user was mid-sentence), and task success per call.
+
+**When to use:** every voice agent. Tune thresholds on recordings from your real callers — phone lines, accents and noise differ widely.`,
+      example: `**Insurance claims line, tuning pass on 400 recorded calls.**
+
+| Setting | Before | After |
+|---|---|---|
+| End of turn | 300 ms silence | 300 ms silence + semantic detector; 1.2 s after asking for a policy number |
+| Interrupt trigger | any VAD speech | ≥ 400 ms of speech or ≥ 2 words, with echo cancellation |
+| History on barge-in | full generated reply | words played before the interruption |
+
+Results: callers cut off mid-sentence fell from 14% to 4% of calls; false interruptions from "uh-huh" fell from 11% to 2%; interruption latency stayed ~250 ms. One bug disappeared entirely: the agent used to say "as I mentioned, it takes 5 days" about details the caller never heard.`,
+      code: [
+        {
+          language: 'typescript',
+          title: 'Decide end of turn from silence plus a semantic "looks finished" score',
+          code: `interface TurnInput {
+  silenceMs: number;          // since VAD last heard speech
+  transcript: string;         // current user turn so far
+  expectingLongInput: boolean; // e.g. the agent asked for a policy number
+  completeProb: number;       // 0..1 from a turn-detection model
+}
+
+export function endOfTurn(t: TurnInput): boolean {
+  if (!t.transcript.trim()) return false;
+  const base = t.expectingLongInput ? 1200 : 300;
+  if (t.completeProb >= 0.8) return t.silenceMs >= base;           // sounds finished
+  if (t.completeProb <= 0.3) return t.silenceMs >= base + 1500;    // clearly mid-sentence
+  return t.silenceMs >= base + 500;
+}
+
+export function isRealInterruption(speechMs: number, words: number, echoSuppressed: boolean) {
+  if (!echoSuppressed) return false; // could be our own voice
+  return speechMs >= 400 || words >= 2;  // ignore "mm-hm" and coughs
+}`,
+        },
+      ],
+      prosCons: {
+        pros: [
+          'Fewer callers cut off mid-sentence, without making every reply slow.',
+          'Backchannels and noise no longer stop the agent.',
+          'Truncated history keeps the model consistent with what the caller really heard.',
+        ],
+        cons: [
+          { con: 'Semantic turn detection adds a model call and can misjudge accents or languages.', fix: 'Use a small, fast detector, fall back to silence timing on low confidence, and tune thresholds per language on real recordings.' },
+          { con: 'A higher interruption threshold makes the agent slower to stop for real interruptions.', fix: 'Duck (lower) the agent\'s volume as soon as speech starts and stop fully once the threshold is met.' },
+          { con: 'Word timestamps are not available from every TTS provider.', fix: 'Estimate the cut point from audio bytes played and the speaking rate, or pick a TTS that returns alignment data.' },
+        ],
+      },
+      keyPoints: [
+        'Endpointing: combine silence timing with a semantic "finished?" signal.',
+        'Wait longer when you asked for long input (numbers, addresses).',
+        'Separate real barge-in from backchannels with duration/word thresholds and echo cancellation.',
+        'After an interruption, store only the words actually played.',
+        'Track interruption latency, false-interruption rate and cut-off rate.',
+      ],
+      exercise: {
+        prompt: `Write **\`truncateToHeard(words, playedMs)\`**.
+
+**Acceptance:**
+- \`words\`: \`{ word, startMs, endMs }[]\` from TTS alignment, in order; \`playedMs\` is how much audio played before the interruption.
+- Keep words whose \`endMs <= playedMs\` (fully heard). If a word was cut mid-way, drop it.
+- Return the kept words joined by spaces, followed by \`'…'\` when anything was dropped; return \`''\` if nothing was heard.`,
+        hints: [
+          'Filter by endMs, then compare the kept count with the total.',
+          'Remember the empty case before adding the ellipsis.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Timed = { word: string; startMs: number; endMs: number };
+
+export function truncateToHeard(words: Timed[], playedMs: number): string {
+  const heard = words.filter((w) => w.endMs <= playedMs);
+  if (!heard.length) return '';
+  const text = heard.map((w) => w.word).join(' ');
+  return heard.length < words.length ? text + '…' : text;
+}
+
+const reply: Timed[] = [
+  { word: 'Your', startMs: 0, endMs: 180 }, { word: 'refund', startMs: 180, endMs: 520 },
+  { word: 'of', startMs: 520, endMs: 600 }, { word: '$40', startMs: 600, endMs: 1100 },
+  { word: 'arrives', startMs: 1100, endMs: 1500 }, { word: 'in', startMs: 1500, endMs: 1600 },
+  { word: '5', startMs: 1600, endMs: 1800 }, { word: 'days.', startMs: 1800, endMs: 2200 },
+];
+console.log(truncateToHeard(reply, 1300)); // 'Your refund of $40…'`,
+        },
+        explanation:
+          'The history should describe the conversation the caller experienced. Storing the truncated text (with a marker) lets the model notice it was cut off and repeat the missing detail if it is still relevant, instead of assuming it was heard.',
+      },
+      quickCheck: {
+        question: 'While the agent is speaking, the caller says "mm-hm". What should a well-tuned voice agent do?',
+        options: [
+          'Stop speaking immediately and wait for the caller',
+          'Treat it as a backchannel and keep speaking, because it is short and not a request',
+          'Restart the whole reply from the beginning',
+          'End the call',
+        ],
+        correct: 1,
+        explanation:
+          'Short acknowledgements signal listening, not a wish to take the turn. A minimum speech duration or word count before interrupting (plus echo cancellation) avoids stopping for them, while longer speech still triggers barge-in.',
+      },
+      source: 'LiveKit docs — Turn detection and interruptions; Pipecat docs — Interruptions and user turn strategies',
+    },
   ],
   codeChallenges: [
     {
@@ -929,6 +1214,37 @@ export async function onUserTurn(text: string, call: Call) {
         'Re-rendering entire videos for one typo',
       ],
     },
+    {
+      id: 'audio-video-iq-06',
+      difficulty: 'hard',
+      question: 'Callers say your voice agent "talks over me" and "keeps going when I try to stop it", and transcripts show it later refers to details the caller never heard. Diagnose and fix it, and say whether you would build on Pipecat or LiveKit Agents.',
+      context: 'Cascade agent (VAD → STT → LLM → TTS) on phone lines and a web widget; 300 ms silence endpointing; any detected speech is ignored while the agent talks.',
+      whatInterviewerLooksFor: [
+        'Separates endpointing problems from barge-in problems',
+        'Semantic turn detection and context-aware waits',
+        'Barge-in with backchannel filtering and echo cancellation',
+        'Truncating history to the words actually played; metrics; a reasoned framework choice',
+      ],
+      modelAnswer: `**Three separate bugs.**
+
+1. **"Talks over me"** = endpointing too eager. 300 ms of silence ends the turn while people pause mid-sentence. Fix: combine silence with a **semantic turn detector** on the transcript, and use longer waits after asking for numbers or addresses. Measure the **cut-off rate** on recorded calls before and after.
+
+2. **"Keeps going when I try to stop it"** = no barge-in. Keep VAD/STT running during playback; on speech of ≥ ~400 ms or ≥ 2 words (so "mm-hm" and coughs do not count), stop audio, cancel the LLM stream and flush queued TTS. Add **echo cancellation** so the agent's own voice on speakerphones does not trigger it. Track **interruption latency** and **false-interruption rate**.
+
+3. **"Refers to things I never heard"** = history stores the full generated reply. After an interruption, store only the words played (TTS word timestamps or bytes played) with a cut-off marker.
+
+**Framework.** Both handle this plumbing. **Pipecat** gives a processor pipeline where interruptions flush queued frames everywhere and lets me insert custom processors (metrics, filters) — good for the phone line over a telephony WebSocket. **LiveKit Agents** gives WebRTC rooms, worker dispatch, SIP and a built-in semantic turn detector — attractive for the web widget and if we want one vendor for transport. I would keep tools, prompts and a 50-call replay eval set outside either framework and pick per channel after a one-week spike comparing p95 time-to-first-audio and the three rates above.`,
+      followUps: [
+        { q: 'How do you test turn-taking changes safely?', a: 'Replay recorded caller audio (with consent) through the pipeline offline, measure cut-off, false-interruption and latency metrics, then roll out to a small share of live calls and compare task success.' },
+        { q: 'What if the TTS provider gives no word timestamps?', a: 'Estimate the cut point from the duration of audio actually played and the average speaking rate, cut at the last whole word, and mark the text as interrupted.' },
+      ],
+      pitfalls: [
+        'Only lengthening the silence timeout, making every reply slow',
+        'Stopping on any sound, including backchannels and echo',
+        'Leaving the full unplayed reply in the conversation history',
+        'Choosing a framework before defining the metrics',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1158,6 +1474,59 @@ hyp = "your balance is one thousand two hundred fifty dollars and fifty cents"`,
       correct: [0],
       explanation: 'Cluster ids are arbitrary within each run. Diarise the whole recording once, or match clusters across chunks with speaker embeddings or enrolled reference voices. Timestamp units would misalign words, not swap labels.',
       followUps: [{ q: 'How do you map clusters to real names?', a: 'Compare cluster embeddings to enrolled voiceprints, or use known join order and calendar attendees, keeping a confidence score and leaving uncertain ones as generic labels.' }],
+    },
+    {
+      id: 'audio-video-mcq-13',
+      difficulty: 'medium',
+      question: 'Your voice agent cuts callers off while they read out a 16-digit account number. Which change targets the cause with the least added latency elsewhere?',
+      options: [
+        'Raise the silence timeout to 2 seconds for every turn',
+        'Use a longer end-of-turn wait only when the agent has just asked for long input, plus a semantic turn detector',
+        'Switch to a higher-quality TTS voice',
+        'Disable VAD and wait for the caller to press #',
+      ],
+      correct: [1],
+      explanation:
+        'Pauses while reading numbers are expected after a specific prompt. Context-aware waits and a semantic "is this finished?" signal fix those turns without slowing every reply, as a global 2-second timeout would.',
+      followUps: [{ q: 'Which metric shows whether the fix worked?', a: 'The cut-off rate: the share of turns where the agent started speaking while the caller was still mid-utterance, measured on recorded calls before and after.' }],
+    },
+    {
+      id: 'audio-video-mcq-14',
+      difficulty: 'hard',
+      question: 'The caller genuinely interrupts the agent mid-reply. Which actions should the pipeline take? Select ALL that apply.',
+      options: [
+        'Stop audio playback and flush queued TTS audio',
+        'Cancel the in-progress LLM stream',
+        'Store the full generated reply in history so the model remembers its plan',
+        'Store only the words that were actually played before the interruption',
+      ],
+      correct: [0, 1, 3],
+      explanation:
+        'The agent must go quiet fast, stop generating and keep history consistent with what the caller heard. Storing the full reply makes the model believe it said things the caller never heard.',
+      followUps: [{ q: 'How do you avoid stopping for "mm-hm"?', a: 'Require a minimum speech duration or a couple of transcribed words before treating speech as an interruption, and run echo cancellation so the agent does not hear itself.' }],
+    },
+    {
+      id: 'audio-video-mcq-15',
+      difficulty: 'medium',
+      question: 'In this Pipecat-style pipeline, why does the assistant context aggregator come after the transport output?',
+      code: {
+        language: 'python',
+        code: `pipeline = Pipeline([
+    transport.input(), stt, context_aggregator.user(),
+    llm, tts, transport.output(),
+    context_aggregator.assistant(),
+])`,
+      },
+      options: [
+        'It must run last because Python lists execute in reverse',
+        'So it records what the bot actually sent to the caller, which matters when an interruption cuts a reply short',
+        'Because the LLM cannot stream unless the aggregator is last',
+        'It has no effect; aggregator position is irrelevant',
+      ],
+      correct: [1],
+      explanation:
+        'Placing the assistant aggregator after output means the context is built from what passed through to the caller. When an interruption flushes queued frames, the unplayed text never reaches it, keeping history honest.',
+      followUps: [{ q: 'Where would you add a per-stage latency logger?', a: 'As a custom processor (or observer) between stages, timestamping when the first frame of each type passes, e.g. the first transcription, first LLM token and first audio frame.' }],
     },
   ],
 };

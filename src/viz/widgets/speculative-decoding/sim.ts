@@ -11,7 +11,8 @@
 //      p_t (lossless).
 // Expected tokens per target pass with acceptance rate α: E = (1 − α^(k+1)) / (1 − α).
 // Speed-up vs plain decoding ≈ E / (k·c + 1), c = cost of one draft step relative to one target pass.
-import { rng, type BaseFrame } from '../../core';
+import type { BaseFrame } from '../../core';
+import { rng } from '../_shared/rng.ts';
 
 export type Quality = 'low' | 'medium' | 'high';
 

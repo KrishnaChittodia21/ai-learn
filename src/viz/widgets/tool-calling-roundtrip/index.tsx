@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, MAX_ITER, MIN_ITER, SCENARIO_LABELS, TOOL_SCENARIOS, simulate, type Lane, type Msg, type Params, type ScenarioId, type Tone } from './sim';
 
 const short = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
@@ -68,6 +69,7 @@ export default function ToolCallingRoundtripViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Choice<ScenarioId>

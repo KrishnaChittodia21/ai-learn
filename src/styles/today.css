@@ -41,8 +41,15 @@
   align-items: center;
   padding: 56px 0 54px;
 }
+/* the next-mission card: the one border beam on Today (.beam in base.css) */
+.td-hero-card {
+  border-radius: var(--radius-xl);
+}
 .td-hero-copy {
   min-width: 0;
+  border-radius: calc(var(--radius-xl) - 1.5px);
+  padding: 34px 36px;
+  background: linear-gradient(160deg, light-dark(#ffffff, #120f2e), light-dark(#f4f1ff, #0a0820));
 }
 .td-eyebrow {
   display: inline-flex;
@@ -468,6 +475,31 @@
   height: 100%;
   border-radius: 99px;
   background: var(--grad-ion);
+  transform-origin: left;
+  transition: transform var(--dur-count) var(--ease-out);
+}
+/* "+6" since the last visit */
+.td-delta {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  vertical-align: middle;
+  border-radius: var(--radius-pill);
+  background: var(--good-soft);
+  color: var(--good);
+  font: 600 var(--fs-xs) var(--mono);
+  letter-spacing: 0;
+  animation: td-delta-in var(--dur-slow) var(--ease-out) 0.3s both;
+}
+.td-delta.down {
+  background: var(--info-soft);
+  color: var(--info);
+}
+@keyframes td-delta-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 .td-tile-bar-nebula span {
   background: linear-gradient(90deg, var(--c-nebula), var(--c-pulsar));
@@ -749,7 +781,7 @@
   box-shadow: 0 0 22px 6px var(--glow-pulsar-c);
 }
 .td-node.now {
-  animation: td-star 2s ease-in-out infinite;
+  animation: td-star 4s ease-in-out infinite;
 }
 .td-node.todo,
 .td-key.todo {
@@ -1065,18 +1097,8 @@
     order: 9;
   }
 
-  /* hero → framed card with the spinning border */
-  .td-hero-card {
-    position: relative;
-    border-radius: var(--radius-xl);
-    padding: 1.5px;
-    background: var(--grad-conic);
-    animation: na-spin 7s linear infinite;
-  }
   .td-hero-copy {
-    border-radius: calc(var(--radius-xl) - 1.5px);
     padding: 22px 20px;
-    background: linear-gradient(160deg, light-dark(#ffffff, #120f2e), light-dark(#f4f1ff, #0a0820));
   }
   .td-eyebrow {
     padding: 0;
@@ -1264,7 +1286,12 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .td-hero-card,
+  .td-delta {
+    animation: na-fade var(--dur-fast) ease both !important;
+  }
+  .td-tile-bar span {
+    transition: none !important;
+  }
   .td-node.now,
   .level-bar-seg.seg-passed {
     animation: none !important;

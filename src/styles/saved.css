@@ -1,0 +1,495 @@
+/* Saved for later (M2): ☆ Save button, header star, the Saved page, backup nudge. Design: new-features/saved.html */
+
+/* ---------- ☆ Save button: idle / hover / saved / focus ---------- */
+.save-btn {
+  --tone: var(--c-solar);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 13px 0 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--rule-strong);
+  background: var(--tint);
+  color: var(--text-2);
+  font: 600 var(--fs-sm) / 1 var(--display);
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background var(--dur),
+    border-color var(--dur),
+    color var(--dur),
+    box-shadow var(--dur),
+    transform var(--dur);
+}
+.save-btn svg {
+  transition:
+    transform 0.35s var(--ease-out),
+    fill var(--dur),
+    color var(--dur);
+}
+.save-btn:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--tone) 60%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+.save-btn:hover svg {
+  color: var(--tone);
+  transform: rotate(-12deg) scale(1.1);
+}
+.save-btn:active {
+  transform: scale(0.96);
+}
+.save-btn[aria-pressed='true'] {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--tone) 22%, transparent), color-mix(in srgb, var(--c-pink) 14%, transparent));
+  box-shadow: 0 0 22px -8px color-mix(in srgb, var(--tone) 80%, transparent);
+}
+.save-btn[aria-pressed='true'] svg {
+  color: var(--tone);
+  fill: currentColor;
+}
+.save-btn.pop svg {
+  animation: sv-pop 0.5s var(--ease-out);
+}
+@keyframes sv-pop {
+  40% {
+    transform: scale(1.45) rotate(-18deg);
+  }
+}
+.save-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.save-btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.save-btn.icon {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  justify-content: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-btn.pop svg,
+  .save-btn:hover svg {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* where the button sits */
+.tp-hero-save {
+  margin-top: var(--s-3);
+}
+.tp-sec-acts,
+.tp-card-acts {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.tp-card-acts .badge {
+  margin-top: 0 !important;
+}
+.tp-card,
+.plab {
+  scroll-margin-top: calc(var(--masthead) + 24px);
+}
+.tp-card.flash,
+.plab.flash {
+  animation: section-flash 1.8s ease-out;
+}
+.toast-action {
+  flex: none;
+  align-self: center;
+}
+
+/* ---------- header star with the count of items still to do ---------- */
+.saved-hdr {
+  position: relative;
+}
+.saved-hdr > svg {
+  color: var(--c-solar);
+}
+.saved-hdr .hdr-n {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  display: grid;
+  place-items: center;
+  font: 500 0.625rem/1 var(--mono);
+  background: var(--grad-action);
+  color: var(--accent-text);
+}
+.more-n {
+  margin-left: auto;
+  font: 500 var(--fs-xs) var(--mono);
+  color: var(--muted);
+}
+/* one more header item: fold search to its icon earlier */
+@media (max-width: 1480px) {
+  .search-trigger {
+    min-width: 0;
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .search-trigger-text,
+  .search-trigger kbd {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .masthead .saved-hdr {
+    display: none;
+  }
+}
+
+/* ---------- Saved page ---------- */
+.sv-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--s-5);
+  align-items: end;
+  margin-bottom: var(--s-5);
+}
+.sv-hero h1 {
+  margin: 0 0 var(--s-2);
+}
+.sv-hero .lead {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.sv-cap {
+  padding: var(--s-4);
+  border-radius: var(--radius-lg);
+  margin: 0;
+}
+.sv-cap-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.sv-cap-n {
+  font: 700 1.5rem/1 var(--display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.sv-cap-n small {
+  font-size: 0.6em;
+  color: var(--muted);
+  font-weight: 500;
+}
+.sv-cap p {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.sv-cap.near .eyebrow {
+  color: var(--warn);
+}
+.sv-cap.near .pbar-fill {
+  background: var(--warn);
+  box-shadow: none;
+}
+.sv-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+.sv-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sv-chips .chip {
+  min-height: 36px;
+  gap: 6px;
+}
+.sv-n {
+  font: 500 0.7rem/1 var(--mono);
+  padding: 3px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--tint-2);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.chip.on .sv-n {
+  background: var(--grad-action);
+  color: var(--accent-text);
+}
+.chip.empty {
+  opacity: 0.55;
+}
+.sv-tools {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  margin-left: auto;
+}
+.sv-panel {
+  padding: var(--s-2) var(--s-5) var(--s-4);
+  border-radius: var(--radius-xl);
+}
+.sv-group + .sv-group {
+  border-top: 1px solid var(--border);
+}
+.sv-gh {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-4) 0 var(--s-1);
+  font: 500 var(--fs-xs) / 1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sv-gh b {
+  font-weight: 500;
+  color: var(--text-2);
+}
+.sv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sv-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--s-3) var(--s-4);
+  align-items: center;
+  padding: var(--s-3) var(--s-2);
+  margin: 0 calc(-1 * var(--s-2));
+  border-radius: var(--radius-md);
+  transition: background var(--dur);
+}
+.sv-row:hover {
+  background: var(--tint);
+}
+.sv-row + .sv-row {
+  box-shadow: 0 -1px 0 var(--border);
+}
+.sv-ic {
+  --tone: var(--c-nebula);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent);
+}
+.k-section {
+  --tone: var(--c-ion);
+}
+.k-interview {
+  --tone: var(--c-pulsar);
+}
+.k-code {
+  --tone: var(--c-solar);
+}
+.k-prompt-lab,
+.k-topic {
+  --tone: var(--c-nebula);
+}
+.k-drill {
+  --tone: var(--c-success);
+}
+.sv-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sv-title {
+  font: 600 var(--fs-md) / 1.35 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.sv-title:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.sv-meta {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.sv-kind {
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  color: var(--text-2);
+}
+.sv-meta .sv-topic {
+  color: var(--text-2);
+}
+.sv-acts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sv-done:hover:not(:disabled) {
+  border-color: var(--c-ion);
+  color: var(--c-ion);
+  background: var(--info-soft);
+}
+.sv-empty {
+  text-align: center;
+  padding: var(--s-7) var(--s-4) var(--s-6);
+}
+.sv-empty-orb {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--s-4);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--c-solar);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c-solar) 22%, transparent), transparent);
+  border: 1px dashed color-mix(in srgb, var(--c-solar) 45%, transparent);
+}
+.sv-empty h2 {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-lg);
+}
+.sv-empty p {
+  max-width: 44ch;
+  margin: 0 auto var(--s-4);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.sv-empty .save-btn {
+  pointer-events: none;
+  vertical-align: middle;
+  margin: 0 2px;
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: var(--fs-xs);
+}
+.sv-donebox {
+  margin-top: var(--s-4);
+  padding: var(--s-2) var(--s-5);
+  border-radius: var(--radius-xl);
+}
+.sv-donebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  min-height: 48px;
+}
+.sv-chev {
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+[aria-expanded='true'] .sv-chev {
+  transform: rotate(180deg);
+}
+.sv-donebox .sv-row {
+  opacity: 0.78;
+}
+.sv-tick {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--accent-text);
+  background: var(--grad-ion);
+  box-shadow: var(--glow-ion);
+}
+.sv-donebox .sv-title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent);
+  color: var(--text-2);
+}
+@media (max-width: 900px) {
+  .sv-hero {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .sv-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 2px var(--gutter);
+    scroll-padding: var(--gutter);
+  }
+  .sv-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .sv-chips .chip {
+    flex: none;
+  }
+  .sv-tools {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .sv-panel,
+  .sv-donebox {
+    padding-left: var(--s-4);
+    padding-right: var(--s-4);
+  }
+  .sv-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+  .sv-acts {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: -4px;
+  }
+  .sv-title {
+    font-size: 0.9375rem;
+  }
+}
+
+/* ---------- gentle "Export a backup" reminder (Today) ---------- */
+.backup-nudge {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-5);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-sm);
+}
+.backup-nudge p {
+  flex: 1 1 260px;
+  margin: 0;
+  color: var(--text-2);
+}
+.backup-nudge strong {
+  color: var(--text);
+}
+.sv-acts .btn-icon {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+}

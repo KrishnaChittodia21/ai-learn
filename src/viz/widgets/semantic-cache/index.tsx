@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, LLM_COST, STREAMS, simulate, totals, type Outcome, type Params, type StreamId } from './sim';
 
 const BADGE: Record<Outcome, { label: string; fill: string; stroke: string }> = {
@@ -32,6 +33,7 @@ export default function SemanticCacheViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(params)}
       controls={
         <>
           <Choice<StreamId>

@@ -20,9 +20,9 @@ const TIER_TOKEN: Record<EarnedTier, string> = {
 };
 
 /**
- * "Achievement unlocked" dialog. One item → the orb rises large inside orbiting aurora rings;
+ * "Achievement unlocked" dialog. One item → the orb rises large inside static aurora rings (M9: no orbit motion);
  * several → one combined grid ("3 new badges"). Focus-trapped; Escape, the close button, a backdrop
- * click or "Keep going" dismiss it. Reduced motion: no confetti, no orbit, no pop; it simply fades in.
+ * click or "Keep going" dismiss it. Reduced motion: no confetti, no pop; it simply fades in.
  */
 export default function AchievementCelebration({ items, onClose, onViewAll }: { items: Unlocked[]; onClose: () => void; onViewAll: () => void }) {
   const ref = useRef<HTMLDivElement>(null);

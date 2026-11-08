@@ -1,12 +1,15 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Check, CirclePlay, HardDriveDownload, Play } from 'lucide-react';
 import { COMPANY_QUESTIONS, LEVEL_OF_TOPIC, LEVELS, PHASES, TOPICS, TOPIC_BY_ID } from '../content';
 import { localDay, useProgress, type Progress } from '../lib/progress';
 import { companyUnlocked, topicCompletion, topicStatus } from '../lib/stats';
 import { weakTopics } from '../lib/weak';
 import { nextStep } from '../lib/nextStep';
-import { getUiPrefs } from '../lib/uiPrefs';
+import { roleTopicIds } from '../content/roles';
+import { getUiPrefs, saveUiPrefs, useUiPrefs } from '../lib/uiPrefs';
+import { backupDue } from '../lib/backup';
+import { exportNow } from '../lib/exportNow';
 import { studyStreak } from '../lib/streak';
 import { shiftDay } from '../lib/metrics';
 import { ProgressPanel } from '../components/ProgressPanel';
@@ -14,6 +17,15 @@ import { DashboardMetrics } from '../components/DashboardMetrics';
 import { WeakReattempt } from '../components/WeakReattempt';
 import { AchievementsSummary } from '../components/achievements/AchievementsSummary';
 import { NeuralCoverage } from '../components/NeuralCoverage';
+import { ShortThumb } from '../components/ShortThumb';
+import { PlanCard } from '../components/PlanCard';
+import { SaveButton } from '../components/SaveButton';
+import { shortLength } from '../lib/shorts';
+import { useShorts } from '../lib/useShorts';
+import { useInViewPause } from '../lib/useInViewPause';
+import { countPlan } from '../lib/motion';
+import { CountUp } from '../components/CountUp';
+import { HeadingReveal } from '../components/HeadingReveal';
 
 const TAB_LABELS: Record<string, string> = {
   learn: 'Read',
@@ -91,6 +103,7 @@ export default function Home() {
   const weakest = weak.find((w) => w.sections.length > 0);
   const step = nextStep(p, TOPICS, {
     companyTotal: COMPANY_QUESTIONS.length,
+    path: roleTopicIds(p.rolePath),
     weak: weakest ? { topic: weakest.topic, index: weakest.sections[0].index, heading: weakest.sections[0].heading } : null,
   });
   const last = getUiPrefs().lastStudyLocation;
@@ -130,27 +143,45 @@ export default function Home() {
   });
   const ringsLabel = `Course progress: ${coveredPct} percent covered. ${levels.map((l) => `${l.title} ${l.done} of ${l.total}`).join(', ')}.`;
 
+  // tiles count up from what the learner saw when they last left Today (saved on leave, so a reload doesn't recount)
+  const [seen] = useState(() => getUiPrefs().lastSeenFigures ?? {});
+  const figures = { passed, sections: fig.sectionsRead, exercises: fig.exercisesDone, mistakes };
+  const figRef = useRef(figures);
+  useEffect(() => {
+    figRef.current = figures;
+  });
+  useEffect(() => {
+    const save = () => saveUiPrefs({ lastSeenFigures: figRef.current });
+    window.addEventListener('pagehide', save);
+    return () => {
+      window.removeEventListener('pagehide', save);
+      save();
+    };
+  }, []);
+  const heroRef = useRef<HTMLDivElement>(null);
+  useInViewPause(heroRef);
+
   return (
     <div className="page today">
       <section className="td-hero" aria-labelledby="today-title">
-        <div className="td-hero-card">
+        <div className="td-hero-card beam" ref={heroRef}>
           <div className="td-hero-copy">
             <p className="td-eyebrow rise d1">
-              <span className="td-eyebrow-dot pulse" aria-hidden />
+              <span className="td-eyebrow-dot" aria-hidden />
               <span>
                 {eyebrow}
                 {level && <span className="td-eyebrow-level"> · {level.title}</span>}
               </span>
             </p>
-            <h1 id="today-title" className={`td-title rise d2${heroTitle.length > 32 ? ' td-title-long' : ''}`}>
-              <span className="gtext">{heroTitle}</span>
+            <h1 id="today-title" className={`td-title${heroTitle.length > 32 ? ' td-title-long' : ''}`}>
+              <HeadingReveal text={heroTitle} />
             </h1>
             <p className="td-lede rise d3">{lede}</p>
             <p className="td-mlede">
               {fresh && topic ? `${plural(topic.sections.length, 'short section')} · start with §1 ${topic.sections[0]?.heading.split(' — ')[0] ?? ''}` : sectionsLine ? `${sectionsLine} · up next: ${step.kind === 'read' ? step.title.replace(/^Read /, '').split(' — ')[0] : step.title}` : step.detail}
             </p>
             <NeuralCoverage compact className="td-nn-phone" status={status} nextId={topic?.id} pct={coveredPct} label={ringsLabel} />
-            <div className="td-actions rise d4">
+            <div className="td-actions rise d4" data-guide="mission">
               <Link className="btn btn-primary btn-lg td-cta" to={step.href}>
                 {ctaLabel} <ArrowRight size={18} aria-hidden />
               </Link>
@@ -177,24 +208,28 @@ export default function Home() {
       </section>
 
       <section className="td-tiles" aria-label="Practice figures">
-        <StatFigure label="Topics covered" short="Covered" value={passed} of={TOPICS.length} tone="ion" i={1} />
+        <StatFigure label="Topics covered" short="Covered" value={passed} seen={seen.passed} of={TOPICS.length} tone="ion" i={1} />
         <StatFigure
           label="Sections read"
           short="Sections"
           value={fig.sectionsRead}
+          seen={seen.sections}
           of={fig.sections}
           tone="nebula"
           i={2}
           hint={`${fig.checksRight}/${fig.checks} quick checks right`}
           className="td-tile-sections"
         />
-        <StatFigure label="Exercises solved" short="Exercises" value={fig.exercisesDone} of={fig.exercises} tone="pulsar" i={3} />
+        <StatFigure label="Exercises solved" short="Exercises" value={fig.exercisesDone} seen={seen.exercises} of={fig.exercises} tone="pulsar" i={3} />
         <div className="card td-tile td-tile-mistakes rise d4">
           <div className="lbl">
             <span className="td-tile-long">Mistakes to drill</span>
             <span className="td-tile-short">Mistakes</span>
           </div>
-          <div className={`td-tile-value num${mistakes ? ' hot' : ''}`}>{mistakes}</div>
+          <div className={`td-tile-value num${mistakes ? ' hot' : ''}`}>
+            <CountUp value={mistakes} from={seen.mistakes ?? mistakes} duration={0.7} />
+            <Delta value={mistakes} seen={seen.mistakes} />
+          </div>
           {mistakes ? (
             <Link className="td-tile-link" to="/practice">
               Start drill <ArrowRight size={14} aria-hidden />
@@ -222,6 +257,12 @@ export default function Home() {
           </ol>
         </section>
       )}
+
+      <BackupNudge p={p} />
+
+      <ShortOfTheDay />
+
+      <PlanCard p={p} />
 
       <ProgressPanel p={p} />
 
@@ -275,10 +316,81 @@ export default function Home() {
   );
 }
 
+/** Today's Short: always open; once watched it says a new one unlocks on the next study day. */
+function ShortOfTheDay() {
+  const { sotd } = useShorts();
+  if (!sotd) return null;
+  const { entry, watched } = sotd;
+  return (
+    <article className={`card sotd${watched ? ' compact' : ''}`} aria-labelledby="sotd-title" data-guide="short-of-the-day">
+      <ShortThumb entry={entry} state={watched ? 'watched' : undefined} />
+      <div>
+        <p className="eyebrow">
+          <CirclePlay size={14} aria-hidden /> Short of the day{watched ? '' : ` · ${shortLength(entry.short)}`}
+        </p>
+        <h2 id="sotd-title">{entry.short.title}</h2>
+        {watched ? (
+          <>
+            <p className="done-note">
+              <Check size={14} aria-hidden /> Watched · a new one unlocks on your next study day
+            </p>
+            <Link className="small" to={`/topic/${entry.topic.id}?tab=learn&s=${entry.section}`}>
+              Learn it: §{entry.section + 1} →
+            </Link>{' '}
+            · <Link className="small" to="/shorts">All Shorts</Link>
+          </>
+        ) : (
+          <>
+            <p>{entry.topic.title}</p>
+            <div className="row wrap">
+              <Link className="btn btn-primary btn-sm" to={`/short/${entry.short.id}`}>
+                <Play size={14} aria-hidden /> Watch
+              </Link>
+              <SaveButton kind="short" refId={entry.short.id} topicId={entry.topic.id} title={entry.short.title} />
+            </div>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/** Every couple of weeks of new progress: a quiet reminder that everything lives in this browser only. */
+function BackupNudge({ p }: { p: Progress }) {
+  const prefs = useUiPrefs();
+  if (!backupDue(p, prefs.lastExportAt, prefs.backupNudgeDismissedAt)) return null;
+  return (
+    <aside className="backup-nudge tint-ion" aria-label="Backup reminder">
+      <HardDriveDownload size={18} aria-hidden />
+      <p>
+        <strong>Export a backup?</strong> Your progress lives only in this browser. A backup file keeps it safe if site data is cleared.
+      </p>
+      <button type="button" className="btn btn-sm btn-primary" onClick={exportNow}>
+        Export a backup
+      </button>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => saveUiPrefs({ backupNudgeDismissedAt: new Date().toISOString() })}>
+        Not now
+      </button>
+    </aside>
+  );
+}
+
+/** "+6" / "−2" since the last visit to Today; nothing when unchanged or on a first visit */
+function Delta({ value, seen }: { value: number; seen?: number }) {
+  const d = countPlan(seen, value, false).delta;
+  if (!d) return null;
+  return (
+    <span className={`td-delta${d < 0 ? ' down' : ''}`} aria-label={`${d > 0 ? 'up' : 'down'} ${Math.abs(d)} since your last visit`}>
+      {d > 0 ? `+${d}` : `−${-d}`}
+    </span>
+  );
+}
+
 function StatFigure({
   label,
   short,
   value,
+  seen,
   of,
   tone,
   i,
@@ -288,12 +400,22 @@ function StatFigure({
   label: string;
   short: string;
   value: number;
+  /** the value when Today was last left (undefined on a first visit: no count, no delta) */
+  seen?: number;
   of: number;
   tone: 'ion' | 'nebula' | 'pulsar';
   i: number;
   hint?: string;
   className?: string;
 }) {
+  const to = value ? Math.max(0.02, value / Math.max(1, of)) : 0;
+  const start = seen === undefined ? to : seen ? Math.max(0.02, seen / Math.max(1, of)) : 0;
+  // the bar starts where the learner last saw it, then its scaleX transitions to now (CSS, transform only)
+  const [bar, setBar] = useState(start);
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setBar(to));
+    return () => cancelAnimationFrame(r);
+  }, [to]);
   return (
     <div className={`card td-tile rise ${className}`} style={{ '--i': i } as CSSProperties}>
       <div className="lbl">
@@ -301,11 +423,12 @@ function StatFigure({
         <span className="td-tile-short">{short}</span>
       </div>
       <div className="td-tile-value num">
-        {value}
+        <CountUp value={value} from={seen ?? value} duration={0.7} />
         <span className="td-tile-of">/{of}</span>
+        <Delta value={value} seen={seen} />
       </div>
       <div className={`td-tile-bar td-tile-bar-${tone}`} aria-hidden>
-        <span className="grow-x" style={{ width: `${Math.max(value ? 2 : 0, pct(value, of))}%` }} />
+        <span style={{ transform: `scaleX(${bar})` }} />
       </div>
       {hint && <p className="td-tile-hint">{hint}</p>}
     </div>
@@ -415,7 +538,7 @@ function Activity({ days }: { days: string[] | undefined }) {
   };
   const todayDone = set.has(today);
   return (
-    <section className="card td-activity" aria-labelledby="activity-title">
+    <section className="card td-activity" aria-labelledby="activity-title" data-guide="activity">
       <h2 id="activity-title" className="lbl">
         Study activity · last 4 weeks
       </h2>

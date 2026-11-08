@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { ANSWER_SENTENCE, DEFAULT_PARAMS, N, SENTENCES, SIZE_MAX, SIZE_MIN, WORDS, brokenSentences, clampOverlap, cutSentences, simulate, type Params, type Strategy } from './sim';
 
 const CHW = 5.4;
@@ -59,6 +60,7 @@ export default function ChunkingPlaygroundViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Choice<Strategy>

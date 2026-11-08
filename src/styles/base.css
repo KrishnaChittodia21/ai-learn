@@ -254,14 +254,52 @@ kbd {
 .tint-bad {
   --tone: var(--bad);
 }
-/* spinning conic gradient border: ONE per screen, for "the thing to do next".
+/* static aurora hairline border (M9: it no longer spins; only "the next thing" gets .beam).
    <div class="gborder"><div class="gborder-in">…</div></div> */
 .gborder {
   position: relative;
   border-radius: var(--radius-lg);
   padding: 1.5px;
-  background: var(--grad-conic);
-  animation: na-spin 8s linear infinite;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--c-violet) 70%, transparent),
+    color-mix(in srgb, var(--c-pink) 60%, transparent),
+    color-mix(in srgb, #ffc58f 60%, transparent)
+  );
+}
+/* border beam (idea from VengeanceUI border-beam.tsx, MIT © 2025–2026 Ashutoshx7): one light travels the hairline.
+   A rotated conic ::before sits behind the 1.5 px padding "mask", so only transform animates (composited).
+   The element needs one child that paints the inside; useInViewPause toggles .paused off-screen. */
+.beam {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 1.5px;
+  background: var(--rule-strong);
+}
+.beam > * {
+  position: relative;
+  z-index: 1;
+}
+.beam::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: 50%;
+  width: 160%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(from 0deg, transparent 0 290deg, var(--c-violet) 318deg, var(--c-pink) 340deg, #ffc58f 352deg, transparent 360deg);
+  animation: na-beam var(--dur-ambient) linear infinite;
+}
+.beam.paused::before {
+  animation-play-state: paused;
+}
+@keyframes na-beam {
+  to {
+    transform: rotate(1turn);
+  }
 }
 .gborder > .gborder-in {
   border-radius: calc(var(--radius-lg) - 1.5px);
@@ -293,7 +331,7 @@ kbd {
     border-color var(--dur),
     color var(--dur),
     box-shadow var(--dur-slow) var(--ease-out),
-    transform var(--dur-slow) var(--ease-out);
+    transform var(--dur-press) var(--ease-out);
 }
 /* secondary: hairline glass pill */
 .btn {
@@ -309,7 +347,7 @@ kbd {
 }
 .btn:active:not(:disabled),
 .btn-ghost:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: scale(var(--press));
 }
 .btn:disabled,
 .btn-ghost:disabled {
@@ -329,10 +367,15 @@ kbd {
   background: var(--grad-action);
   border-color: transparent;
   color: var(--accent-text);
-  transform: translateY(-2px);
   box-shadow:
     var(--glow-action-hover),
     inset 0 0 0 1px rgb(255 255 255 / 0.35);
+}
+/* the lift would stick after a tap on touch screens */
+@media (hover: hover) and (pointer: fine) {
+  .btn.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
 }
 .btn.btn-primary:active:not(:disabled) {
   transform: translateY(0) scale(0.97);
@@ -622,8 +665,8 @@ a.chip {
    ====================================================================== */
 /* rise-in on mount; stagger with .d1–.d6 or style="--i: n" */
 .rise {
-  animation: na-rise 0.9s var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 80ms);
+  animation: na-rise var(--dur-enter) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
 }
 .rise.d1 {
   --i: 1;
@@ -643,6 +686,104 @@ a.chip {
 .rise.d6 {
   --i: 6;
 }
+/* heading reveal (HeadingReveal.tsx): words slide up out of a line mask, once per page per session */
+.hr-word {
+  display: inline-block;
+  overflow: clip;
+  vertical-align: top;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.hr-word > span {
+  display: inline-block;
+  animation: hr-up 460ms var(--ease-out) both;
+  animation-delay: calc(var(--w, 0) * var(--stagger) + 60ms);
+}
+@keyframes hr-up {
+  from {
+    transform: translateY(105%);
+  }
+}
+/* loading skeletons (RouteSkeleton.tsx): page-shaped, one linear sheen (transform only) */
+.skel {
+  display: grid;
+  gap: 14px;
+  padding: var(--s-6) 0;
+  animation: na-fade var(--dur) ease both;
+}
+.sk {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--tint-2);
+}
+.sk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.07)) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: sk-sweep 1.2s linear infinite;
+}
+@keyframes sk-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.sk-line {
+  height: 12px;
+}
+.sk-title {
+  height: 44px;
+  width: min(420px, 80%);
+}
+.w30 {
+  width: 30%;
+}
+.w40 {
+  width: 40%;
+}
+.w70 {
+  width: 70%;
+}
+.skel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.sk-thumb {
+  aspect-ratio: 9 / 16;
+  border-radius: var(--radius-lg);
+}
+.sk-card {
+  height: 140px;
+  border-radius: var(--radius-lg);
+}
+/* viz: holds the widget's place before and while it loads, so nothing jumps */
+.skel-viz,
+.skel.skel-viz {
+  min-height: 520px;
+  margin: 34px 0 0;
+  padding: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  align-content: start;
+}
+.sk-block {
+  height: 340px;
+  border-radius: 16px;
+}
+@media (max-width: 640px) {
+  .skel-viz,
+  .skel.skel-viz {
+    min-height: 460px;
+  }
+  .sk-block {
+    height: 280px;
+  }
+}
 /* pulse: the next step only */
 .pulse {
   animation: na-pulse 2.4s ease-in-out infinite;
@@ -653,14 +794,13 @@ a.chip {
   inset: 0;
   border-radius: 50%;
   pointer-events: none;
-  animation: na-orbit 9s linear infinite;
 }
+/* M9: static (no rings or orbits in motion); the dots just sit at different angles */
 .orbit.slow {
-  animation-duration: 16s;
+  transform: rotate(130deg);
 }
 .orbit.rev {
-  animation-direction: reverse;
-  animation-duration: 12s;
+  transform: rotate(-110deg);
 }
 .orbit-dot {
   position: absolute;
@@ -686,7 +826,7 @@ a.chip {
 @keyframes na-rise {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(var(--rise));
   }
   to {
     opacity: 1;
@@ -700,11 +840,6 @@ a.chip {
   }
   50% {
     box-shadow: 0 0 0 10px color-mix(in srgb, var(--c-ion) 0%, transparent);
-  }
-}
-@keyframes na-orbit {
-  to {
-    transform: rotate(360deg);
   }
 }
 @keyframes na-float {
@@ -747,11 +882,32 @@ a.chip {
     scroll-behavior: auto !important;
   }
   .gtext,
-  .gborder,
   .orbit,
   .pulse,
   .float,
   .spin-border {
     animation: none !important;
+  }
+  /* gentler, not zero: entrances keep a short fade; the beam becomes the static aurora hairline */
+  .rise,
+  .hr-word > span {
+    animation: na-fade var(--dur-fast) ease both !important;
+  }
+  .beam {
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--c-violet) 70%, transparent),
+      color-mix(in srgb, var(--c-pink) 60%, transparent),
+      color-mix(in srgb, #ffc58f 60%, transparent)
+    );
+  }
+  .beam::before,
+  .sk::after {
+    display: none;
+  }
+}
+@keyframes na-fade {
+  from {
+    opacity: 0;
   }
 }

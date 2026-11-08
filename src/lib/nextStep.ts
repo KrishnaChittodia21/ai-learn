@@ -1,6 +1,6 @@
 // "Your next step": one obvious action for the learner, derived only from progress + content.
 // Pure (type-only imports) so it can be unit-tested outside the browser.
-import type { Topic } from '../types';
+import type { TopicMeta } from '../types';
 import type { Progress } from './progress';
 
 /** The study path every topic follows. Ids match the topic page's `?tab=` values. */
@@ -18,7 +18,7 @@ export interface TopicStep {
 
 const passed = (p: Progress, id: string) => !!p.tests[id]?.passedAt;
 
-export function codeLabLabel(t: Topic) {
+export function codeLabLabel(t: TopicMeta) {
   return t.phase === 'behavioral' ? 'Answer Lab' : 'Code Lab';
 }
 
@@ -26,7 +26,7 @@ export function codeLabLabel(t: Topic) {
  * The study-path steps of one topic, in order: Learn → Code Lab → Prompt Lab → Interview Qs → Estimation → Exam
  * (→ Capstone when the topic has capstone projects). Steps with no content are left out.
  */
-export function topicSteps(p: Progress, t: Topic, capstoneCount = 0): TopicStep[] {
+export function topicSteps(p: Progress, t: TopicMeta, capstoneCount = 0): TopicStep[] {
   const read = new Set(p.sections[t.id] ?? []);
   const readCount = t.sections.filter((_, i) => read.has(i)).length;
   const cc = t.codeChallenges.filter((c) => p.cc[c.id]).length;
@@ -66,13 +66,13 @@ export interface NextStep {
   detail: string;
   href: string;
   kind: NextKind;
-  topic?: Topic;
+  topic?: TopicMeta;
   /** optional second action, e.g. revising a weak area */
   secondary?: { title: string; href: string };
 }
 
 export interface WeakHint {
-  topic: Topic;
+  topic: TopicMeta;
   /** section index inside the topic */
   index: number;
   heading: string;
@@ -83,6 +83,8 @@ export interface NextStepOptions {
   weak?: WeakHint | null;
   /** architecture challenges available / completed, for the "all passed" state */
   companyTotal?: number;
+  /** the followed role path's ordered topic ids (C4): its next unfinished topic comes first */
+  path?: string[];
 }
 
 function hasAnyProgress(p: Progress): boolean {
@@ -98,7 +100,7 @@ function hasAnyProgress(p: Progress): boolean {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function nextStep(p: Progress, topics: Topic[], opts: NextStepOptions = {}): NextStep {
+export function nextStep(p: Progress, topics: TopicMeta[], opts: NextStepOptions = {}): NextStep {
   const step = primary(p, topics, opts);
   const weak = opts.weak;
   if (weak && step.kind !== 'start') {
@@ -110,19 +112,20 @@ export function nextStep(p: Progress, topics: Topic[], opts: NextStepOptions = {
   return step;
 }
 
-function primary(p: Progress, topics: Topic[], opts: NextStepOptions): NextStep {
-  const first = topics[0];
+function primary(p: Progress, topics: TopicMeta[], opts: NextStepOptions): NextStep {
+  const inPath = (opts.path ?? []).map((id) => topics.find((t) => t.id === id)).filter((t): t is TopicMeta => !!t);
+  const first = inPath[0] ?? topics[0];
   if (first && !hasAnyProgress(p)) {
     return {
       kind: 'start',
-      title: `Start Phase 1: ${first.title}`,
+      title: inPath.length ? `Start your path: ${first.title}` : `Start Phase 1: ${first.title}`,
       detail: 'Begin with the first lesson. Read each section, then tick "Read" so the app can guide you.',
       href: `/topic/${first.id}?tab=learn&s=0`,
       topic: first,
     };
   }
 
-  const t = topics.find((x) => !passed(p, x.id));
+  const t = inPath.find((x) => !passed(p, x.id)) ?? topics.find((x) => !passed(p, x.id));
   if (!t) {
     const done = Object.keys(p.company).length;
     const total = opts.companyTotal ?? 0;

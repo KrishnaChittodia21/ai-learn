@@ -168,10 +168,32 @@
   --topbar: var(--masthead);
   --tabbar: 0px; /* height of the mobile bottom tab bar (set ≤900px) */
 
-  /* ---------- motion ---------- */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* ---------- motion (M9: mirrored for motion/react in src/lib/motion.ts) ---------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* enter / exit / default */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* on-screen movement */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* sheets, dock */
+  /* springs sampled into linear() for CSS-only movement that should match the motion/react springs */
+  --spring-ui: linear(0, 0.049, 0.156, 0.283, 0.408, 0.522, 0.62, 0.702, 0.769, 0.822, 0.864, 0.897, 0.922, 0.941, 0.956, 0.967, 0.976, 0.982, 0.987, 0.99, 1);
+  --spring-bounce: linear(0, 0.051, 0.168, 0.312, 0.458, 0.592, 0.706, 0.799, 0.871, 0.923, 0.961, 0.986, 1.001, 1.01, 1.014, 1.015, 1.014, 1.013, 1.01, 1.008, 1);
+  --dur-press: 120ms;
+  --dur-fast: 150ms; /* tooltips, reduced-motion fades */
   --dur: 180ms;
   --dur-slow: 250ms;
+  --dur-enter: 320ms; /* section / tile entrances */
+  --dur-spring: 400ms; /* what --spring-ui is sampled over */
+  --dur-count: 700ms; /* count-up, first reveal only */
+  --dur-ambient: 7s; /* minimum lap for any looping decoration */
+  --stagger: 40ms;
+  --rise: 8px;
+  --press: 0.97;
+}
+/* reduced motion: no travel, no stagger, no counting (fades stay, see base.css) */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rise: 0px;
+    --stagger: 0ms;
+    --dur-count: 0ms;
+  }
 }
 
 /* Daylight: explicit choice, or 'system' (no data-theme) on a light OS */

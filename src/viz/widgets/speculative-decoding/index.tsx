@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import {
   CONTEXT,
   COSTS,
@@ -75,6 +76,7 @@ export default function SpeculativeDecodingViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Slider label="draft length k" value={k} min={K_MIN} max={K_MAX} onChange={(v) => setParams((p) => ({ ...p, k: v }))} />

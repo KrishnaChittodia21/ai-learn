@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, EF_MAX, EF_MIN, K, NPTS, POINTS, QUERIES, TOP, buildGraph, simulate, type Params, type QueryId } from './sim';
 
 const PX = (x: number) => 24 + x * 330;
@@ -37,6 +38,7 @@ export default function HnswSearchViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames)}
       controls={
         <>
           <Choice<QueryId>

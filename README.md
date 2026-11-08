@@ -31,3 +31,30 @@ Styles live in `src/styles/`: `tokens.css` (all colours, type, spacing and radii
 ## Adding content
 
 Topic files live in `src/content/topics/*.ts` and must match `src/types.ts`. `CONTENT_GUIDE.md` has the rules and the topic map. Run `npm run validate` after any change.
+
+## Credits
+
+- **Motion (M9):** parts of the motion kit are adapted from [VengeanceUI](https://github.com/Ashutoshx7/VengeanceUI) by Ashutoshx7, MIT licence, © 2025–2026 Ashutoshx7: the border beam (`base.css` `.beam`, from `border-beam.tsx`), the heading reveal (`HeadingReveal.tsx`, from `staggerText.tsx`), the Shorts "Ready to watch" deck and perspective row (`ShortsQueue.tsx`, from `verse-cards.tsx` and `perspective-carousel.tsx`), the ⌘K layout (`CommandPalette.tsx`, from `search-modal.tsx`) and the badge tilt's spring-follow (`TiltBadge.tsx`, from `cursor-card.tsx`). Each file carries the notice in its header. Rewritten for plain CSS and `motion/react`; no Tailwind, GSAP or framer-motion.
+- **Content (C1–C4):** some lessons are adapted from [ai-engineering-from-scratch](https://github.com/rohitg00/ai-engineering-from-scratch) by Rohit Ghumare, MIT licence, including the **Agent Skills**, **Working with Coding Agents**, **AI Product Delivery** and **Alignment and Frontier Risk** topics (`src/content/topics/agent-skills.ts`, `coding-agents.ts`, `ai-product-delivery.ts`, `alignment-frontier-risk.ts`). Rewritten in ai-learn's own words and format; each adapted topic cites the source lessons. The extra reference tables on many topics' **Cheat sheet** tab (`src/content/cheatsheets/*.ts`) are adapted from its `cheatsheets/` folder the same way; each lists its source sheets under the tab. The seven **learning paths by role** (`src/content/roles.ts`: summaries, fit and responsibilities, mapped onto ai-learn's topics) are adapted from its `learning-paths/*.json` and `interviews/roles.yaml`. The ten **from-scratch drills** (`#/drills`, `src/content/drills/*.ts`: graded TypeScript exercises whose tests run in the browser) are ported from its `practice/` problems (Python/numpy → TypeScript), with their hints, notes and mutants (`tests/drill-mutants/`). The **Glossary** (`#/glossary`, `src/content/glossary.ts`) and its **Myths** list (`src/content/myths.ts`) are adapted from its `glossary/terms.md` and `glossary/myths.md`: GenAI-engineering terms kept, links to its own lessons removed, myths fact-checked and softened. Its licence notice:
+
+  > MIT License
+  >
+  > Copyright (c) 2026 Rohit Ghumare
+  >
+  > Permission is hereby granted, free of charge, to any person obtaining a copy
+  > of this software and associated documentation files (the "Software"), to deal
+  > in the Software without restriction, including without limitation the rights
+  > to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  > copies of the Software, and to permit persons to whom the Software is
+  > furnished to do so, subject to the following conditions:
+  >
+  > The above copyright notice and this permission notice shall be included in all
+  > copies or substantial portions of the Software.
+  >
+  > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  > IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  > FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  > AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  > SOFTWARE.

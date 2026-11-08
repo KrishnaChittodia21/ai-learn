@@ -9,6 +9,15 @@ export interface Toast {
   title: string;
   detail?: string;
   tone: ToastTone;
+  /** overrides the tone's kicker, e.g. "Saved for later" */
+  kicker?: string;
+  /** one inline action, e.g. Undo (runs, then closes the toast) */
+  action?: { label: string; run: () => void };
+}
+
+export interface ToastOptions {
+  kicker?: string;
+  action?: Toast['action'];
 }
 
 let toasts: Toast[] = [];
@@ -16,8 +25,8 @@ let nextId = 1;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-export function showToast(title: string, detail?: string, ms = 3000, tone: ToastTone = 'info') {
-  const t: Toast = { id: nextId++, title, detail, tone };
+export function showToast(title: string, detail?: string, ms = 3000, tone: ToastTone = 'info', opts: ToastOptions = {}) {
+  const t: Toast = { id: nextId++, title, detail, tone, ...opts };
   toasts = [...toasts, t].slice(-3);
   emit();
   setTimeout(() => dismissToast(t.id), ms);

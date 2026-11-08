@@ -1,0 +1,136 @@
+/* llm-streaming drawing. Reduced motion: viz.css stops all transitions inside .viz */
+.ls {
+  display: grid;
+  gap: 12px;
+}
+.ls-lane {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) 4.2rem;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--fs-sm);
+}
+.ls-track {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--tint-2);
+}
+.ls-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  transition:
+    width 500ms var(--ease-out),
+    left 500ms var(--ease-out);
+}
+.ls-fill.gen {
+  background: var(--c-ion);
+}
+.ls-fill.seen {
+  background: var(--grad-action);
+}
+.ls-fill.waste {
+  background: var(--bad);
+}
+.ls-mark {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  border-left: 1.5px dashed var(--c-solar);
+}
+.ls-now {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text);
+  transition: left 500ms var(--ease-out);
+}
+.ls-v {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+}
+.ls-axis {
+  position: relative;
+  height: 14px;
+  margin-left: calc(6.5rem + 8px);
+  margin-right: calc(4.2rem + 8px);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  color: var(--muted);
+}
+.ls-axis span {
+  position: absolute;
+  white-space: nowrap;
+}
+.ls-screen {
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: light-dark(rgb(255 255 255 / 0.7), rgb(5 4 13 / 0.35));
+  font-size: var(--fs-sm);
+}
+.ls-screen.gone {
+  opacity: 0.45;
+}
+.ls-lbl {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ls-chunk {
+  animation: ls-in 350ms var(--ease-out);
+}
+@keyframes ls-in {
+  from {
+    opacity: 0;
+  }
+}
+.ls-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--c-pulsar);
+  animation: ls-caret 1s steps(1) infinite;
+}
+@keyframes ls-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.ls-log {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 3.4em;
+}
+@media (max-width: 600px) {
+  .ls-lane {
+    grid-template-columns: 4.6rem minmax(0, 1fr) 3.6rem;
+    gap: 6px;
+    font-size: 0.75rem;
+  }
+  .ls-axis {
+    margin-left: calc(4.6rem + 6px);
+    margin-right: calc(3.6rem + 6px);
+  }
+}

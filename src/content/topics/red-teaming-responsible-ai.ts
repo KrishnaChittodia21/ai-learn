@@ -6,7 +6,7 @@ const topic: Topic = {
   order: 3,
   title: 'AI Red Teaming, Responsible AI and Governance',
   subtitle: 'Attack your own system before others do, measure fairness and transparency, and run AI under a real governance framework',
-  estimatedMinutes: 44,
+  estimatedMinutes: 58,
   sources: [
     'NVIDIA garak — LLM vulnerability scanner (probes, detectors, generators): github.com/NVIDIA/garak',
     'Microsoft PyRIT — Python Risk Identification Tool for generative AI: github.com/Azure/PyRIT',
@@ -18,8 +18,15 @@ const topic: Topic = {
     'ISO/IEC 42001:2023 — Artificial intelligence management system (AIMS)',
     'Mitchell et al. 2019 — Model Cards for Model Reporting',
     'Microsoft — Lessons from red teaming 100 generative AI products (2025)',
+    'Kirchenbauer et al. 2023 — A Watermark for Large Language Models (green/red lists, z-score detection): https://arxiv.org/abs/2301.10226',
+    'Dathathri et al. 2024 — Scalable watermarking for identifying large language model outputs (SynthID Text), Nature',
+    'Google DeepMind — SynthID: https://deepmind.google/models/synthid/',
+    'C2PA — Technical Specification and Explainer (manifests, claims, hard and soft bindings): https://c2pa.org/specifications/',
+    'OpenAI 2023 — New AI classifier for indicating AI-written text (withdrawn July 2023 for low accuracy)',
+    'Liang et al. 2023 — GPT detectors are biased against non-native English writers (Patterns); Sadasivan et al. 2023 — Can AI-Generated Text be Reliably Detected?',
+    'ai-engineering-from-scratch (MIT, © 2026 Rohit Ghumare) — Phase 18 lesson 23 (Watermarking, SynthID, C2PA), adapted and rewritten',
   ],
-  tags: ['red-teaming', 'garak', 'pyrit', 'promptfoo', 'responsible-ai', 'fairness', 'model-cards', 'governance', 'eu-ai-act', 'nist-ai-rmf', 'iso-42001'],
+  tags: ['red-teaming', 'garak', 'pyrit', 'promptfoo', 'responsible-ai', 'fairness', 'model-cards', 'governance', 'eu-ai-act', 'nist-ai-rmf', 'iso-42001', 'watermarking', 'synthid', 'c2pa', 'provenance'],
   cheatSheet: [
     'Red teaming = structured adversarial testing of the whole system (model + prompts + tools + data), not just the model.',
     'Metric: attack success rate (ASR) per harm category and attack strategy, with confidence intervals; track over releases.',
@@ -31,6 +38,7 @@ const topic: Topic = {
     'NIST AI RMF: Govern (culture, roles) · Map (context, risks) · Measure (test, metrics) · Manage (prioritise, respond); AI 600-1 adds GenAI risks.',
     'EU AI Act tiers: prohibited · high-risk · transparency obligations · minimal; GPAI model duties since 2 Aug 2025; high-risk dates moved to late 2027/2028 by the 2026 omnibus deal.',
     'ISO/IEC 42001 = certifiable AI management system (policies, risk/impact assessment, controls, continual improvement) — the "ISO 27001 for AI".',
+    'Provenance: text watermark = keyed green list + logit bias, detect with z = (G − γT)/√(Tγ(1−γ)) > 4 (weak on short or paraphrased text); SynthID covers Google text/image/audio/video; C2PA = signed manifests (stripping removes them); no signal = unknown; never act on AI-text detector scores alone.',
   ],
   sections: [
     {
@@ -499,6 +507,272 @@ console.log(reviewSchedule([
       },
       source: 'NIST AI RMF 1.0 and AI 600-1; Regulation (EU) 2024/1689; ISO/IEC 42001:2023',
     },
+    {
+      heading: 'Watermarking AI text — green lists, SynthID and their limits',
+      body: `**Intuition:** a watermark is a hidden statistical signature added *while the text is generated*, so whoever holds the key can later ask "did our model write this?". It lives in the word choices themselves, not in metadata, so copy-paste keeps it.
+
+**The green/red list scheme (Kirchenbauer et al. 2023).** At every decoding step:
+1. hash the previous token with a secret key to seed a random generator;
+2. use it to split the vocabulary into a **green list** (a fraction γ, e.g. 0.25) and a red list;
+3. add a small bias δ to the logits of green tokens, then sample as usual.
+Human text lands on green about γ of the time by chance; watermarked text lands there far more often. Where many tokens fit, quality barely changes.
+
+**Detection** needs the key and the tokenizer, not the model. Count green tokens G among T scored tokens and compute
+
+z = (G − γT) / √(T · γ · (1 − γ))
+
+Under "no watermark" z behaves like a standard normal score; the paper flags text at **z > 4**, a one-sided false-positive rate of about 3 in 100,000.
+
+**Limits you must design around.**
+- **Short text.** z grows with √T. 10 green out of 20 tokens (γ = 0.25) gives z ≈ 2.6: not detected. The same 50% rate over 200 tokens gives z ≈ 8.2.
+- **Low entropy.** Code, lists, names and one-word answers leave few choices to bias, so little signal goes in.
+- **Editing and paraphrasing.** Each replaced token breaks the hashed pairs around it. Paraphrasing by a person or another model weakens the signal, so more text is needed, and translation or heavy rewriting can remove it.
+- **Coverage.** Only text from a model that applies *this* watermark carries it. "No watermark found" means unknown, not human.
+- **Key exposure.** Anyone holding the key, or able to query a detector freely, can learn to scrub or forge the signal.
+
+**SynthID (Google DeepMind).** Google's watermarking family: it launched for generated images in 2023 and has been extended to audio, video and text. **SynthID Text** biases token choice using *tournament sampling*; it was described in *Nature* (Dathathri et al. 2024) and open-sourced in October 2024, including an integration in Hugging Face Transformers. Like any text watermark it is weakest on short, factual or heavily rewritten text, and only detects output from models that apply it.
+
+**When to use it.** If you run your own generator (an open-weights model behind your API), you can watermark at the source and keep the key server-side. Treat detection as one signal about *your own* outputs ("was this produced by our service?"), never as a verdict about arbitrary text.`,
+      example: `A tutoring company serves essays from its own open-weights model with SynthID-style text watermarking (γ = 0.25, threshold z > 4).
+- A 400-token essay copied straight from the service: 220 green → z = (220 − 100) / √75 ≈ **13.9**, flagged.
+- The same essay after a student rewrites about half the sentences: 140 green → z ≈ **4.6**, still flagged but close.
+- A 40-token answer from the service: 16 green → z = (16 − 10) / √7.5 ≈ **2.2**, not flagged.
+- A 400-token essay written with a different vendor's model: z ≈ 0, "no watermark", which says nothing about whether AI was used.
+The company reports "generated by our service" only above the threshold and never labels anything as human-written.`,
+      diagram: `generate:  prev token + key ─hash─▶ green list (γ of vocab) ─▶ logits + δ on green ─▶ sample
+detect:    tokens ─▶ for each (prev, tok): green? ─▶ G of T
+                                              z = (G − γT) / √(Tγ(1−γ))
+                                              z > 4 ─▶ "from our model"   else ─▶ "unknown"`,
+      prosCons: {
+        pros: [
+          'Invisible to readers, survives copy-paste, and costs almost nothing at generation time.',
+          'Detection is a simple statistical test with a false-positive rate you can set.',
+          'Detection needs only the key and tokenizer, not the model or a log of everything generated.',
+        ],
+        cons: [
+          {
+            con: 'Short or low-entropy outputs carry too little signal to detect.',
+            fix: 'Only report a result above a minimum token count, and say "insufficient text" below it instead of "not AI".',
+          },
+          {
+            con: 'Paraphrasing, translation and heavy edits weaken or remove the signal.',
+            fix: 'Treat it as evidence of origin for lightly edited text, not as an enforcement tool; pair it with C2PA credentials and logs of your own generations.',
+          },
+          {
+            con: 'A leaked key or an open detector lets attackers scrub or forge the watermark.',
+            fix: 'Keep keys server-side, rotate them, and rate-limit and monitor any detection endpoint.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Green list: hash(previous token, key) → green fraction γ; add δ to green logits.',
+        'Detection: z = (G − γT) / √(Tγ(1−γ)); flag at z > 4 (~3 × 10⁻⁵ false positives).',
+        'Needs the key, not the model.',
+        'Weak on short and low-entropy text; paraphrase and translation erode it.',
+        'No watermark ≠ human-written.',
+        'SynthID Text: tournament sampling, Nature 2024, open-sourced Oct 2024, in Hugging Face Transformers.',
+      ],
+      exercise: {
+        prompt: `Given \`isGreen(key, prev, tok, gamma)\`, write \`detect(tokens, key, gamma = 0.25, threshold = 4)\` that scores every token after the first, counts green ones and returns \`{ T, green, z, watermarked }\` with z rounded to 2 decimals. Text with fewer than 2 tokens returns z = 0.
+
+Then check it on the toy generator in the solution (vocabulary 0–999; the "watermarked" sampler prefers a green candidate): 201 watermarked tokens should be flagged, the same number of unwatermarked tokens should not, nor should the watermarked text with a wrong key, its first 21 tokens, or a version where every other token was replaced.`,
+        starter: {
+          language: 'typescript',
+          code: `/** Toy green list: hash (key, previous token, token) into [0, 1); green if below γ. */
+export function isGreen(key: number, prev: number, tok: number, gamma: number): boolean {
+  let h = (key ^ Math.imul(prev, 0x9e3779b1) ^ Math.imul(tok, 0x85ebca6b)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 2 ** 32 < gamma;
+}
+
+export function detect(tokens: number[], key: number, gamma = 0.25, threshold = 4) {
+  // TODO: T, green count, z-score, watermarked
+}`,
+        },
+        hints: [
+          'T = tokens.length − 1: the first token has no previous token to seed from.',
+          'z = (green − γT) / √(T · γ · (1 − γ)).',
+          'Replacing every other token breaks both pairs each replaced token belongs to, so the green rate falls back towards γ.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `/** Toy green list: hash (key, previous token, token) into [0, 1); green if below γ. */
+export function isGreen(key: number, prev: number, tok: number, gamma: number): boolean {
+  let h = (key ^ Math.imul(prev, 0x9e3779b1) ^ Math.imul(tok, 0x85ebca6b)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 2 ** 32 < gamma;
+}
+
+/** Kirchenbauer-style detection: count green tokens, compare with γ·T expected without a watermark. */
+export function detect(tokens: number[], key: number, gamma = 0.25, threshold = 4) {
+  const T = tokens.length - 1; // the first token has no previous token to seed from
+  if (T < 1) return { T: 0, green: 0, z: 0, watermarked: false };
+  let green = 0;
+  for (let i = 1; i < tokens.length; i++) if (isGreen(key, tokens[i - 1], tokens[i], gamma)) green++;
+  const z = (green - gamma * T) / Math.sqrt(T * gamma * (1 - gamma));
+  return { T, green, z: +z.toFixed(2), watermarked: z > threshold };
+}
+
+// toy "model": vocabulary 0..999; the watermarked sampler tries 3 candidates and prefers a green one
+let s = 12345;
+const rand = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 2 ** 32);
+function generate(n: number, key: number | null): number[] {
+  const out = [Math.floor(rand() * 1000)];
+  while (out.length < n) {
+    const cands = [0, 1, 2].map(() => Math.floor(rand() * 1000));
+    const pick = key === null ? cands[0] : cands.find((c) => isGreen(key, out[out.length - 1], c, 0.25)) ?? cands[0];
+    out.push(pick);
+  }
+  return out;
+}
+
+const KEY = 42;
+const marked = generate(201, KEY);
+const human = generate(201, null);
+console.log(detect(marked, KEY));              // { T: 200, green: 123, z: 11.92, watermarked: true }
+console.log(detect(human, KEY));               // { T: 200, green: 60, z: 1.63, watermarked: false }
+console.log(detect(marked, 99));               // wrong key: { T: 200, green: 66, z: 2.61, watermarked: false }
+console.log(detect(marked.slice(0, 21), KEY)); // short:     { T: 20, green: 10, z: 2.58, watermarked: false }
+const para = marked.map((t, i) => (i % 2 ? Math.floor(rand() * 1000) : t)); // "paraphrase" every other token
+console.log(detect(para, KEY));                // { T: 200, green: 57, z: 1.14, watermarked: false }`,
+        },
+        explanation:
+          'Without the watermark each scored token is green with probability γ, so G is binomial with mean γT and variance Tγ(1−γ); z measures how many standard deviations above chance the text sits. The short slice has the same 50% green rate as longer watermarked text but too few tokens to clear the threshold, and replacing every other token breaks every hashed pair. Note the unwatermarked runs land at z ≈ 1.6–2.6 with this toy hash: that is why the threshold sits at 4, not 2. Real schemes hash a wider context and use a cryptographic PRF.',
+      },
+      quickCheck: {
+        question: 'A detector with γ = 0.25 scores 400 tokens and finds 130 green. Is the text flagged at a threshold of z > 4?',
+        options: [
+          'Yes: 130 is well above the 100 expected',
+          'No: z = (130 − 100) / √75 ≈ 3.5, below 4',
+          'Yes: any green share above γ means a watermark',
+          'It cannot be computed without the model',
+        ],
+        correct: 1,
+        explanation:
+          'Expected green = γT = 100, standard deviation = √(400 · 0.25 · 0.75) = √75 ≈ 8.66, so z ≈ 3.46. That is unusual but below the threshold chosen to keep false positives near 3 in 100,000. Detection needs only the key and tokenizer, not the model.',
+      },
+      source: 'Kirchenbauer et al. 2023 — A Watermark for Large Language Models; Dathathri et al. 2024 — Scalable watermarking for identifying LLM outputs (Nature); ai-engineering-from-scratch Phase 18 · 23',
+    },
+    {
+      heading: 'Provenance — C2PA Content Credentials, and why AI-text detectors fail',
+      body: `**Two questions people mix up.** *Detection* guesses "was this AI-made?" from the content alone. *Provenance* records "who made this, with which tool, and what changed since", signed when it happened. Watermarks sit between them: a signal inside the content, readable with a key.
+
+**C2PA.** The Coalition for Content Provenance and Authenticity, founded in 2021 by Adobe, Arm, BBC, Intel, Microsoft and Truepic, publishes an open standard; the user-facing name is **Content Credentials**.
+- A **manifest** holds *assertions* (captured by this camera, generated by this AI model, these edits, made from these ingredient files) and a *claim* that is **cryptographically signed** with the signer's X.509 certificate.
+- A **hard binding**, a hash of the asset, makes tampering evident: change the pixels without re-signing and validation fails.
+- Each edit can add a new manifest that points to the previous one, building a history.
+- Generators use it: OpenAI began adding C2PA manifests to DALL·E 3 images in February 2024.
+
+What it proves: **this signer** made these claims about **this exact file**. It does not prove the claims are true, and it says nothing about files that carry no manifest.
+
+**The weak point is stripping.** Manifests usually travel in file metadata, so a screenshot, a re-encode or a platform that drops metadata removes them. C2PA therefore also allows **soft bindings**, such as a watermark or fingerprint used to look the manifest up again in a repository. Either way, *no credentials* must read as **unknown**, never as authentic or fake.
+
+**Why AI-text detectors are unreliable.** Classifiers that judge style (perplexity, "burstiness", trained detectors) fail in practice:
+- OpenAI withdrew its own AI text classifier in July 2023 for low accuracy; at launch it caught 26% of AI-written text and flagged 9% of human text.
+- Liang et al. (2023) found GPT detectors labelled more than half of non-native English essays (TOEFL) as AI-written.
+- Paraphrasing defeats them (Sadasivan et al. 2023), and every new model shifts the style they learned.
+At scale even a small error rate is many people: 1% false positives on 100,000 essays is 1,000 false accusations.
+
+**What a product team should actually do.**
+1. **Disclose and label** AI interaction and AI content in the UI. The EU AI Act (Art. 50) also requires providers of generators to mark synthetic audio, image, video and text in a machine-readable, detectable way.
+2. **Generators:** watermark at the source and attach signed C2PA manifests; keep keys server-side.
+3. **Platforms:** preserve credentials through upload pipelines, verify and display them, and show "unknown" when absent.
+4. **Never** base grades, bans or firings on a detector score; at most it is a reason for a human to look, with an appeal path.`,
+      example: `A stock-image marketplace accepts uploads from creators and from its own built-in image generator.
+- Built-in generator: every image is watermarked and gets a C2PA manifest signed with the marketplace's certificate ("generated by model X, prompt-based, 2026-03-02"). The listing shows "AI-generated" with a Content Credentials panel.
+- Creator upload with a valid camera manifest and two editing manifests: listing shows "Captured with camera Y, edited in Z".
+- Creator upload re-saved through a tool that stripped metadata, no watermark found: listing shows **"Origin unknown"**, not "human-made".
+- A third-party "AI-likelihood" score of 0.97 on that same upload is stored for review only; it changes no label and triggers no ban without a human decision.
+- The upload pipeline was fixed to keep C2PA data through resizing; before, it silently stripped credentials from every image.`,
+      diagram: `create ─▶ asset + manifest { assertions: tool, AI model, edits, ingredients }
+                     │ claim signed (X.509)          hard binding = hash(asset)
+edit   ─▶ new manifest ─▶ points to previous manifest (history)
+share  ─▶ metadata kept?  yes ─▶ verifier: signature ✓ hash ✓ ─▶ show credentials
+                          no  ─▶ soft binding (watermark / fingerprint) ─▶ look up manifest
+                                 none ─▶ "origin unknown"  (never "authentic" or "fake")`,
+      prosCons: {
+        pros: [
+          'Signed, tamper-evident claims about who made a file and how, verifiable by anyone with the standard tools.',
+          'Records a whole edit history, including which steps used AI, not just a yes/no bit.',
+          'An open standard backed by major camera, software and platform companies, so credentials can travel between products.',
+        ],
+        cons: [
+          {
+            con: 'Metadata is easily stripped by screenshots, re-encoding or platforms.',
+            fix: 'Pair manifests with a watermark or fingerprint as a soft binding, and fix your own pipelines so they preserve credentials.',
+          },
+          {
+            con: 'A valid signature proves who signed, not that the claims are true.',
+            fix: 'Show the signer prominently, trust signers via a curated trust list, and treat claims from unknown signers with caution.',
+          },
+          {
+            con: 'Most content online carries no credentials, so absence is ambiguous.',
+            fix: 'Label absence as "unknown" and never infer authenticity or fakeness from it; do not fall back to style-based detectors for decisions.',
+          },
+        ],
+      },
+      keyPoints: [
+        'Detection guesses from content; provenance records signed history.',
+        'C2PA manifest = assertions + signed claim + hard binding (hash); edits chain manifests.',
+        'Valid credentials prove who signed which claims about this file, not that the claims are true.',
+        'Stripped metadata removes manifests; soft bindings (watermarks, fingerprints) help recover them.',
+        'No credentials → "unknown", never "authentic".',
+        'Style-based AI-text detectors are unreliable and biased; never use them alone for decisions.',
+        'Product: disclose, watermark + sign at the source, preserve and show credentials.',
+      ],
+      exercise: {
+        prompt: `Write \`provenanceLabel(signals)\` that decides what the UI may say about an asset:
+- \`c2pa\`: \`{ status: 'valid', signer, aiGenerated }\` | \`{ status: 'invalid' }\` | \`{ status: 'absent' }\`
+- \`watermark\`: \`{ found: true, scheme }\` | \`{ found: false }\`
+- \`detectorScore?\`: a third-party AI-likelihood score from 0 to 1.
+
+Rules: a valid manifest declaring AI → "AI-generated (signed by <signer>)"; a found watermark → "AI-generated (<scheme> watermark)"; an invalid manifest must say "content credentials failed verification" (with the watermark label in front if one was found); a valid non-AI manifest → "Signed by <signer>, no AI generation declared"; otherwise "Origin unknown". The detector score must never change the label.`,
+        hints: [
+          'Work out the watermark label once, then check the manifest status.',
+          'Check the invalid case before trusting any claim in the manifest.',
+          'The last branch is "Origin unknown" whatever detectorScore says, even 0.97.',
+        ],
+        solution: {
+          language: 'typescript',
+          code: `type Signals = {
+  c2pa: { status: 'valid'; signer: string; aiGenerated: boolean } | { status: 'invalid' } | { status: 'absent' };
+  watermark: { found: true; scheme: string } | { found: false };
+  detectorScore?: number; // third-party "AI-likelihood" classifier, 0..1
+};
+
+/** What the UI may say. Absence of a signal never becomes "human-made"; a classifier score never becomes a label. */
+export function provenanceLabel(s: Signals): string {
+  const mark = s.watermark.found ? 'AI-generated (' + s.watermark.scheme + ' watermark)' : null;
+  if (s.c2pa.status === 'invalid') return [mark, 'content credentials failed verification'].filter(Boolean).join('; ');
+  if (s.c2pa.status === 'valid' && s.c2pa.aiGenerated) return 'AI-generated (signed by ' + s.c2pa.signer + ')';
+  if (mark) return mark;
+  if (s.c2pa.status === 'valid') return 'Signed by ' + s.c2pa.signer + ', no AI generation declared';
+  return 'Origin unknown'; // detectorScore deliberately ignored
+}
+
+console.log(provenanceLabel({ c2pa: { status: 'valid', signer: 'Acme Images', aiGenerated: true }, watermark: { found: false } }));
+// AI-generated (signed by Acme Images)
+console.log(provenanceLabel({ c2pa: { status: 'absent' }, watermark: { found: true, scheme: 'SynthID' } }));
+// AI-generated (SynthID watermark)
+console.log(provenanceLabel({ c2pa: { status: 'absent' }, watermark: { found: false }, detectorScore: 0.97 }));
+// Origin unknown
+console.log(provenanceLabel({ c2pa: { status: 'invalid' }, watermark: { found: true, scheme: 'SynthID' } }));
+// AI-generated (SynthID watermark); content credentials failed verification`,
+        },
+        explanation:
+          'Signed credentials and a detected watermark are positive evidence produced at creation time, so they may drive a label. An invalid manifest is reported as such rather than trusted. Absence of both is genuinely unknown, and a style-based classifier score is too unreliable and too biased to label anyone\'s work, so it is kept for human review only.',
+      },
+      quickCheck: {
+        question: 'An image on your platform has no C2PA manifest and no watermark was found. What should the UI say?',
+        options: ['Human-made', 'AI-generated', 'Origin unknown', 'Whatever a style-based AI detector says'],
+        correct: 2,
+        explanation:
+          'Most content carries no credentials, metadata is often stripped, and many generators add no watermark, so absence proves nothing either way. Style-based detectors are unreliable and biased, so they should not decide the label.',
+      },
+      source: 'C2PA Technical Specification and Explainer; OpenAI — New AI classifier for indicating AI-written text (2023, withdrawn); Liang et al. 2023 — GPT detectors are biased against non-native English writers; EU AI Act Art. 50',
+    },
   ],
   codeChallenges: [
     {
@@ -788,6 +1062,38 @@ All three still require human review of results and a threat model to choose wha
         'Claiming certification equals regulatory compliance',
       ],
     },
+    {
+      id: 'red-teaming-responsible-ai-iq-06',
+      difficulty: 'hard',
+      question: 'A university wants your writing platform to "detect AI-written essays" and also to label the images its students generate with your built-in image tool. What do you build, and what do you refuse to build?',
+      context: 'Your platform hosts 100,000 essays a term, many from non-native English speakers. Its writing assistant and image generator run on models you serve yourselves.',
+      whatInterviewerLooksFor: [
+        'Separates detection, watermarking and provenance, and knows what each can prove',
+        'Knows the evidence that style-based detectors are unreliable and biased',
+        'Works the base-rate arithmetic for false accusations',
+        'Watermarks and signs content at the source, and treats absence as unknown',
+        'Keeps a human decision and an appeal path for any consequence',
+      ],
+      modelAnswer: `**Refuse: a style-based "AI detector" that decides misconduct.** These classifiers are unreliable: OpenAI withdrew its own text classifier in 2023 for low accuracy, paraphrasing defeats them, and Liang et al. (2023) found detectors flagged more than half of non-native English essays as AI-written. Base rates make it worse: with 5% AI essays, 80% recall and a 2% false-positive rate, 100,000 essays give 4,000 true flags and 1,900 false ones, so about a third of flagged students are innocent, disproportionately non-native writers.
+
+**Build: provenance for what our own tools produce.**
+- **Text:** watermark the writing assistant's output (green-list / SynthID Text style, key server-side) and keep a log of generated passages. A teacher can ask "did *our* assistant write this?" and get a z-score with a minimum length; below it the answer is "insufficient text". It says nothing about text from other tools.
+- **Images:** watermark and attach a signed C2PA manifest ("generated by our model on date X") to every generated image; show Content Credentials in the UI and preserve them through our own resizing and export pipeline.
+
+**Build: process, not policing.** Disclose AI features to students, let instructors set per-assignment AI rules, offer draft history (version timeline in the editor) as evidence a student can choose to share, and route any concern to a human conversation with an appeal path. No automatic penalties from any signal.
+
+**Communicate limits.** "No watermark" and "no credentials" mean unknown, not human-made; paraphrasing and translation weaken text watermarks; metadata can be stripped from images. Write these into the policy so nobody over-reads the signals.`,
+      followUps: [
+        { q: 'The university insists on a detector score anyway. What do you do?', a: 'Show it only to instructors, with its measured false-positive rate on their own student population, never as a verdict, never as grounds for a penalty on its own, and with an appeal path. Re-evaluate it every term as models change.' },
+        { q: 'How would you test the watermark before launch?', a: 'Measure detection rate against text length, false positives on a large set of human essays (including non-native writers), and robustness to common edits: paraphrasing tools, partial rewrites, translation round-trips. Publish the minimum length below which you report "insufficient text".' },
+      ],
+      pitfalls: [
+        'Treating a detector score as proof of misconduct.',
+        'Ignoring base rates and the bias against non-native writers.',
+        'Claiming a missing watermark or missing credentials proves human authorship.',
+        'Stripping C2PA metadata in your own image pipeline.',
+      ],
+    },
   ],
   envelopeQuestions: [
     {
@@ -1019,6 +1325,49 @@ console.log((Math.min(rateA, rateB) / Math.max(rateA, rateB)).toFixed(2));`,
       correct: [0],
       explanation: 'Refusal phrases are a weak proxy: "Sorry, but here is how…" passes as safe, while a helpful, harmless answer without refusal words is flagged. Use rubric-based judges or classifiers plus human verification. Lowercasing already handles case.',
       followUps: [{ q: 'What is a better automated grader?', a: 'A category-specific rubric judged by a classifier or LLM that checks whether disallowed content or actions are present, validated against human labels.' }],
+    },
+    {
+      id: 'red-teaming-responsible-ai-mcq-13',
+      difficulty: 'hard',
+      question: 'Which statements about green/red-list text watermarks (Kirchenbauer et al. 2023) are true? Select ALL that apply.',
+      options: [
+        'Detection needs the secret key and the tokenizer, not access to the model',
+        'The same green-token rate is easier to detect in a long text than in a short one',
+        'Paraphrasing or translating the text can weaken or remove the signal',
+        'If no watermark is detected, the text was written by a human',
+      ],
+      correct: [0, 1, 2],
+      explanation: 'The detector re-derives each green list from the key and the previous token and counts green tokens; z grows with √T, so short texts need a much higher green rate. Rewriting replaces tokens and breaks the hashed pairs. Text from any model that does not apply this watermark carries none, so absence proves nothing about human authorship.',
+      followUps: [{ q: 'Why is code a hard case?', a: 'Code is low entropy: syntax leaves few plausible tokens at each step, so the sampler has little freedom to prefer green tokens and the signal per token is small.' }],
+    },
+    {
+      id: 'red-teaming-responsible-ai-mcq-14',
+      difficulty: 'medium',
+      question: 'An image carries a C2PA manifest that validates: the signature checks out and the hash matches. What does that establish? Select ALL that apply.',
+      options: [
+        'The file has not been changed since the signer signed it',
+        'The named signer made the claims in the manifest about this exact file',
+        'The claims in the manifest are true',
+        'Images without a manifest on the same site are fake',
+      ],
+      correct: [0, 1],
+      explanation: 'The hard binding shows the asset is unchanged since signing, and the signature identifies who made the claims. A signer can still make false claims, so trust depends on who signed. Missing manifests prove nothing: metadata is often stripped and most content was never signed.',
+      followUps: [{ q: 'How can a manifest be recovered after a platform strips metadata?', a: 'Through a soft binding: a watermark or perceptual fingerprint in the content that a verifier uses to look the manifest up in a manifest repository.' }],
+    },
+    {
+      id: 'red-teaming-responsible-ai-mcq-15',
+      difficulty: 'expert',
+      question: 'A school runs this policy over 10,000 essays. Assume 5% are AI-written, the detector catches 80% of those, and it wrongly flags 2% of human essays. Roughly what share of flagged students are innocent?',
+      code: {
+        language: 'typescript',
+        code: `for (const essay of essays) {
+  if (aiDetector(essay.text) > 0.9) markAcademicMisconduct(essay.student);
+}`,
+      },
+      options: ['About 2%', 'About 10%', 'About 32%', 'About 80%'],
+      correct: [2],
+      explanation: 'AI essays: 500, flagged 400. Human essays: 9,500, flagged 2% = 190. Flagged total 590, of which 190 / 590 ≈ 32% are innocent. A small false-positive rate on a large majority class produces many false accusations, and published studies show these detectors err more on non-native writers. A score should at most prompt a human review with an appeal path.',
+      followUps: [{ q: 'What would you use instead for content your own platform generated?', a: 'A watermark applied by your own generator and a log of generated passages, which answer "did our tool write this?" with a known false-positive rate, plus human review for any consequence.' }],
     },
   ],
 };

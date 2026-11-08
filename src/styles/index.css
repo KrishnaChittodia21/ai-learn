@@ -10,5 +10,12 @@
 @import './exam.css';
 @import './practice.css';
 @import './overlays.css';
+@import './saved.css';
+@import './guide.css';
+@import './shorts.css';
+@import './plan.css';
+@import './glossary.css';
+@import './paths.css';
+@import './steps.css';
 @import './viz.css';
 @import './charts.css';

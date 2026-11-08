@@ -43,7 +43,7 @@ export function StudyPath({
 
   return (
     <div className="tp-tabs-wrap">
-      <div className="tp-tabs" role="tablist" aria-label="Study path" ref={barRef}>
+      <div className="tp-tabs" role="tablist" aria-label="Study path" ref={barRef} data-guide="study-path">
         {steps.map((s, i) => {
           const state = locks[s.id] ? 'locked' : s.complete ? 'done' : s.id === current ? 'current' : 'todo';
           const isActive = active === s.id;
@@ -55,6 +55,7 @@ export function StudyPath({
               aria-selected={isActive}
               className={`tp-tab ${state} ${isActive ? 'active' : ''}`}
               onClick={() => onSelect(s.id)}
+              data-guide={s.id === 'prompt-lab' ? 'prompt-lab-tab' : undefined}
               title={state === 'locked' ? 'Read every section first' : undefined}
             >
               {isActive && indicator}

@@ -1,19 +1,33 @@
 // ⌘K command palette (lazy-loaded): jump to any page, topic, section, architecture challenge or capstone.
-import { useCallback, useMemo, useRef, useState } from 'react';
+// M9: opens with no animation (keyboard-initiated, used constantly); a Continue row, a type icon per row and, at
+// ≥ 720 px, a preview of the selected topic. Grouped rows + footer key hints follow VengeanceUI
+// src/components/ui/search-modal.tsx (MIT, © 2025–2026 Ashutoshx7), layout only, rebuilt on cmdk + CSS.
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Command, defaultFilter } from 'cmdk';
-import { motion, useReducedMotion } from 'motion/react';
-import { Search } from 'lucide-react';
+import { ArrowRight, BookOpen, CirclePlay, FileText, FlaskConical, Hash, Hammer, History, Search, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { COMPANIES, COMPANY_QUESTIONS, PHASES, TOPICS, TOPIC_BY_ID } from '../content';
 import { PROJECTS } from '../content/projects';
-import { getProgress, setSettings, useProgress } from '../lib/progress';
+import { setSettings, useProgress } from '../lib/progress';
 import { nextStep } from '../lib/nextStep';
-import { companyUnlocked } from '../lib/stats';
+import { roleTopicIds } from '../content/roles';
+import { companyUnlocked, topicCompletion } from '../lib/stats';
 import { closePalette, openTour } from '../lib/guide';
 import { getUiPrefs, saveUiPrefs, useUiPrefs, type RecentCommand } from '../lib/uiPrefs';
 import { useFocusTrap } from '../lib/useFocusTrap';
+import { SHORTS } from '../lib/useShorts';
 
 const PHASE_TITLE = new Map(PHASES.map((ph) => [ph.id as string, `Phase ${ph.number}`]));
+const ICONS: Record<string, ReactNode> = {
+  page: <FileText size={14} />,
+  topic: <BookOpen size={14} />,
+  section: <Hash size={14} />,
+  short: <CirclePlay size={14} />,
+  'prompt-lab': <FlaskConical size={14} />,
+  company: <Trophy size={14} />,
+  capstone: <Hammer size={14} />,
+  recent: <History size={14} />,
+};
 
 interface Item {
   id: string;
@@ -30,7 +44,13 @@ const PAGES: Item[] = [
   { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', keywords: ['drill', 'mistakes'] },
   { id: 'page:companies', label: 'Architecture challenges', href: '/challenges', keywords: ['mock', 'interview'] },
   { id: 'page:achievements', label: 'Achievements', hint: 'badges and tiers', href: '/achievements', keywords: ['badges', 'trophies', 'medals', 'milestones', 'rewards'] },
-  { id: 'page:settings', label: 'Settings', href: '/settings', keywords: ['theme', 'pass mark', 'reset'] },
+  { id: 'page:shorts', label: 'Shorts', hint: 'one idea in about a minute', href: '/shorts', keywords: ['shorts', 'video', 'watch', 'story', 'short of the day'] },
+  { id: 'page:plan', label: 'Plan your journey', hint: 'study pace and finish date', href: '/plan', keywords: ['plan', 'pace', 'schedule', 'finish date', 'goal', 'study plan', 'deadline'] },
+  { id: 'page:paths', label: 'Learning paths', hint: 'pick a role, practise, certificate', href: '/paths', keywords: ['paths', 'role', 'career', 'agentic', 'applied', 'mcp', 'certificate', 'interview'] },
+  { id: 'page:glossary', label: 'Glossary', hint: 'terms and myths', href: '/glossary', keywords: ['glossary', 'terms', 'definitions', 'dictionary', 'myths', 'jargon', 'meaning'] },
+  { id: 'page:drills', label: 'From-scratch drills', hint: 'graded TypeScript exercises', href: '/drills', keywords: ['drills', 'from scratch', 'code', 'exercise', 'bm25', 'attention', 'softmax', 'tests'] },
+  { id: 'page:saved', label: 'Saved for later', hint: 'your starred items', href: '/saved', keywords: ['saved', 'bookmarks', 'star', 'later', 'reading list'] },
+  { id: 'page:settings', label: 'Settings', href: '/settings', keywords: ['theme', 'pass mark', 'reset', 'export', 'import', 'backup'] },
 ];
 
 /**
@@ -56,8 +76,9 @@ export default function CommandPalette() {
   const prefs = useUiPrefs();
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
+  const [selected, setSelected] = useState('');
   useFocusTrap(ref, true, closePalette);
+  const step = nextStep(p, TOPICS, { companyTotal: COMPANY_QUESTIONS.length, path: roleTopicIds(p.rolePath) });
 
   const topics = useMemo<Item[]>(
     () =>
@@ -113,6 +134,10 @@ export default function CommandPalette() {
       ),
     [],
   );
+  const shorts = useMemo<Item[]>(
+    () => SHORTS.map((e) => ({ id: `short:${e.short.id}`, label: e.short.title, hint: `short · ${e.topic.title}`, href: `/short/${e.short.id}`, keywords: ['short', 'watch'] })),
+    [],
+  );
   const recent = (prefs.recentCommands ?? []).slice(0, 5);
 
   const go = useCallback(
@@ -131,6 +156,9 @@ export default function CommandPalette() {
 
   const row = (item: Item, prefix = '') => (
     <Command.Item key={prefix + item.id} value={prefix + item.id} keywords={[item.label, item.hint ?? '', ...(item.keywords ?? [])]} onSelect={() => go(item)}>
+      <span className={`cmdk-ico ico-${item.id.split(':')[0]}`} aria-hidden>
+        {ICONS[prefix ? 'recent' : item.id.split(':')[0]] ?? ICONS.page}
+      </span>
       <span className="cmdk-label">{item.label}</span>
       {item.hint && <span className="cmdk-hint">{item.hint}</span>}
     </Command.Item>
@@ -138,17 +166,8 @@ export default function CommandPalette() {
 
   return (
     <div className="modal-backdrop cmdk-backdrop" onMouseDown={(e) => e.target === e.currentTarget && closePalette()}>
-      <motion.div
-        ref={ref}
-        className="cmdk-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        initial={{ opacity: 0, y: reduce ? 0 : -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduce ? 0 : 0.14, ease: 'easeOut' }}
-      >
-        <Command label="Command palette" loop filter={rank}>
+      <div ref={ref} className="cmdk-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+        <Command label="Command palette" loop filter={rank} value={selected} onValueChange={setSelected}>
           <div className="cmdk-input-row">
             <Search size={17} aria-hidden className="cmdk-glyph" />
             <Command.Input value={search} onValueChange={setSearch} placeholder="Search topics, sections, challenges…" data-autofocus />
@@ -156,25 +175,32 @@ export default function CommandPalette() {
               <kbd>Esc</kbd>
             </button>
           </div>
+          <div className="cmdk-body">
           <Command.List>
             <Command.Empty>No results. Try a shorter word.</Command.Empty>
+            {!q && (
+              <Command.Group heading="Continue">
+                <Command.Item value="action:next" keywords={['next step', 'continue', 'resume', 'what now']} onSelect={() => go({ id: 'action:next', label: step.title, href: step.href })}>
+                  <span className="cmdk-ico ico-next" aria-hidden>
+                    <ArrowRight size={14} />
+                  </span>
+                  <span className="cmdk-label">{step.title}</span>
+                  <span className="cmdk-hint">next step</span>
+                </Command.Item>
+              </Command.Group>
+            )}
             {!q && recent.length > 0 && (
               <Command.Group heading="Recent">
                 {recent.map((r) => row({ ...r }, 'recent:'))}
               </Command.Group>
             )}
             <Command.Group heading="Actions">
-              <Command.Item
-                value="action:next"
-                keywords={['next step', 'continue', 'what now']}
-                onSelect={() => {
-                  const s = nextStep(getProgress(), TOPICS, { companyTotal: COMPANY_QUESTIONS.length });
-                  go({ id: 'action:next', label: 'Go to my next step', href: s.href });
-                }}
-              >
-                <span className="cmdk-label">Go to my next step</span>
-                <span className="cmdk-hint">action</span>
-              </Command.Item>
+              {q && (
+                <Command.Item value="action:next" keywords={['next step', 'continue', 'resume', 'what now']} onSelect={() => go({ id: 'action:next', label: step.title, href: step.href })}>
+                  <span className="cmdk-label">Go to my next step</span>
+                  <span className="cmdk-hint">action</span>
+                </Command.Item>
+              )}
               <Command.Item
                 value="action:guide"
                 keywords={['guide', 'tour', 'help', 'how']}
@@ -202,10 +228,13 @@ export default function CommandPalette() {
             <Command.Group heading="Pages">{PAGES.map((i) => row(i))}</Command.Group>
             <Command.Group heading="Topics">{topics.map((i) => row(i))}</Command.Group>
             {q.length >= 2 && <Command.Group heading="Sections">{sections.map((i) => row(i))}</Command.Group>}
+            {q.length >= 2 && <Command.Group heading="Shorts">{shorts.map((i) => row(i))}</Command.Group>}
             {company.length > 0 && <Command.Group heading="Architecture challenges">{company.map((i) => row(i))}</Command.Group>}
             {promptLabs.length > 0 && <Command.Group heading="Prompt labs">{promptLabs.map((i) => row(i))}</Command.Group>}
             {capstones.length > 0 && <Command.Group heading="Capstone projects">{capstones.map((i) => row(i))}</Command.Group>}
           </Command.List>
+          <Preview value={selected} stepTopic={step.topic?.id} />
+          </div>
           <div className="cmdk-foot">
             <span>
               <kbd>↑</kbd>
@@ -220,7 +249,37 @@ export default function CommandPalette() {
             <span className="cmdk-foot-note">{q.length >= 2 ? 'Searching sections too' : 'Type 2+ letters to search sections'}</span>
           </div>
         </Command>
-      </motion.div>
+      </div>
     </div>
+  );
+}
+
+/** ≥ 720 px: where the selected topic or section leads (completion and the next sections to read). */
+function Preview({ value, stepTopic }: { value: string; stepTopic?: string }) {
+  const p = useProgress();
+  const [kind, id, sec] = value.replace(/^recent:/, '').split(':');
+  const t = TOPIC_BY_ID.get(kind === 'action' && id === 'next' ? (stepTopic ?? '') : kind === 'topic' || kind === 'section' ? id : '');
+  if (!t) return <aside className="cmdk-prev muted">Move to a topic or section to see where it leads.</aside>;
+  const read = new Set((p.sections[t.id] ?? []).filter((i) => i < t.sections.length));
+  const pct = topicCompletion(p, t);
+  const from = kind === 'section' ? Number(sec) : Math.max(0, t.sections.findIndex((_, i) => !read.has(i)));
+  return (
+    <aside className="cmdk-prev" aria-label="Preview">
+      <p className="lbl">{PHASE_TITLE.get(t.phase)}</p>
+      <h3>{t.title}</h3>
+      <div className="cmdk-prev-bar" aria-hidden>
+        <span style={{ transform: `scaleX(${pct / 100})` }} />
+      </div>
+      <p className="small muted">
+        {pct}% done · {read.size} of {t.sections.length} sections read
+      </p>
+      <ol className="cmdk-prev-secs">
+        {t.sections.slice(from, from + 4).map((s, k) => (
+          <li key={from + k} className={read.has(from + k) ? 'done' : undefined}>
+            §{from + k + 1} {s.heading.split(' — ')[0]}
+          </li>
+        ))}
+      </ol>
+    </aside>
   );
 }

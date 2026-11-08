@@ -13,6 +13,9 @@ const files = readdirSync(dir)
   .filter((f) => !wanted.length || wanted.includes(f.replace(/\.ts$/, '')));
 
 const { gradePrompt, DEFAULT_PASS_SCORE } = await import(pathToFileURL(join(root, 'src/lib/promptChecks.ts')).href);
+const { checkShort } = await import(pathToFileURL(join(root, 'src/lib/shorts.ts')).href);
+const { checkCore, checkSteps } = await import(pathToFileURL(join(root, 'src/lib/steps.ts')).href);
+const shortIds = new Set();
 const CHECK_KINDS = new Set(['has-system', 'delimits', 'includes', 'excludes', 'includes-all', 'examples', 'schema', 'no-input-in-system', 'max-words']);
 const MIN = { sections: 2, cheatSheet: 8, codeChallenges: 2, interviewQuestions: 5, envelopeQuestions: 2, test: 12 };
 const allIds = new Map();
@@ -78,6 +81,11 @@ for (const file of files) {
         errs.push(`${where}: missing/invalid quickCheck`);
       const words = (s.body ?? '').split(/\s+/).length;
       if (words > 450) errs.push(`${where}: body ${words} words (keep ≤ 450 — less reading, more practice)`);
+      // optional Short (M5): known beats, exactly one answerable quiz, real numbers
+      if (s.short !== undefined) errs.push(...checkShort(s.short, where, shortIds));
+      // optional core (≤ 180 words) and step lesson (M7)
+      if (s.core !== undefined) errs.push(...checkCore(s.core, where));
+      if (s.steps !== undefined) errs.push(...checkSteps(s.steps, where));
     });
     for (const iq of t.interviewQuestions ?? []) {
       if (!iq.followUps?.length) errs.push(`${iq.id}: no follow-ups`);
@@ -157,6 +165,22 @@ if (dupes.length) {
     console.log(`        ${d.b.text.replace(/\s+/g, ' ').slice(0, 110)}`);
   }
   if (strict) failures++;
+}
+
+// ---------- topic cheatsheets (C4): real topic ids, non-empty blocks, word cap, no ``` fences ----------
+{
+  const { checkCheatsheet } = await import(pathToFileURL(join(root, 'src/lib/cheatsheets.ts')).href);
+  const topicIds = new Set(readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => f.replace(/\.ts$/, '')));
+  const csDir = join(root, 'src/content/cheatsheets');
+  const csFiles = readdirSync(csDir).filter((f) => f.endsWith('.ts'));
+  for (const f of csFiles) {
+    const errs = checkCheatsheet(f.replace(/\.ts$/, ''), (await import(pathToFileURL(join(csDir, f)).href)).default, topicIds);
+    if (errs.length) {
+      failures++;
+      console.log(`✗ cheatsheets/${f}\n  - ${errs.join('\n  - ')}`);
+    }
+  }
+  console.log(`\n${csFiles.length} topic cheatsheet(s) checked`);
 }
 
 console.log(`\n${files.length - failures}/${files.length} topic files valid${dupes.length ? ' (see duplicates above)' : ''}`);

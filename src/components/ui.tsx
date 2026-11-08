@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronRight, Copy, Mic } from 'lucide-react';
@@ -10,13 +10,23 @@ import EditorModule from 'react-simple-code-editor';
 const Editor = ((EditorModule as unknown as { default?: typeof EditorModule }).default ?? EditorModule) as typeof EditorModule;
 import type { CodeSnippet, Difficulty, FollowUp } from '../types';
 import { highlight, normalizeLang } from '../lib/highlight';
+import { markTerms, type HNode } from '../lib/glossaryMatch';
+import { GlossTerm, useGlossaryHovers } from './GlossTerm';
 
-export function Markdown({ children }: { children: string }) {
+/** `defs`: lesson text, where the first mention of each glossary term gets a hover definition (C4) */
+export function Markdown({ children, defs }: { children: string; defs?: boolean }) {
+  const gloss = useGlossaryHovers(!!defs);
+  const rehype = useMemo(() => (gloss ? [() => (tree: HNode) => markTerms(tree, gloss.index)] : []), [gloss]);
   return (
     <div className="md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={rehype}
         components={{
+          span({ node: _n, ...props }) {
+            const term = gloss?.byId.get(String((props as Record<string, unknown>)['data-gloss'] ?? ''));
+            return term ? <GlossTerm term={term}>{props.children}</GlossTerm> : <span {...props} />;
+          },
           code({ className, children: c }) {
             const match = /language-(\w+)/.exec(className ?? '');
             const text = String(c).replace(/\n$/, '');

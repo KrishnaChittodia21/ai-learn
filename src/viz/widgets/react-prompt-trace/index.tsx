@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Choice, Slider, VizFrame, useFrames, useSimulation } from '../../core';
 import { WideSvg } from '../_shared/WideSvg';
 import { meta } from './meta';
+import { buildTurn } from './turn';
 import { DEFAULT_PARAMS, MAX_STEPS, MIN_STEPS, SCENARIOS, STOP_SEQUENCE, simulate, type LineKind, type Params, type ScenarioId, type Stage, type Who } from './sim';
 
 const short = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
@@ -46,6 +47,7 @@ export default function ReactPromptTraceViz() {
       title={meta.title}
       blurb={meta.blurb}
       stepper={stepper}
+      turn={buildTurn(frames, params)}
       controls={
         <>
           <Choice<ScenarioId>
