@@ -1,7 +1,7 @@
 /* ======================================================================
    Topic (Neural Aurora): breadcrumb → holographic chapter header with a progress ring →
    a sticky glowing pill tab bar → a contents rail of glowing progress nodes beside the
-   reading column. Sections: § eyebrow, big title, worked example (glass + gradient edge),
+   reading column. Sections: number eyebrow, big title, worked example (glass + gradient edge),
    pros (ion) / cons → fix (pulsar), the "Try it" exercise inside the ONE spinning border,
    and a quick check with glowing answer states. Other tabs reuse the same glass cards.
    Shared prose/code classes (.md, .code, .editor, .diagram, .reveal, .followups, .answer-box,
@@ -14,25 +14,25 @@
 }
 
 /* ---------- breadcrumb ---------- */
-.tp-crumbs {
+.tp-topbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  align-items: center;
+  gap: 8px 16px;
+}
+.tp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tp-here {
+  margin: 0;
+  font-size: var(--fs-sm);
   color: var(--muted);
 }
-.tp-crumbs a {
-  color: var(--muted);
-  text-decoration: none;
-}
-.tp-crumbs a:hover {
+.tp-here strong {
   color: var(--text);
-}
-.tp-crumbs [aria-current] {
-  color: var(--c-nebula);
+  font-weight: 600;
 }
 
 /* ---------- holographic chapter header ---------- */

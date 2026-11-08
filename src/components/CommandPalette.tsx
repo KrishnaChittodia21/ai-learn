@@ -38,10 +38,10 @@ interface Item {
 }
 
 const PAGES: Item[] = [
-  { id: 'page:home', label: 'Today', hint: 'your next step', href: '/', keywords: ['home', 'dashboard', 'progress'] },
+  { id: 'page:home', label: 'Dashboard', hint: 'your next step', href: '/', keywords: ['home', 'today', 'start', 'next'] },
+  { id: 'page:track', label: 'Track', hint: 'progress, streak, badges and charts', href: '/track', keywords: ['progress', 'stats', 'streak', 'record', 'tracker'] },
   { id: 'page:contents', label: 'Syllabus', hint: 'everything in this course', href: '/contents', keywords: ['index', 'contents', 'map'] },
   { id: 'page:weak', label: 'Weak areas', href: '/weak-areas', keywords: ['mistakes', 'revise'] },
-  { id: 'page:practice', label: 'Practice', hint: 'drill missed exam questions', href: '/practice', keywords: ['drill', 'mistakes'] },
   { id: 'page:companies', label: 'Architecture challenges', href: '/challenges', keywords: ['mock', 'interview'] },
   { id: 'page:achievements', label: 'Achievements', hint: 'badges and tiers', href: '/achievements', keywords: ['badges', 'trophies', 'medals', 'milestones', 'rewards'] },
   { id: 'page:shorts', label: 'Shorts', hint: 'one idea in about a minute', href: '/shorts', keywords: ['shorts', 'video', 'watch', 'story', 'short of the day'] },
@@ -276,7 +276,7 @@ function Preview({ value, stepTopic }: { value: string; stepTopic?: string }) {
       <ol className="cmdk-prev-secs">
         {t.sections.slice(from, from + 4).map((s, k) => (
           <li key={from + k} className={read.has(from + k) ? 'done' : undefined}>
-            §{from + k + 1} {s.heading.split(' — ')[0]}
+            Section {from + k + 1}: {s.heading.split(' — ')[0]}
           </li>
         ))}
       </ol>

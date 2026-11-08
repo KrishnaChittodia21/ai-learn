@@ -36,6 +36,103 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Embeddings — turning meaning into coordinates',
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'FAQ entries', sub: 'embedded offline', x: 110, y: 70 },
+          { id: 'model', kind: 'embedder', label: 'Embedding model', sub: 'text → vector', x: 340, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Vector store', sub: 'nearest neighbours', x: 570, y: 70 },
+          { id: 'refund', kind: 'data', label: 'Refund FAQ', sub: 'cosine 0.62', x: 800, y: 70 },
+          { id: 'query', kind: 'user', label: 'Query', sub: '"my money back"', x: 110, y: 230 },
+          { id: 'bm25', kind: 'retriever', label: 'Keyword (BM25)', sub: 'shared words only', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A GPS coordinate for meaning',
+            lines: [
+              'An embedding model reads text and returns a list of numbers: a **vector**.',
+              'Texts that mean similar things get coordinates that sit close together, even with no shared words.',
+              '"How do I get my money back?" lands next to "Refund policy".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'model'], label: 'text' },
+              { send: ['model', 'store'], label: 'vector' },
+              { say: 1 },
+              { lit: 'store' },
+              { say: 2 },
+              { send: ['query', 'model'], label: 'money back' },
+              { send: ['store', 'refund'], label: 'nearest', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'How the model learns it',
+            lines: [
+              'A transformer encoder trained with **contrastive learning** on millions of (question, matching answer) pairs.',
+              'Matching pairs are pushed close, non-matching pairs far apart.',
+              'The output is a fixed-length vector (e.g. 1536 numbers), whether you feed it 3 words or 3 pages.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'model' },
+              { say: 1 },
+              { badge: 'model', text: 'pairs: close', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { send: ['model', 'store'], label: '1536 numbers' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: offline and online',
+            lines: ['Query and documents are embedded **independently** (a bi-encoder).'],
+            task: {
+              type: 'order',
+              question: 'Put the embedding search flow in order.',
+              items: ['Embed the whole corpus once, offline', 'Store the vectors', 'At query time, embed only the short query', 'Look up its nearest neighbours'],
+              hint: 'The expensive part happens once, before any user asks anything.',
+            },
+            solved: 'Embed and store the corpus once; per query, embed only the query and find its nearest neighbours.',
+            then: [{ send: ['docs', 'model'], label: 'offline' }, { send: ['model', 'store'], label: 'store' }, { send: ['query', 'model'], label: 'query' }, { send: ['store', 'refund'], label: 'nearest', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Meaning beats keywords',
+            lines: [
+              '"I want my money back for a broken kettle": the refund entry scores 0.62, shipping 0.31, office hours 0.14.',
+              'The refund entry shares no keyword with "money back" or "broken".',
+              'A keyword search would have scored it zero. Exact values vary by model; the ranking is what matters.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['query', 'model'], label: 'query' },
+              { send: ['store', 'refund'], label: '0.62', tone: 'ok' },
+              { say: 1 },
+              { badge: 'refund', text: 'no shared words', ms: 1000 },
+              { say: 2 },
+              { send: ['query', 'bm25'], label: 'money back', curve: true },
+              { badge: 'bm25', text: 'score 0', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where embeddings are weak',
+            lines: ['Production systems pair embeddings with keyword search.'],
+            task: {
+              type: 'choose',
+              question: 'Which query is embedding search weakest at?',
+              options: [
+                { text: 'An exact identifier like SKU AB-1234' },
+                { text: '"How do I get my money back?"', why: 'Same meaning in different words is exactly what embeddings are good at.' },
+                { text: '"Refund policy for damaged items"', why: 'A paraphrase of an FAQ entry is a strength, not a weakness.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Embeddings are weaker at exact identifiers, negation and rare jargon: pair them with keyword search.',
+            then: [{ send: ['query', 'bm25'], label: 'AB-1234', curve: true }, { badge: 'bm25', text: 'exact match', tone: 'ok' }],
+          },
+        ],
+      },
       short: {
         id: 'embeddings-meaning-as-coordinates',
         title: 'Embeddings: meaning as coordinates',
@@ -311,6 +408,102 @@ export async function bestFaq(question: string, minScore = 0.3) {
     // ---------------------------------------------------------------- 2
     {
       heading: 'Embedding Models — choosing, prefixes and Matryoshka dimensions',
+      steps: {
+        actors: [
+          { id: 'query', kind: 'user', label: 'Query', sub: '"query: " prefix', x: 110, y: 70 },
+          { id: 'model', kind: 'embedder', label: 'Embedding model', sub: 'dims · max tokens', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Index: 1M chunks', sub: 'dims × 4 bytes each', x: 570, y: 70 },
+          { id: 'eval', kind: 'judge', label: 'Your eval', sub: '150 labelled queries', x: 800, y: 70 },
+          { id: 'passage', kind: 'document', label: 'Passage', sub: '"passage: " prefix', x: 110, y: 230 },
+          { id: 'mteb', kind: 'metric', label: 'MTEB', sub: 'Retrieval column', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Pick for your territory',
+            lines: [
+              'Models differ in dimensions, max tokens, languages and price.',
+              'On **MTEB**, read the Retrieval column (nDCG@10), not the overall average.',
+              'Then confirm on 50–200 of your own labelled queries.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'model' },
+              { say: 1 },
+              { lit: 'mteb' },
+              { badge: 'mteb', text: 'nDCG@10', ms: 1000 },
+              { say: 2 },
+              { send: ['index', 'eval'], label: 'Recall@10' },
+              { badge: 'eval', text: 'your data', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the forgotten prefix',
+            lines: ['Short questions and long passages look different, so e5 expects `"query: "` and `"passage: "` prefixes.'],
+            task: {
+              type: 'choose',
+              question: 'You forget the prefixes. What happens?',
+              options: [
+                { text: 'Recall silently drops by several points' },
+                { text: 'The API returns an error', why: 'Nothing fails loudly: the cost is silent.' },
+                { text: 'Nothing changes', why: 'The model was trained to expect the hint; without it recall drops.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use the prefixes (or input_type) the model expects; forgetting them silently costs recall.',
+            then: [{ send: ['query', 'model'], label: 'query: …' }, { send: ['passage', 'model'], label: 'passage: …', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Matryoshka: nested dolls',
+            lines: [
+              'Matryoshka embeddings are trained so the first *k* dimensions are a good embedding on their own.',
+              'text-embedding-3 takes a `dimensions` parameter: 3-large at 256 dims still beat ada-002 at 1536 on MTEB.',
+              'If you truncate the vectors yourself, **renormalise**.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'model', text: 'first k dims', ms: 1000 },
+              { say: 1 },
+              { send: ['model', 'index'], label: 'dimensions: 512' },
+              { say: 2 },
+              { badge: 'index', text: 'renormalise', tone: 'req', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which one ships?',
+            lines: ['1M chunks, Recall@10 on 150 support queries; storage = 1M × dims × 4 bytes.'],
+            task: {
+              type: 'choose',
+              question: 'Which option should the team ship?',
+              options: [
+                { text: '3-large at dimensions 512: 0.84, 2.0 GB' },
+                { text: '3-large at full 3072: 0.86, 12.3 GB', why: 'It gains 0.02 recall for six times the storage.' },
+                { text: 'MiniLM at 384: 0.71, 1.5 GB', why: 'It saves 0.5 GB but loses 0.13 recall.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The shortened large model keeps almost all the quality at a sixth of the full-size storage.',
+            then: [{ send: ['model', 'index'], label: '512 dims', tone: 'ok' }, { badge: 'index', text: '2.0 GB', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'API or open model?',
+            lines: [
+              'Start fast with an API model.',
+              'Go open when data cannot leave your network, volume is huge, or you need fine-tuning.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['query', 'model'], label: 'API' },
+              { say: 1 },
+              { badge: 'model', text: 'run locally', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** picking an embedding model is like picking a map projection: every map shows the world, but some are better for sailing, some for city walking. You want the one that is accurate for *your* territory, at a size you can afford to store.
 
 **What to compare:**
@@ -509,6 +702,108 @@ export async function overlapAtK(texts: string[], query: string, k = 5) {
     // ---------------------------------------------------------------- 3
     {
       heading: 'Vector Similarity — cosine, dot product and Euclidean distance',
+      steps: {
+        actors: [
+          { id: 'a', kind: 'data', label: 'a = [3, 4]', sub: 'the query', x: 110, y: 70 },
+          { id: 'b', kind: 'data', label: 'b = [6, 8]', sub: 'same way, 2× longer', x: 340, y: 70 },
+          { id: 'c', kind: 'data', label: 'c = [4, 3]', sub: 'slightly turned', x: 570, y: 70 },
+          { id: 'norm', kind: 'guard', label: 'Normalise', sub: 'make ‖v‖ = 1', x: 800, y: 70 },
+          { id: 'cos', kind: 'metric', label: 'Cosine', sub: 'angle only', x: 340, y: 230 },
+          { id: 'dot', kind: 'metric', label: 'Dot product', sub: 'angle + length', x: 570, y: 230 },
+          { id: 'l2', kind: 'metric', label: 'Euclidean', sub: 'distance of tips', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three questions about two arrows',
+            lines: [
+              '**Cosine**: do they point the same way? (angle only)',
+              '**Dot product**: same way, and how long are they?',
+              '**Euclidean**: how far apart are their tips? (lower = closer)',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a', 'cos'], label: 'a', curve: true },
+              { lit: 'cos' },
+              { say: 1 },
+              { send: ['a', 'dot'], label: 'a', curve: true },
+              { lit: 'dot' },
+              { say: 2 },
+              { send: ['a', 'l2'], label: 'a', curve: true },
+              { lit: 'l2' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Unnormalised, they disagree',
+            lines: [
+              'a and b: cosine **1.00**, dot 50, Euclidean 5.00.',
+              'a and c: cosine 0.96, dot 24, Euclidean 1.41.',
+              'Cosine calls a and b identical in meaning; Euclidean says c is closer to a.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'cos', text: 'a,b 1.00', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { badge: 'l2', text: 'a,c 1.41', ms: 1000 },
+              { say: 2 },
+              { badge: 'l2', text: 'c is nearer?', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who prefers c?',
+            lines: ['Before normalising, the metrics rank b and c differently.'],
+            task: {
+              type: 'pick',
+              question: 'Which metric says c is closer to a than b is?',
+              answer: 'l2',
+              hints: {
+                cos: 'Cosine says a and b are identical (1.00 vs 0.96).',
+                dot: 'Dot gives a·b = 50 vs a·c = 24: it favours the long vector b.',
+              },
+            },
+            solved: 'Euclidean measures tip distance, so the longer b looks far away even though it points the same way.',
+            then: [{ lit: 'l2' }, { badge: 'l2', text: 'c: 1.41 < 5.00', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Normalise and they agree',
+            lines: [
+              'Divide by length: a and b both become [0.6, 0.8], c becomes [0.8, 0.6].',
+              'For unit vectors cosine = dot, and ‖a − b‖² = 2 − 2·cos, so Euclidean ranks the same way.',
+              'Now b is the nearest neighbour by all three, and dot product is the cheapest to compute.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['b', 'norm'], label: '[0.6, 0.8]', curve: true },
+              { send: ['c', 'norm'], label: '[0.8, 0.6]' },
+              { say: 1 },
+              { send: ['norm', 'cos'], label: 'unit', curve: true },
+              { send: ['norm', 'l2'], label: 'unit' },
+              { say: 2 },
+              { badge: 'dot', text: 'a·b = 1.00', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: configure the vector DB',
+            lines: ['Some models trained for dot product deliberately exploit vector length.'],
+            task: {
+              type: 'choose',
+              question: 'Which metric do you configure in your vector database?',
+              options: [
+                { text: 'The metric the model card says it was trained with' },
+                { text: 'Always cosine', why: 'On unnormalised vectors the metrics differ: use the one the model was trained with.' },
+                { text: 'Euclidean, because it is the most intuitive', why: 'Intuition does not matter; match the model card.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Match the model card\'s metric in the DB; and absolute scores are not probabilities.',
+            then: [{ lit: 'dot' }, { badge: 'dot', text: 'model card', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** two arrows from the same origin. *Cosine* asks "do they point the same way?" (angle only). *Dot product* asks "same way, and how long are they?". *Euclidean distance* asks "how far apart are their tips?".
 
 | Metric | Formula | Range | Higher = closer? |

@@ -69,7 +69,7 @@ export default function GlossaryPage() {
         <p className="lead">Plain definitions of the words lessons use, what they mean in practice, and the common mix-ups. Lessons underline the first mention of a term; hover or tap it.</p>
       </header>
 
-      <div className="gl-tabs" role="tablist" aria-label="Glossary sections">
+      <div className="gl-tabs" role="tablist" aria-label="Glossary sections" data-guide="gl-tabs">
         {(['terms', 'myths'] as const).map((t) => (
           <button key={t} type="button" role="tab" id={`gl-tab-${t}`} aria-selected={tab === t} aria-controls={`gl-panel-${t}`} className={`gl-tab${tab === t ? ' on' : ''}`} onClick={() => setTab(t)}>
             {t === 'terms' ? 'Terms' : 'Myths'} <span className="n">{t === 'terms' ? GLOSSARY.length : MYTHS.length}</span>
@@ -80,7 +80,7 @@ export default function GlossaryPage() {
       {tab === 'terms' ? (
         <div id="gl-panel-terms" role="tabpanel" aria-labelledby="gl-tab-terms">
           <div className="gl-tools">
-            <label className="gl-search">
+            <label className="gl-search" data-guide="gl-search">
               <Search size={16} aria-hidden />
               <span className="sr-only">Search terms</span>
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a term or abbreviation" autoComplete="off" />
@@ -97,7 +97,7 @@ export default function GlossaryPage() {
                 </button>
               ))}
             </div>
-            <nav className="gl-az" aria-label="Jump to letter">
+            <nav className="gl-az" aria-label="Jump to letter" data-guide="gl-az">
               {LETTERS.map((l) =>
                 groups.some((g) => g.l === l) ? (
                   <button key={l} type="button" onClick={() => jump(l)} aria-label={l === '#' ? 'Numbers' : `Letter ${l}`}>
@@ -122,7 +122,7 @@ export default function GlossaryPage() {
                 <h2 id={`gl-${l}`} className="gl-letter" tabIndex={-1}>
                   {l}
                 </h2>
-                <ul className="gl-list">
+                <ul className="gl-list" data-guide="gl-list">
                   {terms.map((t) => (
                     <Entry key={t.id} t={t} open={open.has(t.id)} onToggle={() => toggle(t.id)} />
                   ))}

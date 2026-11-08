@@ -11,10 +11,10 @@ const layers = levelLayers(TOPICS, LEVELS, LEVEL_OF_TOPIC);
 /** same path as the component: progress → topicStatus → "passed,new,…" key → neuron states */
 const statesFor = (p: ReturnType<typeof emptyProgress>) => parseStates(TOPICS.map((t) => topicStatus(p, t)).join(','), TOPICS);
 
-test('three level layers sized from content (8 / 17 / 35), every topic placed once in course order', () => {
+test('three level layers sized from content (8 / 17 / 37), every topic placed once in course order', () => {
   assert.deepEqual(
     layers.map((l) => l.length),
-    [8, 17, 36],
+    [8, 17, 37],
   );
   assert.deepEqual(
     layers.flat().map((t) => t.id),
@@ -28,7 +28,7 @@ test('fresh progress: every neuron is new, nothing covered', () => {
   assert.deepEqual(layerCounts(layers, st), [
     { done: 0, total: 8 },
     { done: 0, total: 17 },
-    { done: 0, total: 36 },
+    { done: 0, total: 37 },
   ]);
 });
 

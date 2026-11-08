@@ -221,8 +221,8 @@ The prompt is the *contract* between retriever and generator: numbered chunks, a
             head: 'The question finds its *pages*',
             query: 'How many days of parental leave do contractors get?',
             chunks: [
-              { text: 'parental-leave-2025.pdf §3', score: 0.82 },
-              { text: 'contractor-handbook.pdf §7', score: 0.79 },
+              { text: 'parental-leave-2025.pdf section 3', score: 0.82 },
+              { text: 'contractor-handbook.pdf section 7', score: 0.79 },
               { text: 'holiday-calendar.pdf', score: 0.61 },
               { text: 'expenses-policy.pdf', score: 0.4 },
             ],
@@ -234,8 +234,8 @@ The prompt is the *contract* between retriever and generator: numbered chunks, a
             kicker: 'Cited answer',
             head: 'Every sentence *names its source*',
             claims: [
-              { text: 'Contractors get no paid parental leave; up to 10 days unpaid [2]', ok: true, note: 'contractor-handbook §7' },
-              { text: 'Employee leave is 16 weeks [1]', ok: true, note: 'parental-leave-2025 §3' },
+              { text: 'Contractors get no paid parental leave; up to 10 days unpaid [2]', ok: true, note: 'contractor-handbook section 7' },
+              { text: 'Employee leave is 16 weeks [1]', ok: true, note: 'parental-leave-2025 section 3' },
             ],
           },
           {
@@ -289,7 +289,7 @@ The retriever is usually a bi-encoder embedding model (e.g. \`text-embedding-3-s
       example: `Corpus: 1,200 HR policy PDFs → 18,400 chunks of ~500 tokens, embedded with \`text-embedding-3-small\` and stored in Postgres + pgvector.
 
 Query: *"How many days of parental leave do contractors get?"*
-1. Query embedding (1536-d) → cosine search returns chunks with similarity 0.82 (\`parental-leave-2025.pdf §3\`), 0.79 (\`contractor-handbook.pdf §7\`), 0.61 (\`holiday-calendar.pdf\`).
+1. Query embedding (1536-d) → cosine search returns chunks with similarity 0.82 (\`parental-leave-2025.pdf section 3\`), 0.79 (\`contractor-handbook.pdf section 7\`), 0.61 (\`holiday-calendar.pdf\`).
 2. Prompt holds the top 3 as [1], [2], [3] (~1,600 tokens total).
 3. Model answers: *"Contractors are not eligible for paid parental leave; they may take up to 10 days unpaid [2]. Employee leave is 16 weeks [1]."*
 4. Citation check: [1] and [2] were retrieved → valid. Latency ≈ 40 ms retrieval + ~900 ms generation.`,
@@ -448,6 +448,121 @@ export function buildPrompt(question: string, chunks: Chunk[], maxChars = 8000):
     },
     {
       heading: 'Naive RAG — retrieve-read and its failure modes',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'WFH monitor limit?', x: 110, y: 70 },
+          { id: 'embedder', kind: 'embedder', label: 'Embedder', sub: 'raw question', x: 340, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Top-k', sub: 'cosine, k = 3', x: 570, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Vector store', sub: 'fixed-size chunks', x: 800, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'concatenate + answer', x: 570, y: 230 },
+          { id: 'missed', kind: 'document', label: 'Reimbursement', sub: 'rank 7, sim 0.71', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Retrieve-Read',
+            lines: [
+              'Naive RAG: "Google it once, paste the top results, answer".',
+              'Embed the raw question → top-k by cosine → concatenate → generate.',
+              'No query processing, no reranking, no checks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'embedder'], label: 'question' },
+              { say: 1 },
+              { send: ['embedder', 'retriever'], label: 'vector' },
+              { send: ['retriever', 'store'], label: 'top-3' },
+              { send: ['store', 'retriever'], label: 'chunks', count: 3 },
+              { send: ['retriever', 'llm'], label: 'concatenate' },
+              { say: 2 },
+              { lit: 'llm' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What it actually retrieved',
+            lines: [
+              'Top 3: "Remote work eligibility" (0.81), the **same chunk again** from an older PDF (0.80), "Home office ergonomics tips" (0.77).',
+              '"Equipment reimbursement: up to $300 for peripherals" sits at rank 7 (0.71).',
+              'The model says "Yes, you may expense a monitor": no limit, unsupported, citing [3].',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['store', 'retriever'], label: 'eligibility ×2', count: 2 },
+              { badge: 'retriever', text: 'duplicates', tone: 'miss', ms: 1300 },
+              { say: 1 },
+              { down: 'missed' },
+              { say: 2 },
+              { send: ['retriever', 'llm'], label: '3 chunks' },
+              { badge: 'llm', text: 'no limit', tone: 'miss', ms: 1300 },
+              { down: 'missed', on: false },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: name the failure',
+            lines: ['The reimbursement chunk never says "monitor" or "working from home".'],
+            task: {
+              type: 'choose',
+              question: 'Why did the chunk with the answer rank 7th?',
+              options: [
+                { text: 'Vocabulary mismatch: a single dense query with no keyword signal' },
+                {
+                  text: 'Lost in the middle',
+                  why: 'Lost in the middle is about a chunk that *is* in the context being ignored; this one never got in.',
+                },
+                { text: 'Stale version', why: 'Nothing here is an old policy; the right chunk simply uses different words.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Adding BM25 on "expense" + dedupe moves the reimbursement chunk to rank 2.',
+            then: [{ send: ['missed', 'retriever'], label: 'rank 2', tone: 'ok' }, { send: ['retriever', 'llm'], label: '$300', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Predictable failure modes',
+            lines: [
+              '**Multi-part question**: one embedding for two needs.',
+              '**Low precision**: top-k full of near-duplicates; no rerank or dedupe.',
+              '**Lost in the middle**: the right chunk at position 6 of 10 is ignored.',
+              '**Stale version**: no metadata filter; **hallucinated glue**: no grounding instruction.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'embedder', text: 'one vector', tone: 'miss', ms: 1100 },
+              { say: 1 },
+              { badge: 'retriever', text: 'near-duplicates', tone: 'miss', ms: 1100 },
+              { say: 2 },
+              { badge: 'llm', text: 'position 6 of 10', tone: 'miss', ms: 1100 },
+              { say: 3 },
+              { badge: 'store', text: '2022 policy', tone: 'miss', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: is naive RAG ever enough?',
+            lines: ['Build it first, measure recall@k and faithfulness, then add only what the failures demand.'],
+            task: {
+              type: 'choose',
+              question: 'Where is naive RAG fine?',
+              options: [
+                { text: 'Prototypes, small homogeneous corpora (FAQ pages), and as the baseline you must beat' },
+                {
+                  text: 'Never: always start with every advanced stage',
+                  why: 'Without a measured baseline you cannot tell which advanced pieces the failures actually demand.',
+                },
+                {
+                  text: 'Large mixed corpora with many policy versions',
+                  why: 'That is where stale versions, duplicates and vocabulary mismatch bite hardest.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Naive RAG is the baseline: measure it, then fix the failures you actually see.',
+            then: [{ send: ['user', 'embedder'], label: 'baseline' }, { send: ['retriever', 'llm'], label: 'measure' }],
+          },
+        ],
+      },
       body: `**Intuition:** naive RAG is "Google it once, paste the top results, answer". It works surprisingly often — and fails in predictable ways, like a librarian who only ever reads the exact words you said.
 
 **The flow (Gao et al. 2023 call it *Retrieve-Read*):** index fixed-size chunks → embed the raw user question → take top-k by cosine → concatenate → generate. No query processing, no reranking, no checks.
@@ -592,6 +707,113 @@ export function dedupeAndCap(chunks: C[], k: number): C[] {
     },
     {
       heading: 'Advanced RAG — pre-retrieval and post-retrieval optimisations',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'cap + 2025 change?', x: 110, y: 70 },
+          { id: 'editor', kind: 'llm', label: 'Query editor', sub: 'decompose, self-query', x: 340, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Hybrid retrieve', sub: 'BM25 + dense, RRF', x: 570, y: 70 },
+          { id: 'reranker', kind: 'reranker', label: 'Reranker', sub: 'cross-encoder 80 → 5', x: 800, y: 150 },
+          { id: 'guard', kind: 'guard', label: 'Threshold', sub: 'score ≥ 0.3', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'answer + citations', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Same line, two new stations',
+            lines: ['Keep the naive RAG assembly line.', 'Add a **query editor** before the search…', '…and a **fact-checker/curator** after it.'],
+            script: [
+              { say: 0 },
+              { send: ['user', 'editor'], label: 'question' },
+              { send: ['editor', 'retriever'], label: 'queries' },
+              { send: ['retriever', 'reranker'], label: 'candidates' },
+              { send: ['reranker', 'guard'], label: 'top 5' },
+              { send: ['guard', 'llm'], label: 'kept', tone: 'ok' },
+              { say: 1 },
+              { lit: 'editor' },
+              { say: 2 },
+              { lit: 'reranker' },
+              { lit: 'guard' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Pre-retrieval: fix what you search for',
+            lines: [
+              '**Decompose**: q1 "reimbursement limit home office monitor peripherals", q2 "2025 change to equipment reimbursement policy".',
+              '**Self-query** extracts the filter `doc_type = \'policy\'`.',
+              '**Hybrid** retrieves 40 candidates per sub-query: BM25 catches "reimbursement", dense catches "WFH ≈ remote".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'editor'], label: 'question' },
+              { badge: 'editor', text: 'q1 + q2', ms: 1200 },
+              { say: 1 },
+              { badge: 'editor', text: 'doc_type=policy', ms: 1300 },
+              { say: 2 },
+              { send: ['editor', 'retriever'], label: 'q1, q2', count: 2 },
+              { badge: 'retriever', text: '80 candidates', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the advanced line',
+            lines: ['Each station improves either what you search for or what the model sees.'],
+            task: {
+              type: 'order',
+              question: 'Put the stages for this question in order.',
+              items: ['Decompose into sub-queries', 'Hybrid retrieve 40 per sub-query', 'Rerank 80 → 5', 'Threshold at 0.3', 'Generate with citations'],
+              hint: 'Pre-retrieval first, then retrieval, then post-retrieval curation, then the answer.',
+            },
+            solved: 'Query editor → hybrid retrieve → rerank → threshold → generate.',
+            then: [
+              { send: ['editor', 'retriever'], label: 'q1, q2' },
+              { send: ['retriever', 'reranker'], label: '80' },
+              { send: ['reranker', 'guard'], label: '5' },
+              { send: ['guard', 'llm'], label: '4', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Post-retrieval: fix what the model sees',
+            lines: [
+              'Rerank scores: 0.94 (2025 policy: "$400, up from $300"), 0.88 (2024 policy: "$300"), 0.41, 0.33, 0.12.',
+              'Threshold 0.3 keeps 4 chunks; the strongest go first to counter lost-in-the-middle.',
+              'Answer: "The cap is $400 [1]; it was raised from $300 in 2025 [1][2]." Naive RAG returned no amount.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'reranker'], label: '80' },
+              { badge: 'reranker', text: '0.94 · 0.88', tone: 'ok', ms: 1300 },
+              { say: 1 },
+              { send: ['reranker', 'guard'], label: 'top 5' },
+              { badge: 'guard', text: '0.12 dropped', tone: 'miss', ms: 1300 },
+              { say: 2 },
+              { send: ['guard', 'llm'], label: '4 chunks', tone: 'ok' },
+              { badge: 'llm', text: '$400 [1][2]', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which stage first?',
+            lines: ['Your measured baseline fails mostly on vocabulary and multi-part misses.'],
+            task: {
+              type: 'choose',
+              question: 'Which stage do you add first?',
+              options: [
+                { text: 'Query rewrite / multi-query' },
+                { text: 'Every stage at once', why: 'Add the stage that targets your dominant failure class; don\'t bolt on all of them.' },
+                {
+                  text: 'Only a cross-encoder rerank 50 → 5',
+                  why: 'Reranking sharpens what was found; it cannot recover chunks the search never returned.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Query rewrite / multi-query fixes vocabulary and multi-part misses, for about one extra LLM call.',
+            then: [{ send: ['user', 'editor'], label: 'question' }, { send: ['editor', 'retriever'], label: '3–5 paraphrases', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** keep the same assembly line as naive RAG but add a *query editor* before the search and a *fact-checker/curator* after it.
 
 **Pre-retrieval (improve what you search for and what you index):**
@@ -740,6 +962,113 @@ export async function retrieve(question: string, d: Deps, keep = 5, minScore = 0
     },
     {
       heading: 'Modular RAG — composable modules, routing and iterative flows',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'three kinds', x: 110, y: 70 },
+          { id: 'router', kind: 'judge', label: 'Router', sub: 'JSON route, ~150 ms', x: 340, y: 70 },
+          { id: 'docs', kind: 'retriever', label: 'Hybrid + rerank', sub: 'route: docs', x: 570, y: 70 },
+          { id: 'sql', kind: 'tool', label: 'Text-to-SQL', sub: 'route: sql', x: 340, y: 230 },
+          { id: 'multi', kind: 'agent', label: 'Multi-hop loop', sub: 'route: multi_hop', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Generate', sub: 'shared state', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'From assembly line to LEGO kit',
+            lines: [
+              'Naive and advanced RAG are a fixed assembly line.',
+              'Modular RAG: interchangeable blocks (retrieve, rewrite, rerank, generate, judge) wired into the **flow** each question needs.',
+              'Routing, scheduling and fusion are what make it modular.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['router', 'docs'], label: 'linear' },
+              { send: ['docs', 'llm'], label: 'chunks' },
+              { say: 1 },
+              { send: ['router', 'sql'], label: 'sql' },
+              { send: ['router', 'multi'], label: 'multi_hop' },
+              { say: 2 },
+              { lit: 'router' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Four flow patterns',
+            lines: [
+              '**Linear**: rewrite → retrieve → rerank → generate.',
+              '**Conditional**: a router picks a pipeline.',
+              '**Branching**: parallel paths, then merge (e.g. RRF).',
+              '**Loop**: retrieve → generate → judge → retrieve again.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'llm'], label: 'linear' },
+              { say: 1 },
+              { send: ['user', 'router'], label: 'question' },
+              { say: 2 },
+              { send: ['router', 'docs'], label: 'branch' },
+              { send: ['router', 'multi'], label: 'branch' },
+              { say: 3 },
+              { send: ['multi', 'llm'], label: 'draft' },
+              { badge: 'multi', text: 'judge → again', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: route it',
+            lines: ['"How many P1 incidents in Q3?"'],
+            task: {
+              type: 'pick',
+              question: 'Which module should the router send this question to?',
+              answer: 'sql',
+              hints: {
+                docs: 'The docs route suits "how do I…" questions; "how many" is a count over records.',
+                multi: 'There is no chain to follow here, just one count.',
+              },
+            },
+            solved: '"How many" goes to text-to-SQL; "how do I" goes to hybrid retrieve + rerank.',
+            then: [{ send: ['router', 'sql'], label: 'sql', tone: 'ok' }, { send: ['sql', 'llm'], label: 'rows', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'A loop for a chained question',
+            lines: [
+              '"Who owns the service that failed in INC-4821 and what\'s its runbook?" → `multi_hop`.',
+              'Retrieve the incident → extract the service → retrieve ownership + runbook (2 hops) → generate.',
+              'On 300 labelled questions: routing accuracy 94%; answers 81% vs 66% for one advanced-RAG line.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'router'], label: 'question' },
+              { send: ['router', 'multi'], label: 'multi_hop' },
+              { say: 1 },
+              { badge: 'multi', text: 'hop 1 → hop 2', ms: 1300 },
+              { send: ['multi', 'llm'], label: 'owner + runbook', tone: 'ok' },
+              { say: 2 },
+              { badge: 'llm', text: '81% vs 66%', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: do you need it?',
+            lines: ['Each module is a function over a shared state; the flow is a graph (LangGraph `StateGraph`, LlamaIndex workflows).'],
+            task: {
+              type: 'choose',
+              question: 'One homogeneous docs corpus, one kind of question. What should you build?',
+              options: [
+                { text: 'A well-tuned advanced RAG line' },
+                {
+                  text: 'A modular graph with a router and loops',
+                  why: 'Modular RAG pays off for mixed sources, mixed query types or loops; here the single line is simpler and faster.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Go modular for heterogeneous sources, mixed query types or loops; otherwise keep the line.',
+            then: [{ send: ['router', 'docs'], label: 'one line' }, { send: ['docs', 'llm'], label: 'chunks', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** naive and advanced RAG are a fixed assembly line. Modular RAG is a LEGO kit: retrieval, rewriting, reranking, generation, memory and judging are interchangeable blocks you wire into whatever *flow* the question needs.
 
 **The framework (Gao et al. 2024, "Modular RAG"):** a RAG system = **modules** (indexing, pre-retrieval, retrieval, post-retrieval, generation, orchestration) built from **operators** (e.g. "rerank", "query expansion", "judge"), connected by a **flow pattern**:
@@ -894,6 +1223,107 @@ export async function route(question: string, llm: (p: string) => Promise<string
     },
     {
       heading: 'Long Context vs RAG — when you do not need retrieval at all',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'placed last', x: 110, y: 150 },
+          { id: 'corpus', kind: 'document', label: 'Corpus', sub: 'SDK docs, 90K tok', x: 340, y: 70 },
+          { id: 'cache', kind: 'cache', label: 'Prompt cache', sub: 'static prefix first', x: 570, y: 70 },
+          { id: 'rag', kind: 'retriever', label: 'RAG', sub: '~5K tokens, filtered', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: '200K–1M window', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'If the book fits on the desk',
+            lines: [
+              'Current models accept 200K–1M tokens, so a small, stable corpus can go straight into the prompt.',
+              'The real question is not "does it fit?" but cost, speed and accuracy per question.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['corpus', 'cache'], label: 'whole corpus' },
+              { send: ['cache', 'llm'], label: 'prefix' },
+              { send: ['user', 'llm'], label: 'question', curve: true },
+              { say: 1 },
+              { send: ['rag', 'llm'], label: '~5K tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Prompt caching',
+            lines: [
+              'The provider keeps the processed prefix; a byte-identical prefix later costs a fraction.',
+              'On Anthropic: writes ≈ 1.25× base input (5-min TTL), reads ≈ 0.1×.',
+              'Static corpus first, question last. Any byte change in the prefix, like a timestamp, is a miss.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['corpus', 'cache'], label: 'write once' },
+              { say: 1 },
+              { badge: 'cache', text: 'read ≈ 0.1×', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { send: ['cache', 'llm'], label: 'prefix', tone: 'ok' },
+              { badge: 'cache', text: 'timestamp = miss', tone: 'miss', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: per-user permissions',
+            lines: ['Some readers may see documents that others may not.'],
+            task: {
+              type: 'pick',
+              question: 'Which path can enforce per-user permissions?',
+              answer: 'rag',
+              hints: {
+                cache: 'A cached prefix is one shared prefix: everyone who uses it sees all of it.',
+                llm: 'The model reads whatever is in the prompt; permissions must be applied before that.',
+              },
+            },
+            solved: 'RAG filters per user at query time; a shared cached prefix cannot.',
+            then: [{ send: ['user', 'rag'], label: 'question + ACL', curve: true }, { send: ['rag', 'llm'], label: 'allowed chunks', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Accuracy is not free',
+            lines: [
+              '*Lost in the Middle*: evidence at the start and end is used best, the middle worst.',
+              'The *effective* context length is often far shorter than the advertised window.',
+              'Long context wins on **holistic** tasks ("summarise this contract"), where chunking breaks cross-references.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: 'U-shaped', tone: 'miss', ms: 1300 },
+              { say: 1 },
+              { badge: 'llm', text: 'effective < window', tone: 'miss', ms: 1300 },
+              { say: 2 },
+              { send: ['cache', 'llm'], label: 'whole contract', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: SDK docs',
+            lines: [
+              'Internal SDK docs: 90K tokens, edited weekly, 2,000 questions/day, readable by all engineers.',
+              'Golden set: long context + cache 91% correct; RAG k = 5 86%.',
+            ],
+            task: {
+              type: 'choose',
+              question: 'What do you ship?',
+              options: [
+                { text: 'Long context, with the docs cached as the system prefix' },
+                {
+                  text: 'RAG, because it is always cheaper',
+                  why: 'RAG is cheaper per question, but here the extra ~$30/day buys 5 points of accuracy and removes a pipeline.',
+                },
+                { text: 'Long context without caching', why: 'Uncached, every question re-sends 90K tokens ($0.27 vs $0.027 cached at $3/1M).' },
+              ],
+              answer: 0,
+            },
+            solved: 'Small, stable, readable by all, warm cache, and more accurate: long context + caching. Otherwise use RAG or a hybrid.',
+            then: [{ send: ['corpus', 'cache'], label: 'cached' }, { send: ['cache', 'llm'], label: 'prefix', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** if the whole book fits on the desk, you don't need a librarian. Current models accept 200K–1M tokens, so for a small, stable corpus you can paste everything into the prompt and skip retrieval. The real question is never "does it fit?" but "what does each question cost, how fast is it, and is it as accurate?"
 
 **Trade-offs for a 300K-token corpus** (illustrative price: $3 per 1M input tokens):
@@ -1059,6 +1489,127 @@ export function chooseContextStrategy(p: Inputs): { strategy: Strategy; reasons:
     },
     {
       heading: 'Conversational RAG — follow-up questions, history-aware rewriting and citation continuity',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'follow-up message', x: 110, y: 70 },
+          { id: 'classify', kind: 'judge', label: 'Classify', sub: 'follow-up? ref?', x: 340, y: 70 },
+          { id: 'condense', kind: 'llm', label: 'Condense', sub: 'standalone query', x: 570, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'standalone + filter', x: 800, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'answer + cite', x: 570, y: 230 },
+          { id: 'state', kind: 'data', label: 'Turn state', sub: 'cited source ids', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: '"What about the second one?"',
+            lines: [
+              'In a chat, the latest message is rarely a complete question.',
+              'A **condense** step turns history + new message into one standalone query.',
+              '**Turn state** remembers what the bot showed: the cited source ids.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'classify'], label: '"the second one?"' },
+              { say: 1 },
+              { send: ['classify', 'condense'], label: 'follow-up' },
+              { send: ['condense', 'retriever'], label: 'standalone' },
+              { send: ['retriever', 'llm'], label: 'chunks' },
+              { say: 2 },
+              { send: ['llm', 'state'], label: 'store sources' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one chat turn',
+            lines: ['Every turn runs the same small pipeline.'],
+            task: {
+              type: 'order',
+              question: 'Put one turn in order.',
+              items: [
+                'Classify the message',
+                'Resolve references to earlier sources',
+                'Condense follow-ups into a standalone query',
+                'Retrieve and answer',
+                'Store the turn with its cited source ids',
+              ],
+              hint: 'You must know what kind of message it is before resolving or condensing it, and you store the turn only once it is answered.',
+            },
+            solved: 'Classify → resolve → condense (follow-ups only) → retrieve and answer → store.',
+            then: [
+              { send: ['user', 'classify'], label: 'message' },
+              { send: ['classify', 'condense'], label: 'follow-up' },
+              { send: ['condense', 'retriever'], label: 'standalone' },
+              { send: ['llm', 'state'], label: 'store' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Resolving "the second one"',
+            lines: [
+              'Turn 1 cited [1] Dell Latitude 7450 and [2] MacBook Air 13 (`hw-cat#14`).',
+              '"what about the second one, battery life?" → `source-ref`: resolves to `hw-cat#14` with **no LLM call**.',
+              'Standalone query "MacBook Air 13 battery life" → `hw-cat#15` ("up to 18 hours").',
+              'Embedding the raw message returned the battery *replacement* policy instead.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'state' },
+              { say: 1 },
+              { send: ['classify', 'state'], label: 'source [2]?' },
+              { send: ['state', 'classify'], label: 'hw-cat#14', tone: 'ok' },
+              { say: 2 },
+              { send: ['condense', 'retriever'], label: 'MacBook Air 13 battery' },
+              { badge: 'retriever', text: 'up to 18 hours', tone: 'ok', ms: 1300 },
+              { say: 3 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a topic switch',
+            lines: ['Turn 4: "new question: monitor expense limit?"'],
+            task: {
+              type: 'choose',
+              question: 'What should the condense step do with this message?',
+              options: [
+                { text: 'Condense it with no history: "monitor expense limit"' },
+                {
+                  text: 'Condense it with the last turns',
+                  why: 'The rewriter produced "MacBook Air monitor expense limit" and recall@5 fell from 0.92 to 0.61 on such turns.',
+                },
+                {
+                  text: 'Skip retrieval, like "thanks!"',
+                  why: 'It is a new question that needs a search; only turns like "thanks" or "make it shorter" skip retrieval.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'On a topic switch, old history drags the old topic into the new query: drop it.',
+            then: [
+              { send: ['classify', 'condense'], label: 'topic switch' },
+              { send: ['condense', 'retriever'], label: 'monitor expense limit', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What history to keep',
+            lines: [
+              'Keep the last 2–4 turns verbatim and the cited source ids per turn.',
+              '**Not** old retrieved chunk text: stale, expensive, and it confuses the rewriter.',
+              'Safe default: rewrite only follow-ups, also search with the original message, fuse with RRF.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'state'], label: 'ids + titles' },
+              { say: 1 },
+              { badge: 'state', text: 'no chunk text', tone: 'miss', ms: 1300 },
+              { say: 2 },
+              { send: ['condense', 'retriever'], label: 'rewrite' },
+              { send: ['user', 'retriever'], label: 'original', curve: true },
+              { badge: 'retriever', text: 'RRF', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** in a chat, the latest message is rarely a complete question. "What about the second one?" means nothing to a retriever on its own. Conversational RAG adds a **condense step**, which turns history + new message into one standalone query, and **turn state**, which remembers what the bot showed. General query rewriting (typos, expansion, step-back) is covered in *Query Transformation*; this section covers what is specific to multi-turn chat.
 
 **Per turn:**
@@ -1220,6 +1771,114 @@ export function resolveSourceRef(message: string, lastSources: Source[]): Source
     },
     {
       heading: 'Permission-aware Retrieval — document ACLs, pre-filtering by user and tenant, and leak-proof caches',
+      steps: {
+        actors: [
+          { id: 'alice', kind: 'user', label: 'Alice', sub: 'all-staff, eng', x: 110, y: 70 },
+          { id: 'bob', kind: 'user', label: 'Bob', sub: 'group:hr-comp', x: 110, y: 230 },
+          { id: 'filter', kind: 'guard', label: 'ACL pre-filter', sub: 'tenant + principals', x: 340, y: 150 },
+          { id: 'store', kind: 'vector-db', label: 'Vector store', sub: 'chunks + ACL', x: 570, y: 70 },
+          { id: 'cache', kind: 'cache', label: 'Answer cache', sub: 'keyed by ?', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'sees allowed only', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The one rule',
+            lines: [
+              'A user must never retrieve a chunk they could not open in the source system.',
+              'And the model must never see one: anything in the prompt can end up in the answer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['alice', 'filter'], label: 'L5 salary band?' },
+              { send: ['filter', 'store'], label: 'allowed only' },
+              { say: 1 },
+              { send: ['store', 'llm'], label: 'handbook', tone: 'ok' },
+              { lit: 'llm' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Index time: copy the ACL onto every chunk',
+            lines: [
+              'Each chunk carries `tenant_id` and `acl_principals`, e.g. `["user:42", "group:hr-comp"]`.',
+              'Chunks inherit their document\'s ACL.',
+              'Derived artefacts (summaries, headers, entities, embeddings) take the **most restrictive** ACL of their sources.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'store', text: 'tenant + ACL', ms: 1300 },
+              { say: 1 },
+              { lit: 'store' },
+              { say: 2 },
+              { badge: 'store', text: 'most restrictive', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where does the filter go?',
+            lines: ['Post-filter: top-5 = 4 salary-band chunks + 1 handbook chunk; dropping forbidden hits leaves 1 weak chunk.'],
+            task: {
+              type: 'choose',
+              question: 'Where must the ACL filter run?',
+              options: [
+                { text: 'Inside the vector query: `tenant_id = ? AND acl_principals overlaps (?)`' },
+                {
+                  text: 'After top-k, dropping forbidden hits',
+                  why: 'It returns too few results, often zero, and the forbidden chunks have already left the store (here, into the trace log).',
+                },
+                { text: 'On the generated answer', why: 'Far too late: the model has already read the forbidden text.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pre-filter inside the search: Alice\'s best hit is the handbook, and the bot points her to HR.',
+            then: [{ send: ['alice', 'filter'], label: 'principals' }, { send: ['filter', 'store'], label: 'pre-filtered', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the cache leak',
+            lines: [
+              '09:00 Bob (hr-comp) asks for the L5 band; the answer is cached by question text alone.',
+              '09:05 Alice asks the same question and gets "L5: $150K–$185K".',
+            ],
+            task: {
+              type: 'choose',
+              question: 'How should the answer cache be keyed?',
+              options: [
+                { text: 'hash(tenant + sorted principals) + hash(question)' },
+                { text: 'hash(question), with a shorter TTL', why: 'A shorter TTL only narrows the window; Alice can still hit Bob\'s entry.' },
+                { text: 'hash(user id) only', why: 'The key must include the question too, or one user\'s different questions collide.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Scope every cache by tenant + principals: Alice and Bob now get separate entries.',
+            setup: [{ send: ['bob', 'cache'], label: 'L5 band' }, { send: ['cache', 'alice'], label: '$150K–$185K', tone: 'err', curve: true }],
+            then: [
+              { send: ['bob', 'cache'], label: 'key: hr-comp' },
+              { send: ['alice', 'filter'], label: 'key: all-staff' },
+              { badge: 'cache', text: 'separate entries', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Groups, revocations and canaries',
+            lines: [
+              'Store **group** principals on chunks, so a membership change needs no re-index.',
+              'Resolve the caller\'s groups at query time with a short cache TTL (e.g. 5 min).',
+              'Nightly canary: one test user per group asks for known-forbidden docs; any hit alerts.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'store', text: 'group:hr-comp', ms: 1300 },
+              { say: 1 },
+              { send: ['alice', 'filter'], label: 'groups (5 min)' },
+              { say: 2 },
+              { send: ['bob', 'filter'], label: 'canary' },
+              { badge: 'filter', text: '0 forbidden hits', tone: 'ok', ms: 1300 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** RAG turns your search index into a new way to read documents. If the index ignores permissions, anyone can ask the bot about the CEO's compensation memo. The rule: **a user must never retrieve a chunk they could not open in the source system**, and the model must never see one, because anything in the prompt can end up in the answer.
 
 **Index time: copy the ACL onto every chunk.**

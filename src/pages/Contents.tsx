@@ -3,30 +3,17 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSPropert
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronDown, CirclePlay, Search } from 'lucide-react';
-import { COMPANY_QUESTIONS, LEVELS, PHASES, TOPICS } from '../content';
-import { PROJECTS, projectsForTopic } from '../content/projects';
+import { LEVELS, PHASES, TOPICS } from '../content';
+import { projectsForTopic } from '../content/projects';
 import { useProgress } from '../lib/progress';
-import { companyUnlocked, topicCompletion, topicStatus, type TopicStatus } from '../lib/stats';
+import { topicCompletion, topicStatus, type TopicStatus } from '../lib/stats';
 import { codeLabLabel } from '../lib/nextStep';
-import { currentlyWrong, weakTopics } from '../lib/weak';
-import { VIZ, vizForSection } from '../viz/registry';
+import { vizForSection } from '../viz/registry';
 import type { TopicMeta } from '../types';
 
 /** section → has an interactive visualisation (computed once) */
 const VIZ_SECTIONS = new Map(TOPICS.map((t) => [t.id, t.sections.map((s) => vizForSection(t.id, s.heading).length > 0)]));
 
-const TOTALS: [string, number][] = [
-  ['Phases', PHASES.filter((ph) => TOPICS.some((t) => t.phase === ph.id)).length],
-  ['Topics', TOPICS.length],
-  ['Sections', TOPICS.reduce((a, t) => a + t.sections.length, 0)],
-  ['Animations', VIZ.length],
-  ['Coding exercises', TOPICS.reduce((a, t) => a + t.sections.filter((s) => s.exercise).length, 0)],
-  ['Code labs', TOPICS.reduce((a, t) => a + t.codeChallenges.length, 0)],
-  ['Interview Qs', TOPICS.reduce((a, t) => a + t.interviewQuestions.length, 0)],
-  ['Estimation drills', TOPICS.reduce((a, t) => a + t.envelopeQuestions.length, 0)],
-  ['Exam questions', TOPICS.reduce((a, t) => a + t.test.length, 0)],
-  ['Challenges', COMPANY_QUESTIONS.length],
-];
 
 const NUMERALS = ['I', 'II', 'III'];
 const STATUS_LABEL: Record<TopicStatus, string> = {
@@ -67,6 +54,8 @@ const PLANET_LABEL: Record<PlanetState, string> = {
 /** orbit diameter as a share of the galaxy, inner → outer (I, II, III) */
 const ORBIT_SIZE = [30, 61, 91];
 
+const OPENED_KEY = 'genai-syllabus-opened';
+
 export default function ContentsPage() {
   const p = useProgress();
   const nav = useNavigate();
@@ -74,7 +63,22 @@ export default function ContentsPage() {
   const [query, setQuery] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [onlyViz, setOnlyViz] = useState(false);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // phases start collapsed; this holds the ones opened
+  const [opened, setOpened] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(OPENED_KEY) ?? '{}') as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  // remembered for the session, so Back from a topic returns to the same open phases
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(OPENED_KEY, JSON.stringify(opened));
+    } catch {
+      /* storage blocked: phases just start collapsed */
+    }
+  }, [opened]);
   const q = useDeferredValue(query.trim().toLowerCase());
   const filtering = !!q || onlyUnread || onlyViz;
 
@@ -110,7 +114,7 @@ export default function ContentsPage() {
   }, [p.sections, q, onlyUnread, onlyViz]);
 
   /** per-phase progress for the galaxy and the level panels */
-  const { rows: orbit, current } = useMemo(() => {
+  const { rows: orbit } = useMemo(() => {
     const rows = PHASES.map((ph) => {
       const ts = TOPICS.filter((t) => t.phase === ph.id);
       const st = ts.map((t) => topicStatus(p, t));
@@ -152,7 +156,7 @@ export default function ContentsPage() {
     nav({ hash: id }, { replace: true });
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     // a collapsed phase opens when you jump to it
-    if (id.startsWith('phase-')) setCollapsed((c) => ({ ...c, [id.slice(6)]: false }));
+    if (id.startsWith('phase-')) setOpened((o) => ({ ...o, [id.slice(6)]: true }));
     requestAnimationFrame(() =>
       document.getElementById(id)?.scrollIntoView({
         behavior: smooth ? 'smooth' : 'auto',
@@ -160,7 +164,7 @@ export default function ContentsPage() {
       }),
     );
   };
-  const setAll = (value: boolean) => setCollapsed(Object.fromEntries(PHASES.map((ph) => [ph.id, value])));
+  const setAll = (open: boolean) => setOpened(Object.fromEntries(PHASES.map((ph) => [ph.id, open])));
   const phaseCount = orbit.length;
 
   return (
@@ -174,21 +178,14 @@ export default function ContentsPage() {
             <span className="gtext">The GenAI universe</span>
           </h1>
           <p className="syl-lead">
-            {covered} of {TOPICS.length} topics covered. Search it, filter it, or open any tab of a topic directly.
+            {covered} of {TOPICS.length} topics covered. Open a phase to see its topics, or search below.
           </p>
-        </div>
-        <div className="syl-search-wrap" role="search">
-          <label className="syl-search glass">
-            <Search size={18} aria-hidden />
-            <span className="sr-only">Search the syllabus</span>
-            <input type="search" placeholder="Search topics, sections, keywords…" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </label>
         </div>
       </header>
 
       {!filtering && (
         <>
-          <figure className="syl-galaxy" aria-labelledby="syl-galaxy-cap">
+          <figure className="syl-galaxy" aria-labelledby="syl-galaxy-cap" data-guide="syl-galaxy">
             <figcaption id="syl-galaxy-cap" className="sr-only">
               Galaxy map: {coveredPct}% of topics covered.{' '}
               {LEVELS.map((lv, li) => {
@@ -244,69 +241,18 @@ export default function ContentsPage() {
             </ul>
           </figure>
 
-          <div className="syl-overview">
-            {LEVELS.map((lv, li) => {
-              const rows = orbit.filter((r) => r.ph.level === lv.id);
-              const passed = rows.reduce((a, r) => a + r.passed, 0);
-              const total = rows.reduce((a, r) => a + r.total, 0);
-              return (
-                <section key={lv.id} className={`syl-panel lv-${li + 1}`} aria-labelledby={`syl-ov-${lv.id}`}>
-                  <header className="syl-panel-head">
-                    <span className="syl-panel-num" aria-hidden>
-                      {NUMERALS[li]}
-                    </span>
-                    <h2 id={`syl-ov-${lv.id}`}>
-                      <span className="sr-only">Level {NUMERALS[li]}: </span>
-                      {lv.title}
-                    </h2>
-                    <span className="syl-panel-count">
-                      {passed}/{total}
-                      <span className="sr-only"> topics covered</span>
-                    </span>
-                  </header>
-                  <ul className="syl-prows">
-                    {rows.map((r) => (
-                      <li key={r.ph.id}>
-                        <a
-                          href={`#phase-${r.ph.id}`}
-                          className={`syl-prow s-${r.state} ${r.ph.id === current ? 'cur' : ''}`}
-                          aria-current={r.ph.id === current ? 'location' : undefined}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            jump(`phase-${r.ph.id}`);
-                          }}
-                        >
-                          <span className="syl-prow-num">{pad(r.ph.number)}</span>
-                          <span className="syl-prow-title">{r.ph.title}</span>
-                          <span className="syl-meter" aria-hidden>
-                            <span style={{ width: `${r.meter}%` }} />
-                          </span>
-                          <span className="syl-prow-count">
-                            {r.passed}/{r.total}
-                            <span className="sr-only"> topics covered, {PLANET_LABEL[r.state]}</span>
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
-
-          <dl className="syl-totals" aria-label="Course totals">
-            {TOTALS.map(([label, n]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{n}</dd>
-              </div>
-            ))}
-          </dl>
         </>
       )}
 
-      <div className="syl-tools" role="group" aria-label="Filters">
+      <div className="syl-tools" role="group" aria-label="Search and filters">
         <div className="syl-filters">
+          <div className="syl-search-wrap" role="search" data-guide="syl-search">
+            <label className="syl-search glass">
+              <Search size={16} aria-hidden />
+              <span className="sr-only">Search the syllabus</span>
+              <input type="search" placeholder="Search topics, sections, keywords…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </label>
+          </div>
           <button type="button" className={`chip ${onlyUnread ? 'on' : ''}`} aria-pressed={onlyUnread} onClick={() => setOnlyUnread((v) => !v)}>
             Only unread
           </button>
@@ -326,45 +272,19 @@ export default function ContentsPage() {
               Clear
             </button>
           )}
-          <span className="syl-filters-end">
+          <span className="syl-filters-end" data-guide="syl-expand">
             <span className="syl-match" aria-live="polite">
               {filtering ? `${matchCount} topic${matchCount === 1 ? '' : 's'} match` : ''}
             </span>
-            <button type="button" className="link-btn small" onClick={() => setAll(false)} disabled={filtering}>
+            <button type="button" className="link-btn small" onClick={() => setAll(true)} disabled={filtering}>
               Expand all
             </button>
-            <button type="button" className="link-btn small" onClick={() => setAll(true)} disabled={filtering}>
+            <button type="button" className="link-btn small" onClick={() => setAll(false)} disabled={filtering}>
               Collapse all
             </button>
           </span>
         </div>
       </div>
-
-      <nav className="syl-jump" aria-label="Jump to phase">
-        <ol>
-          {phases.map(({ ph, views }) => {
-            const st = orbit.find((r) => r.ph.id === ph.id)?.state ?? 'ahead';
-            return (
-              <li key={ph.id}>
-                <button
-                  type="button"
-                  className={`j-${st} ${filtering && !views.length ? 'dim' : ''}`}
-                  onClick={() => jump(`phase-${ph.id}`)}
-                  title={ph.title}
-                  aria-label={`Phase ${ph.number}: ${ph.title}`}
-                >
-                  {pad(ph.number)}
-                </button>
-              </li>
-            );
-          })}
-          <li>
-            <button type="button" className="syl-jump-tools" onClick={() => jump('phase-tools')}>
-              Practice &amp; tools
-            </button>
-          </li>
-        </ol>
-      </nav>
 
       {filtering && matchCount === 0 && <p className="syl-empty">Nothing in the syllabus matches. Try a shorter search or clear the filters.</p>}
 
@@ -375,7 +295,7 @@ export default function ContentsPage() {
         const lvPassed = lvTopics.filter((t) => topicStatus(p, t) === 'passed').length;
         return (
           <section key={lv.id} className={`syl-level lv-${li + 1}`} aria-labelledby={`syl-level-${lv.id}`}>
-            <header className="syl-level-head">
+            <header className="syl-level-head" data-guide="syl-level">
               <span className="syl-numeral" aria-hidden>
                 {NUMERALS[li]}
               </span>
@@ -393,7 +313,8 @@ export default function ContentsPage() {
 
             {lvPhases.map(({ ph, views, total }) => {
               const passed = TOPICS.filter((t) => t.phase === ph.id && topicStatus(p, t) === 'passed').length;
-              const open = filtering || !collapsed[ph.id];
+              // a deep link (#phase-<id>) opens its phase until it is toggled
+              const open = filtering || (opened[ph.id] ?? hash === `#phase-${ph.id}`);
               const st = orbit.find((r) => r.ph.id === ph.id)?.state ?? 'ahead';
               return (
                 <section key={ph.id} id={`phase-${ph.id}`} className={`syl-phase s-${st}`} aria-labelledby={`syl-ph-${ph.id}`}>
@@ -405,7 +326,7 @@ export default function ContentsPage() {
                       aria-expanded={open}
                       aria-controls={`syl-body-${ph.id}`}
                       disabled={filtering}
-                      onClick={() => setCollapsed((c) => ({ ...c, [ph.id]: !c[ph.id] }))}
+                      onClick={() => setOpened((o) => ({ ...o, [ph.id]: !open }))}
                     >
                       <span className="syl-phase-num">{pad(ph.number)}</span>
                       <span className="syl-phase-text">
@@ -445,7 +366,6 @@ export default function ContentsPage() {
         );
       })}
 
-      <ToolsGroup />
     </div>
   );
 }
@@ -616,7 +536,7 @@ function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: numb
               {listed.map((i) => (
                 <li key={i} className={read.has(i) ? 'read' : ''}>
                   <Link to={`${base}?tab=learn&s=${i}`}>
-                    <span className="syl-sec-num">§{i + 1}</span>
+                    <span className="syl-sec-num">{i + 1}</span>
                     <span className="syl-sec-title">
                       <Hl text={t.sections[i].heading} q={q} />
                     </span>
@@ -633,86 +553,3 @@ function TopicRow({ view, phaseNumber, q }: { view: TopicView; phaseNumber: numb
   );
 }
 
-function ToolsGroup() {
-  const p = useProgress();
-  const { unlocked, remaining } = companyUnlocked(p, TOPICS);
-  const companyDone = COMPANY_QUESTIONS.filter((q) => p.company[q.id]).length;
-  const weak = weakTopics(p, TOPICS).length;
-  const mistakes = TOPICS.reduce((a, t) => a + currentlyWrong(p, t).length, 0);
-  const rows: {
-    to: string;
-    title: string;
-    desc: string;
-    state: string;
-    flag?: boolean;
-  }[] = [
-    {
-      to: '/challenges',
-      title: 'Architecture challenges',
-      desc: `${COMPANY_QUESTIONS.length} end-to-end GenAI system design challenges with a mock-interview timer.`,
-      state: unlocked
-        ? `${companyDone}/${COMPANY_QUESTIONS.length} done`
-        : `Locked · ${remaining.length} exam${remaining.length === 1 ? '' : 's'} to pass`,
-    },
-    {
-      to: '/weak-areas',
-      title: 'Weak areas',
-      desc: 'The sections behind the questions you miss.',
-      state: weak ? `${weak} topic${weak === 1 ? '' : 's'} need work` : 'Nothing yet',
-      flag: weak > 0,
-    },
-    {
-      to: '/practice',
-      title: 'Practice',
-      desc: 'A timed drill of every exam question you currently get wrong.',
-      state: `${mistakes} question${mistakes === 1 ? '' : 's'}`,
-      flag: mistakes > 0,
-    },
-    {
-      to: '/settings',
-      title: 'Settings',
-      desc: 'Pass mark, exam timing, study-first lock, theme, coach tips, guide and reset.',
-      state: '',
-    },
-  ];
-  return (
-    <section id="phase-tools" className="syl-tools-group" aria-labelledby="syl-tools-title">
-      <header className="syl-level-head">
-        <span className="syl-numeral" aria-hidden>
-          §
-        </span>
-        <div>
-          <h2 id="syl-tools-title">Practice &amp; tools</h2>
-          <p>Everything outside the topic pages.</p>
-        </div>
-      </header>
-      <ul className="syl-toollist">
-        {rows.map((r) => (
-          <li key={r.to}>
-            <Link to={r.to} className="syl-tool-title">
-              {r.title}
-            </Link>
-            <span className="syl-tool-desc">{r.desc}</span>
-            <span className={`syl-tool-state ${r.flag ? 'flag' : ''}`}>{r.state}</span>
-          </li>
-        ))}
-        {PROJECTS.length > 0 && (
-          <li>
-            <span className="syl-tool-title">Capstone projects</span>
-            <span className="syl-tool-desc">
-              Real code projects in this repo, judged by tests:{' '}
-              {PROJECTS.map((pr, i) => (
-                <span key={pr.id}>
-                  {i > 0 && ', '}
-                  <Link to={`/topic/${pr.topics[0]}?tab=capstone`}>{pr.title}</Link>
-                </span>
-              ))}
-              .
-            </span>
-            <span className="syl-tool-state">{PROJECTS.length}</span>
-          </li>
-        )}
-      </ul>
-    </section>
-  );
-}

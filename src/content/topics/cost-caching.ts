@@ -37,6 +37,104 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Cost Optimization — the levers and their order',
+      steps: {
+        actors: [
+          { id: 'reqs', kind: 'user', label: 'Requests', sub: '1M / month', x: 110, y: 70 },
+          { id: 'router', kind: 'server', label: 'Router', sub: 'easy vs hard', x: 340, y: 70 },
+          { id: 'small', kind: 'llm', label: 'Small model', sub: 'easy requests', x: 570, y: 70 },
+          { id: 'bill', kind: 'metric', label: 'Monthly bill', sub: '$16,500 baseline', x: 800, y: 70 },
+          { id: 'cache', kind: 'cache', label: 'Prompt cache', sub: 'static prefix', x: 340, y: 230 },
+          { id: 'premium', kind: 'llm', label: 'Premium model', sub: 'hard requests', x: 570, y: 230 },
+          { id: 'eval', kind: 'judge', label: 'Eval suite', sub: 'quality unchanged?', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A taxi meter with two rates',
+            lines: [
+              'Input tokens are the luggage; output tokens are the distance, at a much higher rate.',
+              'cost = calls × (input × p_in + cached × p_cache + output × p_out).',
+              'Every lever attacks one factor of that equation.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['reqs', 'premium'], label: '3,500 in', curve: true },
+              { send: ['premium', 'bill'], label: '400 out', tone: 'miss' },
+              { say: 1 },
+              { badge: 'bill', text: '$16,500/mo', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { lit: 'router' },
+              { lit: 'cache' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Route, then cache',
+            lines: [
+              'Route 70% of traffic to a small model: about **$6,123** a month.',
+              'Cache the 3,000-token static prefix: about **$3,220**.',
+              'Shorter answers (250 tokens) cut output a further ~37%.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['reqs', 'router'], label: 'all traffic' },
+              { send: ['router', 'small'], label: '70%', tone: 'ok' },
+              { send: ['router', 'premium'], label: '30%' },
+              { say: 1 },
+              { send: ['cache', 'premium'], label: 'cached prefix', tone: 'ok' },
+              { say: 2 },
+              { badge: 'bill', text: '≈ 80% saving', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: nobody is waiting',
+            lines: ['A nightly report job: no human is waiting for the answer.'],
+            task: {
+              type: 'choose',
+              question: 'Which lever fits work a human is not waiting on?',
+              options: [
+                { text: 'The batch API (~50% saving, up to 24 h latency)' },
+                { text: 'Semantic response caching', why: 'Caching pays off for repeated prefixes or questions, not because nobody is waiting.' },
+                { text: 'Model routing', why: 'Routing is for mixed-difficulty traffic.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Batch anything a human is not waiting on; route mixed-difficulty traffic; cache repeated prefixes and questions.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the process',
+            lines: ['Cutting cost is a loop, not a one-off switch.'],
+            task: {
+              type: 'order',
+              question: 'Put the cost-optimisation process in order.',
+              items: ['Attribute cost per feature', 'Pick the top 2–3 features', 'Apply the lever', 'Run the eval suite', 'Watch cost per request in production'],
+              hint: 'You cannot pick targets before you can see where the money goes; proof of quality comes before you watch production.',
+            },
+            solved: 'Attribute → pick the top features → apply a lever → prove quality with evals → watch production.',
+            then: [{ send: ['premium', 'eval'], label: 'same quality?' }, { badge: 'eval', text: 'within 1 pt', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Every lever has a risk',
+            lines: [
+              'Routing: quality drops on misrouted requests.',
+              'Capping output: truncation (`finish_reason = length`).',
+              'So the saving ships only with an eval showing quality held.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['router', 'small'], label: 'hard request', tone: 'err' },
+              { say: 1 },
+              { badge: 'premium', text: 'finish = length', tone: 'err', ms: 1200 },
+              { say: 2 },
+              { send: ['small', 'eval'], label: 'gate', curve: true },
+              { lit: 'eval' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an LLM bill is a taxi meter with two rates: one for the luggage you load (input tokens) and a much higher one for the distance driven (output tokens). You save most by taking a cheaper car for short trips, carrying less luggage and not driving further than needed.
 
 **The cost equation:** monthly cost = Σ over features of calls × (input tokens × p_in + cached tokens × p_cache + output tokens × p_out). Every lever attacks one factor.
@@ -185,6 +283,186 @@ console.log(monthlyCost({ ...base, batchShare: 0.5 })); // 6075`,
     },
     {
       heading: 'Semantic Caching — reuse answers for similar questions, safely',
+      steps: {
+        actors: [
+          { id: 'query', kind: 'user', label: 'Query', sub: 'forgot password…', x: 110, y: 70 },
+          { id: 'exact', kind: 'cache', label: 'Exact cache', sub: 'hash of the query', x: 340, y: 70 },
+          { id: 'embed', kind: 'embedder', label: 'Embed query', sub: 'vector', x: 570, y: 70 },
+          { id: 'semantic', kind: 'vector-db', label: 'Semantic cache', sub: 'tenant·model·prompt', x: 800, y: 70 },
+          { id: 'pairs', kind: 'data', label: 'Labelled pairs', sub: 'same / different', x: 340, y: 230 },
+          { id: 'threshold', kind: 'guard', label: 'Threshold', sub: 'cosine ≥ 0.95', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'only on a miss', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Same meaning, different words',
+            lines: [
+              'An exact cache only helps when the identical question comes again.',
+              'A semantic cache sees that "How do I reset my password?" and "forgot password, how to reset" mean the same.',
+              'It serves the stored answer for free in ~10 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['query', 'exact'], label: 'new wording', tone: 'miss' },
+              { say: 1 },
+              { send: ['exact', 'embed'], label: 'query' },
+              { send: ['embed', 'semantic'], label: 'vector' },
+              { say: 2 },
+              { send: ['semantic', 'query'], label: 'stored answer', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the lookup',
+            lines: ['Each request walks the cheapest checks first.'],
+            task: {
+              type: 'order',
+              question: 'Put the semantic-cache lookup in order.',
+              items: ['Normalise and try the exact cache', 'Embed the query', 'Search the scoped cache', 'Compare with the threshold', 'On a miss, call the LLM and store'],
+              hint: 'The exact hash is cheapest; the LLM only runs when nothing close enough is found.',
+            },
+            solved: 'Exact cache → embed → scoped vector search → threshold → LLM and store only on a miss.',
+            then: [
+              { send: ['query', 'exact'] },
+              { send: ['exact', 'embed'] },
+              { send: ['embed', 'semantic'] },
+              { send: ['semantic', 'threshold'], curve: true },
+              { send: ['threshold', 'llm'], label: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Picking the threshold',
+            lines: [
+              'Label 300–500 query pairs (same intent / different intent) and sweep the threshold.',
+              'HR bot: 0.93 gave 3.2% false hits; 0.95 gave 0.6%; 0.97 dropped the hit rate to 18%.',
+              'It chose **0.95** plus a rule that numbers and countries must match.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pairs', 'threshold'], label: 'sweep' },
+              { say: 1 },
+              { badge: 'threshold', text: '0.93: 3.2% false', tone: 'err', ms: 1000 },
+              { badge: 'threshold', text: '0.97: 18% hits', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { badge: 'threshold', text: '0.95 + rules', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: never cache this',
+            lines: ['Some answers depend on who is asking.'],
+            task: {
+              type: 'choose',
+              question: 'Which question should never be answered from the semantic cache?',
+              options: [
+                { text: '"What\'s my balance?"' },
+                { text: '"How do I reset my password?"', why: 'A FAQ-like question is exactly what the cache is for.' },
+                { text: '"forgot password, how to reset"', why: 'Same intent as the password FAQ: a good cache hit.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Never cache user-specific or tool-derived answers; FAQ-like, high-repeat questions are the sweet spot.',
+            then: [{ send: ['threshold', 'llm'], label: 'personal: skip cache' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Keep hits safe',
+            lines: [
+              'Put the tenant id in the cache key or filter, always.',
+              '"cancel my order" vs "don\'t cancel my order" scores 0.95: check entities, verify, or raise the threshold.',
+              'Store source doc ids: re-ingesting a doc invalidates its entries.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'semantic', text: 'tenant scoped', tone: 'ok', ms: 1200 },
+              { say: 1 },
+              { badge: 'threshold', text: 'negation!', tone: 'err', ms: 1200 },
+              { say: 2 },
+              { badge: 'semantic', text: 'invalidate 1,900', tone: 'miss', ms: 1200 },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'semantic-cache-false-hits',
+        title: 'Semantic caching without wrong answers',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'An HR help bot · 40K questions a day',
+            value: 31,
+            suffix: '%',
+            unit: 'of questions would hit the cache',
+            sub: 'A week of logs replayed at similarity threshold **0.95**.',
+            stats: [
+              { value: '$50', label: 'saved a day' },
+              { value: 15, label: 'ms p50 for a hit' },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'How a semantic cache answers',
+            head: 'Exact first, *similar* second',
+            steps: [
+              'Normalise; try the exact hash cache',
+              'Embed the query (1536-d)',
+              'Search scoped by tenant, model, prompt version',
+              'cos ≥ 0.95 and entities match: cached answer',
+              'Otherwise call the LLM and store the result',
+            ],
+          },
+          {
+            type: 'claims',
+            kicker: 'Similar is not the same',
+            head: 'Close vectors, *wrong* answers',
+            claims: [
+              { text: '"forgot password, how to reset" gets the "reset my password" answer', ok: true },
+              { text: '"don\'t cancel my order" gets the "cancel my order" answer', ok: false, note: 'cos 0.95' },
+              { text: '"parental leave US" gets the "parental leave UK" answer', ok: false, note: 'cos 0.94' },
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: '400 labelled query pairs',
+            head: 'Pick the threshold on *false hits*',
+            rungs: [
+              { label: 'Threshold 0.93', amount: 3.2 },
+              { label: 'Threshold 0.95', amount: 0.6 },
+            ],
+            unit: '% false hits',
+            sub: 'At **0.97** the hit rate fell to 18%. They chose 0.95 plus a rule that numbers and countries must match.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'What may be served from cache',
+            head: 'Some answers are *never* shareable',
+            items: [
+              { label: 'FAQ-style answers, scoped and with a TTL', keep: true },
+              { label: '"What\'s my balance?"' },
+              { label: 'Tool-derived answers' },
+              { label: 'Tenant A\'s answer to tenant B' },
+            ],
+            keepLabel: 'Cache',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Hit rate is 45% and wrong-answer complaints rose after launch. Best first diagnostic?',
+            answer: 1,
+            options: [
+              { text: 'Lower the threshold to raise the hit rate', why: 'That serves even more false hits.' },
+              { text: 'Label a sample of hits near the threshold', why: 'It measures the false-hit rate and shows the pattern (negations, entities, staleness) before you pick a fix.' },
+              { text: 'Shorten the TTL to one minute', why: 'Staleness is only one cause; changing TTL blindly may not touch the real one.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Tune for *false hits*, not hit rate.',
+          sub: 'Exact cache first, semantic second, **scoped by tenant**, with TTL and doc-based invalidation.',
+        },
+      },
       body: `**Intuition:** an exact cache only helps if someone types the identical question. A semantic cache recognises that "How do I reset my password?" and "forgot password, how to reset" mean the same thing, and serves the stored answer for free in ~10 ms.
 
 **Mechanics**
@@ -348,6 +626,100 @@ console.log(pickThreshold(pairs, 0.0)); // { threshold: 0.96, falseHitRate: 0, h
     },
     {
       heading: 'Prompt Caching — provider-side prefix caching and cache-friendly prompts',
+      steps: {
+        actors: [
+          { id: 'tools', kind: 'tool', label: 'Tools', sub: 'stable order', x: 110, y: 70 },
+          { id: 'system', kind: 'document', label: 'System prompt', sub: 'instructions', x: 340, y: 70 },
+          { id: 'doc', kind: 'document', label: 'Contract', sub: '40K tokens', x: 570, y: 70 },
+          { id: 'question', kind: 'user', label: 'New question', sub: 'per request, last', x: 800, y: 70 },
+          { id: 'cache', kind: 'cache', label: 'Provider cache', sub: 'KV for the prefix', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'prefills new part', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Remember the unchanged beginning',
+            lines: [
+              'Without caching, the model re-reads your long document on every request.',
+              'Prompt caching keeps the internal state (KV cache) for the **unchanged beginning**.',
+              'Only the new part is processed: cheaper and faster.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'llm'], label: '42K tokens again', tone: 'miss' },
+              { say: 1 },
+              { send: ['doc', 'cache'], label: 'prefix → KV', curve: true },
+              { say: 2 },
+              { send: ['cache', 'llm'], label: 'cache read', tone: 'ok' },
+              { send: ['question', 'llm'], label: 'new tokens' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'It is a prefix match',
+            lines: [
+              'The cache key is the exact token sequence **from the start**.',
+              'Change one early token, like a timestamp in the system prompt, and everything after it misses.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'tools' },
+              { lit: 'system' },
+              { lit: 'doc' },
+              { say: 1 },
+              { badge: 'system', text: 'time: 14:03:27', tone: 'err', ms: 1400 },
+              { send: ['cache', 'llm'], label: 'miss', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a cache-friendly layout',
+            lines: ['Static first, slow-changing next, per-request last.'],
+            task: {
+              type: 'order',
+              question: 'Order the prompt for the best cache hits.',
+              items: ['Tools and system instructions', 'Few-shot examples and large documents', 'Conversation history', 'The new user message'],
+              hint: 'What never changes goes first; what changes on every request goes last.',
+            },
+            solved: 'Static → slow-changing → per-request, with timestamps and request ids at the end or left out.',
+            then: [{ send: ['tools', 'cache'] }, { send: ['system', 'cache'] }, { send: ['doc', 'cache'], curve: true }, { send: ['question', 'llm'], label: 'new part' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Ten questions on one contract',
+            lines: [
+              '40K-token contract + 2K of instructions, 10 questions in 3 minutes.',
+              'No caching: **$1.26**. With a breakpoint after the contract: **≈ $0.27**, a 79% saving.',
+              'TTFT fell from ~3.1 s to ~0.9 s because the big prefill was skipped.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'cache'], label: 'write 1.25×' },
+              { say: 1 },
+              { send: ['cache', 'llm'], label: 'read 0.1×', tone: 'ok', count: 3 },
+              { say: 2 },
+              { badge: 'llm', text: 'TTFT ~0.9 s', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: break-even',
+            lines: ['Anthropic, 5-minute TTL: the first request pays 1.25× to write; each hit pays ~0.1×.'],
+            task: {
+              type: 'choose',
+              question: 'When does caching start to pay off?',
+              options: [
+                { text: 'From the second request that reuses the prefix within the TTL' },
+                { text: 'Only after about ten hits', why: 'One hit at ~0.1× already saves more than the 0.25× extra paid on the write.' },
+                { text: 'Never, with only a 5-minute TTL', why: 'Each hit refreshes the TTL, and one hit within it is already enough to pay off.' },
+              ],
+              answer: 0,
+            },
+            solved: 'One write at 1.25× plus hits at ~0.1×: caching pays from the second request within the TTL.',
+            then: [{ send: ['cache', 'llm'], label: 'hit', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** the model re-reads your 10-page manual on every request. Prompt caching lets the provider remember its internal state (the KV cache) for the *unchanged beginning* of the prompt, so it only processes the new part: cheaper and faster.
 
 **It is a prefix match.** The cache key is the exact token sequence from the start. Change one token early (a timestamp in the system prompt) and everything after it misses.
@@ -500,6 +872,102 @@ console.log(cacheSavings({ prefixTokens: 40000, suffixTokens: 100, callsWithinTt
     },
     {
       heading: 'LLM FinOps — unit economics, attribution, budgets and forecasts',
+      steps: {
+        actors: [
+          { id: 'gateway', kind: 'server', label: 'Gateway', sub: 'tags at creation', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Support agent', sub: 'tenant·feature·route', x: 340, y: 70 },
+          { id: 'ledger', kind: 'data', label: 'Cost ledger', sub: 'per team & tenant', x: 570, y: 70 },
+          { id: 'budget', kind: 'guard', label: 'Budget ladder', sub: '80% · 90% · 100%', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human hand-off', sub: '$4 each', x: 340, y: 230 },
+          { id: 'unit', kind: 'metric', label: 'Cost / success', sub: 'per resolved task', x: 570, y: 230 },
+          { id: 'forecast', kind: 'metric', label: 'Forecast', sub: 'from drivers', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Cost per loaf, not per gram',
+            lines: [
+              'Report **$ per useful outcome** (a resolved ticket, a merged PR), owned by a team.',
+              '**Cost per task** = spend ÷ tasks attempted.',
+              '**Cost per successful task** = spend ÷ tasks that succeeded; failures and retries count too.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'ledger'], label: 'spend' },
+              { say: 1 },
+              { badge: 'unit', text: '$0.12 / conversation', ms: 1200 },
+              { say: 2 },
+              { send: ['ledger', 'unit'], label: '÷ resolved' },
+              { badge: 'unit', text: '$0.171 / resolved', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the cheaper model',
+            lines: ['A model 40% cheaper cuts spend from $24,000 to $14,400, but resolution falls from 70% to 55%.'],
+            task: {
+              type: 'choose',
+              question: 'Is the swap a saving?',
+              options: [
+                { text: 'No: counting $4 hand-offs, all-in cost rises from $264,000 to $374,400' },
+                { text: 'Yes: cost per resolved fell to $0.131', why: 'It looks better, but it ignores the human fallback: $110,400 a month worse.' },
+                { text: 'Yes: the token bill dropped 40%', why: 'The token bill went down while the business cost went up.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Only cost per successful task, with the human fallback included, shows the cheaper model costs more.',
+            then: [{ send: ['agent', 'human'], label: 'more hand-offs', tone: 'err', count: 3 }],
+          },
+          {
+            kind: 'watch',
+            title: 'Tag when the request is created',
+            lines: [
+              'Stamp tenant, feature, user, route and prompt version **at the gateway**.',
+              'Carry them through every agent step.',
+              'Tagging after the fact always leaves an "unattributed" bucket.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'gateway', text: 'tenant · feature', tone: 'ok', ms: 1200 },
+              { say: 1 },
+              { send: ['gateway', 'agent'], label: 'tags' },
+              { send: ['agent', 'ledger'], label: 'tagged spend', tone: 'ok' },
+              { say: 2 },
+              { badge: 'ledger', text: 'no unattributed', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the enforcement ladder',
+            lines: ['Budgets escalate from a gentle limit to a hard stop.'],
+            task: {
+              type: 'order',
+              question: 'Order the rungs of the enforcement ladder.',
+              items: ['Rate limit: 429 + Retry-After', 'Soft budget (80%): alert the team', 'Degrade (90%): cheaper model or batch', 'Hard cap (100%): block or override'],
+              hint: 'Per-minute limits come first; then follow the share of the budget used, from 80% up to 100%.',
+            },
+            solved: 'Rate limit → alert at 80% → degrade at 90% → hard cap at 100%; anomalies page on-call.',
+            then: [{ lit: 'budget' }, { badge: 'budget', text: '90%: degrade', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Forecast from drivers',
+            lines: [
+              'users × tasks per user × calls per task × tokens per call × price.',
+              'Watch **tokens per task** weekly: it drifts up silently as context grows.',
+              'Start with showback; move to chargeback once nearly all spend is attributed.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ledger', 'forecast'], label: 'drivers', curve: true },
+              { say: 1 },
+              { badge: 'forecast', text: 'tokens/task ↑', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { send: ['ledger', 'agent'], label: 'showback' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a bakery does not track the price of flour per gram; it tracks the cost of each loaf it *sells*, burnt loaves included. LLM FinOps does the same: report $ per useful outcome, owned by a team, with a budget and a forecast.
 
 **1. Unit economics.** Pick the unit the business sells or saves: a resolved ticket, a generated report, a merged PR, a completed agent task.

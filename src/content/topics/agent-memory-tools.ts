@@ -40,6 +40,107 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Agent Memory — the four kinds of memory an agent needs',
+      steps: {
+        actors: [
+          { id: 'working', kind: 'llm', label: 'Working', sub: 'the context window', x: 340, y: 150 },
+          { id: 'episodic', kind: 'data', label: 'Episodic', sub: 'what happened', x: 110, y: 70 },
+          { id: 'semantic', kind: 'data', label: 'Semantic', sub: 'facts, preferences', x: 110, y: 230 },
+          { id: 'procedural', kind: 'document', label: 'Procedural', sub: 'how to act', x: 570, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent loop', sub: 'read → act → write', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A stateless model',
+            lines: [
+              'An LLM starts from zero on every call.',
+              '"Memory" is whatever your code puts back into the prompt.',
+              'CoALA names four stores: working, episodic, semantic, procedural.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'working' },
+              { say: 1 },
+              { send: ['episodic', 'working'], label: 'episode' },
+              { send: ['semantic', 'working'], label: 'fact' },
+              { say: 2 },
+              { send: ['procedural', 'working'], label: 'rule' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: '"Add retries like last time"',
+            lines: [
+              '**Episodic** hit: last time, backoff with `p-retry`, 3 attempts, user approved.',
+              '**Semantic** hits: repo uses pnpm; user dislikes new dependencies.',
+              '**Procedural**: run `pnpm test` after edits.',
+              'Prompt: 2.6K tokens instead of replaying a 40K-token history.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['episodic', 'working'], label: '0.82 match' },
+              { say: 1 },
+              { send: ['semantic', 'working'], label: 'pnpm' },
+              { say: 2 },
+              { send: ['procedural', 'working'], label: 'pnpm test' },
+              { say: 3 },
+              { badge: 'working', text: '2.6K tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which store?',
+            lines: ['Each fact belongs in one kind of memory.'],
+            task: {
+              type: 'pick',
+              question: '"User prefers TypeScript, timezone IST." Where does it go?',
+              answer: 'semantic',
+              hints: {
+                episodic: 'Episodic holds what happened (a past run), not standing facts.',
+                procedural: 'Procedural holds how to act: prompts, tools, skills.',
+                working: 'Working memory is just the current context; it is gone next session.',
+              },
+            },
+            solved: 'Facts and preferences are semantic memory.',
+            then: [{ send: ['semantic', 'working'], label: 'TypeScript, IST', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one turn of memory',
+            lines: ['The hard parts are the policies, not the storage.'],
+            task: {
+              type: 'order',
+              question: 'Put a memory turn in order.',
+              items: ['Read relevant memories into working memory', 'Act (the agent loop)', 'Write what is worth remembering'],
+              hint: 'Retrieve before you act, decide what to keep after.',
+            },
+            solved: 'Read → act → write; the write policy decides what is worth remembering.',
+            then: [
+              { send: ['episodic', 'working'], label: 'read' },
+              { send: ['working', 'agent'], label: 'act' },
+              { send: ['agent', 'episodic'], label: 'new episode', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Procedural memory is global',
+            lines: [
+              'Start with working memory only; add others when needed.',
+              'Prompt and tool edits change behaviour for **everyone**.',
+              'So version and review procedural memory.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'working' },
+              { say: 1 },
+              { send: ['procedural', 'agent'], label: 'new rule' },
+              { badge: 'procedural', text: 'affects all', tone: 'miss' },
+              { say: 2 },
+              { badge: 'procedural', text: 'reviewed', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `An LLM is **stateless**: every call starts from zero. "Memory" is whatever your code decides to put back into the prompt. Think of a new employee: a whiteboard for today's task (working memory), a diary of past meetings (episodic), a notebook of facts about clients (semantic), and the company handbook of how-tos (procedural).
 
 The **CoALA** framework (Sumers et al. 2023) names these four stores:
@@ -193,6 +294,109 @@ export function assembleContext(items: string[], maxItems = 5): string {
     // ---------------------------------------------------------------- 2
     {
       heading: 'Short-Term Memory — buffers, rolling summaries and token budgets',
+      steps: {
+        actors: [
+          { id: 'history', kind: 'data', label: 'History', sub: '60 turns, 48K tokens', x: 110, y: 70 },
+          { id: 'summ', kind: 'llm', label: 'Summariser', sub: 'cheap model', x: 340, y: 70 },
+          { id: 'summary', kind: 'document', label: 'Rolling summary', sub: '≈600 tokens', x: 570, y: 70 },
+          { id: 'recent', kind: 'data', label: 'Recent turns', sub: 'last 10, verbatim', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Agent call', sub: '12K history budget', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A desk holds only so much',
+            lines: [
+              'Short-term memory is the history you resend on every call.',
+              'Every input token is paid for on every step, and latency grows.',
+              'Budget history in **tokens**, not turns.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['history', 'llm'], label: '48K tokens', curve: true },
+              { say: 1 },
+              { badge: 'llm', text: 'over budget', tone: 'err' },
+              { say: 2 },
+              { badge: 'llm', text: '12K budget' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the window forgets',
+            lines: ['The user gave order #A-77812 in turn 4. A window keeps the last 10 turns.'],
+            task: {
+              type: 'choose',
+              question: 'What keeps the order id and still fits the budget?',
+              options: [
+                { text: 'Summary buffer: rolling summary + last 10 turns verbatim' },
+                { text: 'Window of the last 10 turns', why: 'It fits, but it forgets the order id from turn 4.' },
+                { text: 'Full buffer', why: '48K tokens does not fit a 12K budget.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Summary buffer: ~8.1K tokens with the order id preserved.',
+            then: [
+              { send: ['history', 'summ'], label: 'turns 1–50' },
+              { send: ['summ', 'summary'], label: 'A-77812, refund', tone: 'ok' },
+              { send: ['summary', 'llm'], label: 'summary' },
+              { send: ['recent', 'llm'], label: 'last 10' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'How the summary buffer works',
+            lines: [
+              'When the verbatim part passes a threshold, summarise the oldest chunk.',
+              'Keep decisions, open questions, IDs and user constraints.',
+              '~4.5x cheaper per call than resending all 48K.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['recent', 'summ'], label: 'oldest chunk', curve: true },
+              { say: 1 },
+              { send: ['summ', 'summary'], label: 'IDs, decisions', tone: 'ok' },
+              { say: 2 },
+              { send: ['summary', 'llm'], label: '≈600' },
+              { send: ['recent', 'llm'], label: '7.5K', curve: true },
+              { badge: 'llm', text: '~4.5x cheaper', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where to cut',
+            lines: ['Trimming must keep the API happy.'],
+            task: {
+              type: 'choose',
+              question: 'Which trim does the API reject?',
+              options: [
+                { text: 'Keeping a tool_result whose tool_use was cut' },
+                { text: 'Replacing an old 30K-token tool output with a stub', why: 'That is tool-result clearing: it keeps the turn and shrinks it.' },
+                { text: 'Cutting on a turn boundary', why: 'Turn boundaries are where you should cut.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Never orphan a tool_result; keep the system prompt and the original task.',
+            then: [{ badge: 'recent', text: 'pairs intact', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Clear bulky tool results',
+            lines: [
+              'A 30K-token file read from step 3 rarely matters at step 40.',
+              'Replace old bulky outputs with a short stub.',
+              'In LangGraph, a checkpointer persists this per-thread state.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'history', text: '30K file read', tone: 'miss' },
+              { say: 1 },
+              { send: ['history', 'recent'], label: 'stub', curve: true },
+              { say: 2 },
+              { lit: 'recent' },
+            ],
+          },
+        ],
+      },
       body: `Short-term memory is the conversation and tool trace you resend on every call. It is like a desk: it holds only so much, and the more you pile on, the harder it is to find things. Even with 200K–1M-token windows you still pay for every input token on every step, latency grows with prompt length, and models attend less reliably to the middle of very long contexts.
 
 Common strategies:
@@ -361,6 +565,105 @@ export function trimToBudget(messages: Msg[], budget: number): Msg[] {
     // ---------------------------------------------------------------- 3
     {
       heading: 'Long-Term Memory — vector-store memory, scoring, consolidation and forgetting',
+      steps: {
+        actors: [
+          { id: 'turn', kind: 'user', label: 'Conversation', sub: 'after each turn', x: 110, y: 70 },
+          { id: 'extract', kind: 'llm', label: 'Extractor', sub: 'atomic facts', x: 340, y: 70 },
+          { id: 'redact', kind: 'guard', label: 'Redact', sub: 'drop PII first', x: 570, y: 70 },
+          { id: 'store', kind: 'vector-db', label: 'Memory store', sub: 'user_id, importance', x: 800, y: 70 },
+          { id: 'scorer', kind: 'retriever', label: 'Scorer', sub: 'rec + imp + rel', x: 800, y: 230 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'top-k memories', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The write path',
+            lines: [
+              '**Extract** atomic facts with a schema-constrained call.',
+              '**Redact** PII you may not keep, before embedding.',
+              '**Consolidate** near-duplicates: ADD / UPDATE / DELETE / NOOP.',
+              'Store with tenant, user, time, importance and source.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['turn', 'extract'], label: 'transcript' },
+              { say: 1 },
+              { send: ['extract', 'redact'], label: 'facts' },
+              { say: 2 },
+              { send: ['redact', 'store'], label: 'facts', tone: 'ok' },
+              { badge: 'store', text: 'UPDATE', ms: 1100 },
+              { say: 3 },
+              { lit: 'store' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: moved to Pune',
+            lines: ['The store has "lives in Delhi". The user now says "moved to Pune".'],
+            task: {
+              type: 'choose',
+              question: 'What should consolidation do?',
+              options: [
+                { text: 'UPDATE: replace the old fact' },
+                { text: 'ADD a second fact', why: 'Then the store holds two contradicting facts.' },
+                { text: 'NOOP', why: 'The new fact changes what is true; ignoring it leaves stale memory.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Consolidation (ADD/UPDATE/DELETE/NOOP) prevents contradictory memories.',
+            then: [{ send: ['redact', 'store'], label: 'Pune' }, { badge: 'store', text: 'UPDATE', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The read path: three scores',
+            lines: [
+              'score = recency + importance + relevance, each normalised to [0,1].',
+              '"Had pizza for lunch today" is recent and relevant: it scores highest.',
+              'Importance keeps "allergic to peanuts" near the top; many teams **pin** it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['store', 'scorer'], label: '3 candidates' },
+              { say: 1 },
+              { badge: 'scorer', text: 'B lunch 1.891', tone: 'miss' },
+              { say: 2 },
+              { send: ['scorer', 'agent'], label: 'top-k + pinned', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: redact when?',
+            lines: ['Cards and government ids must not be kept.'],
+            task: {
+              type: 'pick',
+              question: 'Which part must strip PII before anything is embedded?',
+              answer: 'redact',
+              hints: {
+                extract: 'Extraction produces the facts; redaction runs right after, before embedding.',
+                store: 'Once in the store, the PII has already been embedded.',
+                scorer: 'The scorer reads memories that are already stored.',
+              },
+            },
+            solved: 'Write path: extract → redact → consolidate → store.',
+            then: [{ send: ['extract', 'redact'], label: 'facts' }, { badge: 'redact', text: 'PII removed', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Forgetting is a feature',
+            lines: [
+              'TTLs for episodic logs and decay of low-importance items.',
+              'Hard delete when a user asks for erasure.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'store', text: 'TTL expired', tone: 'miss' },
+              { say: 1 },
+              { send: ['turn', 'store'], label: 'erase me', curve: true, tone: 'err' },
+              { badge: 'store', text: 'deleted', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `Long-term memory survives across sessions. Picture a librarian who, after each conversation, writes index cards, merges duplicates, throws out outdated ones, and later pulls only the few cards that matter.
 
 **Write path** (after a turn, usually async):
@@ -519,6 +822,172 @@ export function consolidate(existing: Fact[], candidate: Omit<Fact, 'id' | 'hist
     // ---------------------------------------------------------------- 4
     {
       heading: 'Tool Selection — choosing the right tool from dozens or hundreds',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: '200-query eval', x: 110, y: 70 },
+          { id: 'ret', kind: 'retriever', label: 'Tool retrieval', sub: 'top-8 + 3 core', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'picks a tool', x: 570, y: 70 },
+          { id: 'conf', kind: 'tool', label: 'Confluence', sub: 'search', x: 800, y: 70 },
+          { id: 'drive', kind: 'tool', label: 'Drive', sub: 'search', x: 800, y: 230 },
+          { id: 'catalog', kind: 'data', label: 'Tool catalog', sub: '140 tools, ~45K tok', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A toolbox of 140',
+            lines: [
+              'Every tool definition costs tokens on every call.',
+              'Accuracy drops as the set grows and names overlap.',
+              'Baseline: 71% correct; most errors are `search` vs `search`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['catalog', 'llm'], label: '45K tokens', curve: true },
+              { say: 1 },
+              { send: ['user', 'llm'], label: 'query', curve: true },
+              { say: 2 },
+              { send: ['llm', 'drive'], label: 'search', tone: 'err', curve: true },
+              { badge: 'llm', text: '71%', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: two tools called search',
+            lines: ['Confluence and Drive both expose a tool named `search`.'],
+            task: {
+              type: 'choose',
+              question: 'What is the cheapest fix for the confusion?',
+              options: [
+                { text: 'Namespace them and say when to use and when not to' },
+                { text: 'Remove one of them', why: 'Both are needed; names and descriptions can disambiguate them.' },
+                { text: 'Force tool_choice on every call', why: 'Forcing suits deterministic workflow steps, not open questions.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Namespaced names + "use when / don\'t use when" descriptions: 71% → 83%.',
+            then: [{ send: ['llm', 'conf'], label: 'confluence_search', tone: 'ok' }, { badge: 'llm', text: '83%', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Retrieve the tools, not just the docs',
+            lines: [
+              'Embed each tool\'s name + description.',
+              'Each step, retrieve the top-8 for the query, plus 3 core tools.',
+              '~3.5K tokens of definitions, **89%**, and faster first tokens.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['catalog', 'ret'], label: 'embeddings' },
+              { say: 1 },
+              { send: ['user', 'ret'], label: 'query' },
+              { send: ['ret', 'llm'], label: '11 tools', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'conf'], label: 'call', tone: 'ok' },
+              { badge: 'llm', text: '89%', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: match the lever to the size',
+            lines: ['How many tools you have decides how much machinery you need.'],
+            task: {
+              type: 'order',
+              question: 'Order the levers from fewest tools to most.',
+              items: ['Great descriptions only', 'Namespacing + tool retrieval', 'Tool search or hierarchical routing'],
+              hint: 'Under ~15 tools, descriptions; 20–100, namespacing and retrieval; hundreds, search or routing.',
+            },
+            solved: 'Descriptions → namespacing + retrieval → tool search or routing, and measure selection accuracy.',
+            then: [{ send: ['catalog', 'ret'], label: 'search' }, { send: ['ret', 'llm'], label: 'top-k', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Deferred loading',
+            lines: [
+              'Mark tools `defer_loading: true`.',
+              'Claude first sees only the search tool and non-deferred tools.',
+              'Matching definitions are expanded on demand.',
+            ],
+            script: [
+              { say: 0 },
+              { down: 'catalog' },
+              { say: 1 },
+              { send: ['llm', 'ret'], label: 'tool search' },
+              { say: 2 },
+              { down: 'catalog', on: false },
+              { send: ['catalog', 'llm'], label: 'definitions', curve: true, tone: 'ok' },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'agent-with-140-tools',
+        title: 'When the agent has 140 tools',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: '200-query eval · 140 tools',
+            head: 'Right tool, *picked*',
+            rungs: [
+              { label: 'All 140 tools on every call', amount: 71 },
+              { label: 'Namespaced + use-when descriptions', amount: 83 },
+              { label: 'Plus top-8 retrieval + 3 core tools', amount: 89 },
+            ],
+            unit: '% correct',
+            sub: 'Illustrative numbers, but the pattern is **typical**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'The baseline',
+            value: 45,
+            suffix: 'K',
+            unit: 'input tokens of tool definitions, every step',
+            stats: [
+              { value: 6, label: 'MCP servers' },
+              { value: 140, label: 'tools' },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'Most of the errors',
+            head: 'Two tools called *search*',
+            steps: ['The user asks a question', 'Confluence exposes search', 'Drive exposes search', 'The model picks the wrong search'],
+            broken: 3,
+            sub: 'Fix: **confluence_search**, plus "use when / don’t use when" lines.',
+          },
+          {
+            type: 'race',
+            kicker: 'Retrieve the tools, not just the docs',
+            head: 'A faster *first token*',
+            lanes: [
+              { label: 'All tools: ~1.9 s median TTFT', seconds: 1.9, tone: 'pink' },
+              { label: 'Top-8 + 3 core: ~0.7 s', seconds: 0.7, tone: 'ion' },
+            ],
+            sub: 'Tool definitions drop from ~45K to **~3.5K** tokens.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Match the lever to the size',
+            head: 'More tools, *more machinery*',
+            steps: ['Under ~15 tools: great descriptions', '20–100: namespacing + retrieval', 'Hundreds: tool search or routing'],
+            sub: 'Measure selection with a labelled **query → tool** set.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Confluence and Drive both expose a tool named search. The cheapest fix?',
+            answer: 0,
+            options: [
+              { text: 'Namespace them and say when to use and when not to', why: 'Namespaced names and use-when descriptions took the eval from 71% to 83%.' },
+              { text: 'Remove one of them', why: 'Both are needed; names and descriptions can disambiguate them.' },
+              { text: 'Force tool_choice on every call', why: 'Forcing suits deterministic workflow steps, not open questions.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Send the model *fewer, clearer* tools.',
+          sub: 'Naming fixes confusion; **retrieval** fixes both cost and distraction.',
+        },
+      },
       body: `Picking a tool is like picking a screwdriver from a toolbox: easy with 5, slow and error-prone with 500 that all look alike. Every tool definition you send costs tokens on every call, and accuracy drops as the set grows and names overlap (OpenAI's guidance is to keep the active set small, roughly under 20).
 
 Levers, from cheapest to most powerful:
@@ -684,6 +1153,105 @@ export async function evalToolSelection(cases: Case[], select: Selector) {
     // ---------------------------------------------------------------- 5
     {
       heading: 'Virtual context — MemGPT, Letta and memory blocks the agent edits itself',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'agent', label: 'Agent', sub: 'edits its own memory', x: 340, y: 70 },
+          { id: 'core', kind: 'cache', label: 'Core memory', sub: 'in-prompt blocks', x: 110, y: 70 },
+          { id: 'runtime', kind: 'server', label: 'Runtime', sub: 'warns near the limit', x: 110, y: 230 },
+          { id: 'recall', kind: 'data', label: 'Recall memory', sub: 'full message history', x: 570, y: 230 },
+          { id: 'archival', kind: 'vector-db', label: 'Archival memory', sub: 'searchable store', x: 800, y: 70 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Context is RAM, stores are disk',
+            lines: [
+              'MemGPT pages data between the window and external stores, like an OS.',
+              '**Core**: small labelled blocks, always in the prompt.',
+              '**Recall**: the full message history. **Archival**: unbounded facts and documents.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { say: 1 },
+              { send: ['core', 'llm'], label: 'human · task' },
+              { say: 2 },
+              { send: ['llm', 'recall'], label: 'search', curve: true },
+              { send: ['llm', 'archival'], label: 'insert' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Save before eviction',
+            lines: [
+              'Turn 212: the context passes ~70% of the budget; the runtime warns.',
+              'The agent inserts three paper summaries into archival memory.',
+              'It updates the `task` block; the oldest 60 messages become a summary.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['runtime', 'llm'], label: 'warning', tone: 'miss', curve: true },
+              { say: 1 },
+              { send: ['llm', 'archival'], label: 'archival_memory_insert' },
+              { say: 2 },
+              { send: ['llm', 'core'], label: 'core_memory_replace' },
+              { badge: 'core', text: 'task updated', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the 2019 Smith paper',
+            lines: ['A week later: "what did we decide about the 2019 Smith paper?" It is no longer in the window.'],
+            task: {
+              type: 'pick',
+              question: 'Which store does the agent search for that old turn?',
+              answer: 'recall',
+              hints: {
+                core: 'Core blocks hold a few condensed facts, not old conversation turns.',
+                archival: 'Archival holds inserted facts and documents; the turn itself lives in the message history.',
+                runtime: 'The runtime runs the loop; it is not a store.',
+              },
+            },
+            solved: '`conversation_search` reads recall memory and finds turn 88.',
+            then: [{ send: ['llm', 'recall'], label: 'Smith 2019', curve: true }, { send: ['recall', 'llm'], label: 'turn 88', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why a block limit?',
+            lines: ['Each block has a label, a value, a character limit and a description.'],
+            task: {
+              type: 'choose',
+              question: 'What is the character limit for?',
+              options: [
+                { text: 'It forces the agent to condense instead of appending forever' },
+                { text: 'It stops prompt injection', why: 'Poisoning is handled by limiting who may write to core memory.' },
+                { text: 'It saves database space', why: 'Core memory lives in the prompt; the limit keeps it small and condensed.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Limits force condensation; hitting one returns a clear error so the agent can summarise.',
+            then: [{ badge: 'core', text: 'limit reached', tone: 'miss' }, { send: ['llm', 'core'], label: 'condensed', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Watch out',
+            lines: [
+              '**Memory poisoning**: text written to core is re-read on every turn.',
+              'Only trusted sources write to core; tag archival records with their source.',
+              'Keep a version history per block to see when it forgot something.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['archival', 'core'], label: 'web page?', tone: 'err', curve: true },
+              { badge: 'core', text: 'poisoned', tone: 'err' },
+              { say: 1 },
+              { badge: 'core', text: 'trusted only', tone: 'ok' },
+              { say: 2 },
+              { lit: 'core' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** your laptop runs programs far bigger than its RAM because the operating system pages data between RAM and disk. **MemGPT** (Packer et al. 2023) applies the same trick to an LLM: the context window is RAM, an external store is disk, and the *agent itself* decides what to page in and out by calling memory tools.
 
 **The tiers** (names from MemGPT and its successor, **Letta** — the project took that name in 2024):
@@ -830,6 +1398,106 @@ console.log(coreMemoryAppend('human', 'Prefers APA citations, works on soil')); 
     // ---------------------------------------------------------------- 6
     {
       heading: 'Sleep-time compute and memory layers — consolidate memory while the user is away (Letta, Mem0)',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'in conversation', x: 110, y: 70 },
+          { id: 'primary', kind: 'agent', label: 'Primary agent', sub: 'reply only', x: 340, y: 70 },
+          { id: 'blocks', kind: 'cache', label: 'Memory blocks', sub: 'shared', x: 570, y: 70 },
+          { id: 'sleep', kind: 'agent', label: 'Sleep-time agent', sub: 'runs when idle', x: 800, y: 70 },
+          { id: 'logs', kind: 'data', label: 'Transcripts', sub: 'recent sessions', x: 800, y: 230 },
+          { id: 'eval', kind: 'metric', label: 'Weekly eval', sub: 'facts it should know', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Reorganise notes after the call',
+            lines: [
+              'Memory work during a turn adds latency the user feels.',
+              'The primary agent just replies, reading the shared blocks.',
+              'A **sleep-time agent** rewrites memory when the primary is idle.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'primary'], label: 'message' },
+              { say: 1 },
+              { send: ['blocks', 'primary'], label: 'context' },
+              { send: ['primary', 'user'], label: 'reply', tone: 'ok' },
+              { say: 2 },
+              { send: ['logs', 'sleep'], label: 'transcripts' },
+              { send: ['sleep', 'blocks'], label: 'consolidate', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the slow model',
+            lines: ['One agent has someone waiting; the other does not.'],
+            task: {
+              type: 'pick',
+              question: 'Which agent can afford a slower, stronger model?',
+              answer: 'sleep',
+              hints: {
+                primary: 'The primary agent has a user waiting for the reply.',
+                blocks: 'Blocks are storage, not a model.',
+              },
+            },
+            solved: 'The sleep-time agent: nobody is waiting, so it can use a stronger model.',
+            then: [{ send: ['logs', 'sleep'], label: 'idle' }, { badge: 'sleep', text: 'larger model', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The coaching app, before and after',
+            lines: [
+              'Inline: reply + extract + dedupe = 3 model calls per turn, p50 2.9 s.',
+              'Sleep-time: reply only, p50 **1.1 s**.',
+              'Contradictions in a 500-user audit: 41 users → 6.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'primary', text: '3 calls · 2.9 s', tone: 'miss' },
+              { say: 1 },
+              { send: ['primary', 'user'], label: 'reply', tone: 'ok' },
+              { badge: 'primary', text: '1 call · 1.1 s', tone: 'ok' },
+              { say: 2 },
+              { send: ['sleep', 'blocks'], label: 'learned_context', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: guardrails for a background writer',
+            lines: ['A transcript can contain injected text.'],
+            task: {
+              type: 'choose',
+              question: 'Which is NOT a guardrail for the sleep-time agent?',
+              options: [
+                { text: 'Let it edit every block, persona included' },
+                { text: 'Version every write with its author', why: 'This is a guardrail: you can diff and roll back.' },
+                { text: 'Treat transcripts as untrusted input', why: 'This is a guardrail: it consolidates facts, it does not follow instructions in them.' },
+                { text: 'Run a weekly "facts it should know" eval', why: 'This is a guardrail: it catches consolidation that silently drops things.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Version writes, protect persona and safety blocks, treat inputs as untrusted, measure.',
+            then: [{ send: ['eval', 'blocks'], label: 'check', curve: true }, { badge: 'blocks', text: 'persona locked', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Mem0 as a memory layer',
+            lines: [
+              '`add(messages, user_id)`: extraction plus ADD / UPDATE / DELETE / NOOP.',
+              '`search(query, user_id)` returns ranked memories.',
+              'Scopes: user, agent, run. Call `add` from a background job.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['logs', 'blocks'], label: 'add()', curve: true },
+              { say: 1 },
+              { send: ['blocks', 'primary'], label: 'search()' },
+              { say: 2 },
+              { badge: 'blocks', text: 'user · agent · run' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** you do not reorganise your notes in the middle of a phone call; you do it afterwards. Memory work done during a turn (extracting facts, merging duplicates, rewriting blocks) adds latency the user feels. **Sleep-time compute** moves it off the critical path.
 
 **Sleep-time agents (Letta).** A second agent shares the primary agent's memory blocks. It runs when the primary is idle — after a conversation, every N turns, or on a schedule — reads recent transcripts and documents, and rewrites memory: merges duplicates, marks contradicted facts as outdated, condenses blocks near their limit and writes **learned context** ("Priya's thesis deadline moved to March; she now prefers short answers"). The research behind it (Lin et al. 2025, Letta and UC Berkeley) also shows a second benefit: work done ahead of time on the context can cut the compute needed at question time. Because nobody is waiting, the sleep-time agent can use a slower, stronger model.
@@ -991,6 +1659,105 @@ console.log(rollback(s, 'human'));                              // 'Lives in Del
     // ---------------------------------------------------------------- 7
     {
       heading: 'Skill libraries — Voyager-style procedural memory that grows with use',
+      steps: {
+        actors: [
+          { id: 'task', kind: 'user', label: 'New task', sub: 'next curriculum step', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'writes code', x: 340, y: 70 },
+          { id: 'env', kind: 'server', label: 'Environment', sub: 'runs the code', x: 570, y: 70 },
+          { id: 'verify', kind: 'judge', label: 'Verifier', sub: 'did it work?', x: 800, y: 70 },
+          { id: 'library', kind: 'vector-db', label: 'Skill library', sub: 'code + description', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Remember how, not what',
+            lines: [
+              'A new task retrieves the top-k similar skills from the library.',
+              'Run the code; feed back errors and a **self-verification** check.',
+              'Save the skill only after it is verified to work.',
+            ],
+            script: [
+              { send: ['task', 'agent'], label: 'task' },
+              { say: 0 },
+              { send: ['library', 'agent'], label: 'top-k skills', curve: true },
+              { say: 1 },
+              { send: ['agent', 'env'], label: 'run' },
+              { send: ['env', 'verify'], label: 'result' },
+              { say: 2 },
+              { badge: 'verify', text: 'verified', tone: 'ok' },
+              { send: ['verify', 'library'], label: 'save skill', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the write gate',
+            lines: ['A broken skill is worse than none, because it is reused.'],
+            task: {
+              type: 'pick',
+              question: 'Which part must pass before a skill is saved?',
+              answer: 'verify',
+              hints: {
+                agent: 'The agent wrote the code; it needs an external check.',
+                env: 'Running is not the same as working; a check must confirm the outcome.',
+                task: 'The task only says what to do next.',
+              },
+            },
+            solved: 'Save only after an external check passes: tests, a verifier or human approval.',
+            then: [{ send: ['env', 'verify'], label: 'result' }, { send: ['verify', 'library'], label: 'save', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'The analytics agent, 6 weeks',
+            lines: [
+              'A skill is saved only when the analyst clicks "numbers confirmed".',
+              'Week 6: 212 skills; 61% of questions just fill parameters.',
+              'Human fixes 38% → 11%; median answer 40 s → 9 s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['verify', 'library'], label: 'confirmed', tone: 'ok', curve: true },
+              { say: 1 },
+              { send: ['library', 'agent'], label: 'revenue_by_region', curve: true },
+              { say: 2 },
+              { badge: 'agent', text: 'fixes 11%', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: two "active users"',
+            lines: ['Two near-identical skills used different definitions of active users.'],
+            task: {
+              type: 'choose',
+              question: 'What fixed it?',
+              options: [
+                { text: 'A dedupe check on write and a reviewed definition field' },
+                { text: 'Retrieve with a higher similarity threshold', why: 'Both skills would still exist with conflicting definitions.' },
+                { text: 'Delete the whole library', why: 'The library was working; the gap was deduplication on write.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Deduplicate, version and tag skills; review shared ones.',
+            then: [{ badge: 'library', text: 'dedupe on write', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Keep the library healthy',
+            lines: [
+              'New skills call old ones, so abilities compound.',
+              'A skill one session wrote should not run for every tenant until reviewed.',
+              'Best for repeated, checkable tasks in a stable environment.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['library', 'agent'], label: 'old skill', curve: true },
+              { say: 1 },
+              { badge: 'library', text: 'needs review', tone: 'miss' },
+              { say: 2 },
+              { lit: 'library' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a junior engineer who solves a tricky task writes a script and saves it in the team repo; next time they (or anyone) run the script instead of re-deriving it. That is **procedural memory**: remembering *how*, not *what*.
 
 **Voyager** (Wang et al. 2023) showed the idea in Minecraft with GPT-4. Three parts:

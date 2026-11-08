@@ -35,6 +35,99 @@ const topic: Topic = {
   sections: [
     {
       heading: 'LangGraph Fundamentals — StateGraph, state schema, reducers, nodes and edges',
+      steps: {
+        actors: [
+          { id: 'state', kind: 'data', label: 'Input state', sub: '{ ticket, log: [] }', x: 110, y: 70 },
+          { id: 'classify', kind: 'agent', label: 'classify', sub: 'node', x: 340, y: 70 },
+          { id: 'extract', kind: 'agent', label: 'extract', sub: 'node', x: 570, y: 70 },
+          { id: 'reply', kind: 'agent', label: 'reply', sub: 'node', x: 790, y: 70 },
+          { id: 'reducer', kind: 'tool', label: 'concat reducer', sub: 'on the log key', x: 450, y: 230 },
+          { id: 'final', kind: 'data', label: 'Final state', sub: 'merged updates', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Make the flowchart explicit',
+            lines: [
+              '**Nodes** are functions, **edges** are arrows, and one shared **state** flows through them.',
+              'Each node returns a *partial* update, never the whole state.',
+              "`classify` → `{ category: 'billing', log: ['classify'] }`.",
+            ],
+            script: [
+              { say: 0 },
+              { send: ['state', 'classify'], label: 'ticket' },
+              { send: ['classify', 'extract'] },
+              { send: ['extract', 'reply'] },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'classify', text: 'billing' },
+              { badge: 'extract', text: "orderId '5512'" },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Reducers decide how updates merge',
+            lines: [
+              'A reducer is `(current, update) => next`.',
+              "With a concat reducer, every node's `log` entry is kept.",
+              "Final: `log = ['classify', 'extract', 'reply']`.",
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'reducer' },
+              { say: 1 },
+              { send: ['classify', 'reducer'], label: 'log' },
+              { send: ['extract', 'reducer'], label: 'log' },
+              { send: ['reply', 'reducer'], label: 'log' },
+              { say: 2 },
+              { send: ['reducer', 'final'], label: '3 entries', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: no reducer',
+            lines: ['Same graph, but `log` has no reducer.'],
+            task: {
+              type: 'choose',
+              question: 'What is `log` at the end?',
+              options: [
+                { text: "`['reply']`: each node overwrote the last" },
+                { text: "`['classify', 'extract', 'reply']`", why: 'Without a reducer, the last write wins.' },
+                {
+                  text: 'The graph throws an error',
+                  why: 'In a sequential graph nothing errors; the audit trail just goes missing.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'No reducer = last write wins. Design reducers first.',
+            setup: [{ down: 'reducer' }],
+            then: [
+              { send: ['reply', 'final'], label: "['reply']", tone: 'err', curve: true },
+              { badge: 'final', text: 'trail lost', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: build and run',
+            lines: ['Nodes that are ready together run in one **superstep**; their updates merge, then the next starts.'],
+            task: {
+              type: 'order',
+              question: 'Put the steps in order.',
+              items: [
+                'Define the state schema',
+                '`addNode` for each function',
+                '`addEdge` from START to END',
+                '`.compile()`',
+                '`invoke()`',
+              ],
+              hint: 'You must compile before invoke; compile checks the nodes and edges you added.',
+            },
+            solved: 'Schema → nodes → edges → compile → invoke.',
+            then: [{ send: ['state', 'classify'] }, { send: ['classify', 'extract'] }, { send: ['extract', 'reply'] }],
+          },
+        ],
+      },
       body: `**Intuition:** a chain is a straight pipe and an agent loop is a \`while\` hidden inside a function. LangGraph makes the flowchart explicit: **nodes** are functions, **edges** are arrows, and one shared **state** object flows through them.
 
 | Approach | Control flow | Good for |
@@ -224,6 +317,105 @@ console.log(out.words, out.tags); // 60 ['counted', 'long']`,
     },
     {
       heading: 'Conditional Edges and Cycles — routers, agent ↔ tools loops and recursion limits',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'Paris vs Rome', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'agent', sub: 'model node', x: 340, y: 70 },
+          { id: 'router', kind: 'guard', label: 'toolsCondition', sub: "'tools' or END", x: 570, y: 70 },
+          { id: 'end', kind: 'data', label: 'END', sub: 'final answer', x: 790, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'ToolNode', sub: 'runs tool_calls', x: 450, y: 230 },
+          { id: 'weather', kind: 'tool', label: 'weather API', sub: 'one call per city', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A traffic light after each node',
+            lines: [
+              '`route(state)` reads the state and returns the next node name, or `END`.',
+              'Superstep 1: the model returns 2 tool calls → `toolsCondition` says `tools`.',
+              'Superstep 2: `ToolNode` runs both concurrently (~300 ms instead of ~600 ms).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'agent'], label: 'compare' },
+              { say: 1 },
+              { send: ['agent', 'router'], label: '2 tool_calls' },
+              { badge: 'router', text: "'tools'" },
+              { send: ['router', 'tools'] },
+              { say: 2 },
+              { send: ['tools', 'weather'], label: 'Paris, Rome', count: 2 },
+              { send: ['weather', 'tools'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'An edge back makes a loop',
+            lines: [
+              'The edge `tools → agent` closes the loop: the core of every agent.',
+              'Superstep 3: no tool calls → `END`.',
+              '"Paris 14 °C rain, Rome 22 °C sun."',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tools', 'agent'], label: '2 ToolMessages', tone: 'ok' },
+              { say: 1 },
+              { send: ['agent', 'router'], label: 'no calls' },
+              { send: ['router', 'end'] },
+              { say: 2 },
+              { badge: 'end', text: 'answer', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the endless retry',
+            lines: ['The weather API is down; the model retries the tool forever.'],
+            task: {
+              type: 'choose',
+              question: 'What stops the run by default?',
+              options: [
+                { text: '`recursionLimit` (25 supersteps) throws `GraphRecursionError`' },
+                {
+                  text: '`toolsCondition`',
+                  why: 'It only routes: while there are tool calls, it keeps sending them to tools.',
+                },
+                { text: 'Nothing; it loops forever', why: 'The default recursion limit is 25 supersteps.' },
+              ],
+              answer: 0,
+            },
+            solved: 'It stops after ~12 rounds (≈ 12 LLM calls, ~$0.25): a circuit breaker, not a budget.',
+            then: [
+              { send: ['tools', 'weather'], tone: 'err' },
+              { send: ['tools', 'agent'], label: 'error', tone: 'err' },
+              { send: ['agent', 'router'] },
+              { send: ['router', 'tools'] },
+              { badge: 'router', text: 'limit 25', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: end it gracefully',
+            lines: ['`recursionLimit` is a top-level config key, not inside `configurable`.'],
+            task: {
+              type: 'choose',
+              question: 'How do you end the run with a useful message instead of an error?',
+              options: [
+                { text: 'Count `toolRounds` in state and route to an exit at 3' },
+                { text: 'Raise `recursionLimit`', why: 'That only lets it burn more calls before the same error.' },
+                {
+                  text: 'Move `recursionLimit` into `configurable`',
+                  why: 'It belongs at the top level, and it is still only a circuit breaker.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'After 3 rounds: "The weather service is unavailable, please try later."',
+            then: [
+              { badge: 'router', text: 'toolRounds = 3', tone: 'miss' },
+              { send: ['router', 'end'], label: 'graceful exit', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a conditional edge is a traffic light. After a node runs, a small **routing function** reads the state and says which node goes next. Point an edge back to an earlier node and you have a loop: the core of every agent.
 
 **Mechanics**
@@ -394,6 +586,113 @@ console.log('router OK');`,
     },
     {
       heading: 'Persistence and Checkpointers — threads, state history, time travel and durable execution',
+      steps: {
+        actors: [
+          { id: 'plan', kind: 'agent', label: 'plan', sub: 'node', x: 110, y: 70 },
+          { id: 'search', kind: 'agent', label: 'search', sub: 'node', x: 340, y: 70 },
+          { id: 'read', kind: 'agent', label: 'read', sub: 'node', x: 570, y: 70 },
+          { id: 'draft', kind: 'agent', label: 'draft', sub: 'node', x: 790, y: 70 },
+          { id: 'pg', kind: 'data', label: 'PostgresSaver', sub: 'thread job-981', x: 340, y: 230 },
+          { id: 'review', kind: 'agent', label: 'review', sub: 'node', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A save-game after every superstep',
+            lines: [
+              'After every superstep, LangGraph writes a snapshot of the state for the current **thread**.',
+              'Every call passes `{ configurable: { thread_id } }`; threads are isolated.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['plan', 'pg'], label: 'checkpoint' },
+              { send: ['search', 'pg'], label: 'checkpoint' },
+              { send: ['read', 'pg'], label: 'checkpoint' },
+              { say: 1 },
+              { badge: 'pg', text: 'job-981' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A crash mid-run',
+            lines: [
+              'The pod is OOM-killed while `draft` runs.',
+              "The worker calls `invoke(null, { configurable: { thread_id: 'job-981' } })`.",
+              "`getState().next` is `['draft']`.",
+            ],
+            script: [
+              { say: 0 },
+              { down: 'draft' },
+              { badge: 'draft', text: 'OOM', tone: 'err' },
+              { say: 1 },
+              { down: 'draft', on: false },
+              { send: ['pg', 'draft'], label: 'resume', tone: 'ok' },
+              { say: 2 },
+              { badge: 'pg', text: "next: ['draft']" },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what runs again?',
+            lines: ['Checkpoints for `plan`, `search` and `read` are in Postgres.'],
+            task: {
+              type: 'pick',
+              question: 'Which node runs first after the resume?',
+              answer: 'draft',
+              hints: {
+                plan: 'Its checkpoint is saved, so it is skipped.',
+                search: 'Its checkpoint is saved, so it is skipped.',
+                read: 'Its checkpoint is saved, so it is skipped.',
+                review: 'Review runs too, but only after draft.',
+              },
+            },
+            solved: 'Only `draft` and `review` run: 3 LLM calls saved (~40 s, ~$0.12).',
+            then: [{ send: ['pg', 'draft'], label: 'resume', tone: 'ok' }, { send: ['draft', 'review'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Time travel',
+            lines: [
+              'The report used 2024 data because `plan` chose the query "EU AI Act fines".',
+              'Find the snapshot whose `next` is `[\'search\']`; `updateState` it with the query "EU AI Act fines 2026".',
+              'That writes a **new** checkpoint (a fork); `invoke(null, forkConfig)` runs search → … → review.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'plan', text: '2024 data', tone: 'miss' },
+              { say: 1 },
+              { send: ['pg', 'search'], label: 'updateState' },
+              { say: 2 },
+              { badge: 'pg', text: 'fork', tone: 'ok' },
+              { send: ['search', 'read'] },
+              { send: ['read', 'draft'] },
+              { send: ['draft', 'review'] },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the original branch',
+            lines: ['`getStateHistory` yields snapshots newest first.'],
+            task: {
+              type: 'choose',
+              question: 'After `updateState` and the forked run, what happens to the original branch?',
+              options: [
+                { text: 'It stays in history for comparison' },
+                {
+                  text: 'It is overwritten by the fork',
+                  why: '`updateState` adds a checkpoint; it never rewrites history.',
+                },
+                {
+                  text: 'It is deleted when the fork finishes',
+                  why: 'Forks sit beside the original; nothing is deleted.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: '`updateState` forks: it adds a checkpoint, never rewrites history.',
+          },
+        ],
+      },
       body: `**Intuition:** a checkpointer is a save-game system. After every superstep LangGraph writes a snapshot of the state for the current **thread**, so you can continue the conversation tomorrow, inspect any past step, rewind, or pick up after a crash.
 
 **Mechanics**
@@ -531,6 +830,106 @@ export async function rewindAndRetry(
     },
     {
       heading: 'Streaming — values, updates, messages and custom modes to a live UI',
+      steps: {
+        actors: [
+          { id: 'retrieve', kind: 'retriever', label: 'retrieve', sub: 'node', x: 110, y: 70 },
+          { id: 'analyse', kind: 'agent', label: 'analyse', sub: 'node', x: 340, y: 70 },
+          { id: 'answer', kind: 'llm', label: 'answer', sub: 'node', x: 570, y: 70 },
+          { id: 'stream', kind: 'server', label: 'graph.stream', sub: 'custom, updates, msgs', x: 340, y: 230 },
+          { id: 'ui', kind: 'user', label: 'Chat UI', sub: 'over SSE', x: 750, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Read it as it is written',
+            lines: [
+              '"Summarise our Q3 churn drivers": 3 nodes, 6.1 s in total.',
+              'With `invoke()` the user stares at a spinner for 6.1 s.',
+              '`stream()` sends progress, node results and tokens as they happen.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retrieve', 'analyse'] },
+              { send: ['analyse', 'answer'] },
+              { say: 1 },
+              { badge: 'ui', text: 'spinner 6.1 s', tone: 'miss' },
+              { say: 2 },
+              { send: ['stream', 'ui'], label: 'chunks', count: 3 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Three modes at once',
+            lines: [
+              '120 ms, custom: "Searching 3 data sources".',
+              '1.4 s, updates: `retrieve` done (42 rows).',
+              '3.9 s, updates: `analyse` done.',
+              '4.5 s, messages: the first token from `answer`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retrieve', 'stream'], label: 'custom' },
+              { send: ['stream', 'ui'], label: 'Searching…' },
+              { say: 1 },
+              { send: ['retrieve', 'stream'], label: 'updates' },
+              { badge: 'ui', text: '42 rows' },
+              { say: 2 },
+              { send: ['analyse', 'stream'], label: 'updates' },
+              { say: 3 },
+              { send: ['answer', 'stream'], label: 'tokens', count: 3 },
+              { send: ['stream', 'ui'], label: 'tokens', tone: 'ok', count: 3 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the mode',
+            lines: ['Several modes at once yield `[mode, chunk]` tuples.'],
+            task: {
+              type: 'choose',
+              question: 'Which stream mode gives a chat typing effect?',
+              options: [
+                { text: '`messages`' },
+                { text: '`values`', why: 'The full state after each superstep: good for dashboards and tests.' },
+                { text: '`updates`', why: 'Node deltas: good for step-by-step progress.' },
+                { text: '`custom`', why: 'Your own events, like "fetched 3 of 10 pages".' },
+              ],
+              answer: 0,
+            },
+            solved: '`messages` yields `[messageChunk, metadata]` per LLM token.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: hide internal tokens',
+            lines: ['An internal classifier would stream its tokens to the chat too.'],
+            task: {
+              type: 'choose',
+              question: 'How do you show only tokens from the answer node?',
+              options: [
+                { text: "Filter on `metadata.langgraph_node === 'answer'`" },
+                { text: 'Switch to `values` mode', why: 'You would lose the token stream entirely.' },
+                { text: 'Use `debug` mode', why: '`debug` is detailed events for local troubleshooting.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Filter by `langgraph_node`, or tag the internal model with `nostream`.',
+            then: [
+              { send: ['answer', 'stream'], label: 'answer only', tone: 'ok' },
+              { send: ['stream', 'ui'], label: 'tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Same cost, faster feel',
+            lines: ['First sign of life: ~120 ms. First answer word: 4.5 s.', 'Zero change in total latency or cost.'],
+            script: [
+              { say: 0 },
+              { send: ['stream', 'ui'], label: '120 ms', tone: 'ok' },
+              { say: 1 },
+              { badge: 'ui', text: 'still 6.1 s total' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** \`invoke()\` is waiting for the whole letter; \`stream()\` is reading it as it is written. For a multi-step agent, streaming shows progress ("searching…"), node results and LLM tokens as they happen, so a 6-second run feels responsive.
 
 **Stream modes (\`graph.stream(input, { streamMode })\`)**
@@ -706,6 +1105,117 @@ console.log(await collect(fake())); // { steps: ['router','answer'], answer: 'Re
     },
     {
       heading: 'Human-in-the-Loop with interrupt() — pause, Command({ resume }) and approve/edit/reject tool calls',
+      steps: {
+        actors: [
+          { id: 'agent', kind: 'agent', label: 'agent', sub: 'proposes send_email', x: 110, y: 70 },
+          { id: 'review', kind: 'guard', label: 'review node', sub: 'interrupt(payload)', x: 340, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'ToolNode', sub: 'send_email', x: 570, y: 70 },
+          { id: 'pg', kind: 'data', label: 'Checkpointer', sub: 'thread mail-311', x: 340, y: 230 },
+          { id: 'human', kind: 'user', label: 'Reviewer', sub: 'approve/edit/reject', x: 680, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A pause button inside a node',
+            lines: [
+              "The model proposes `send_email({ to: 'cfo@acme.com', … })`.",
+              '`review` calls `interrupt({ toolCalls })`; the payload comes back under `__interrupt__`.',
+              'The checkpoint is saved and the HTTP request ends.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'review'], label: 'tool_calls' },
+              { say: 1 },
+              { badge: 'review', text: 'interrupt', tone: 'miss' },
+              { send: ['review', 'human'], label: '__interrupt__', curve: true },
+              { say: 2 },
+              { send: ['review', 'pg'], label: 'save' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Resume two hours later',
+            lines: [
+              'The reviewer changes the recipient to `finance-team@acme.com`.',
+              "The server calls `invoke(new Command({ resume: decision }), { configurable: { thread_id: 'mail-311' } })`.",
+              '`interrupt()` now returns the decision, and `ToolNode` sends to the finance team.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'human', text: 'edit recipient' },
+              { say: 1 },
+              { send: ['human', 'pg'], label: 'Command resume' },
+              { send: ['pg', 'review'], label: 'decision' },
+              { say: 2 },
+              { send: ['review', 'tools'], label: 'edited call', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where does it restart?',
+            lines: ['`interrupt()` works by throwing, so never wrap it in a bare try/catch.'],
+            task: {
+              type: 'choose',
+              question: 'On resume, where does `review` start running?',
+              options: [
+                { text: 'From its first line: code before `interrupt()` runs twice' },
+                {
+                  text: 'Right after the `interrupt()` call',
+                  why: 'The node re-runs from the top; `interrupt()` then returns the resume value.',
+                },
+                {
+                  text: 'At the next node; `review` is skipped',
+                  why: 'The node runs again so `interrupt()` can return the decision.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'The node restarts from the top: keep code before `interrupt()` pure, or move side effects earlier.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: edit a tool call',
+            lines: ['Approve = go to tools unchanged. Reject = a ToolMessage with the reason.'],
+            task: {
+              type: 'choose',
+              question: 'How does the review node apply an **edit**?',
+              options: [
+                { text: 'Replace the AI message (same `id`) with edited `tool_calls`, then go to tools' },
+                {
+                  text: 'Append a ToolMessage explaining the change',
+                  why: 'That is how a reject works: the agent gets the reason back.',
+                },
+                {
+                  text: 'Resume with `invoke(null, config)`',
+                  why: 'That resumes a static breakpoint and carries no decision.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Same id, edited args: `ToolNode` sends to finance-team@acme.com.',
+            then: [{ send: ['review', 'tools'], label: 'finance-team', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Reject with a reason',
+            lines: [
+              'The reviewer rejects: "Do not share Q3 before earnings".',
+              'The agent receives a ToolMessage with that reason…',
+              '…and replies "Understood, I won\'t send it."',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'human', text: 'reject', tone: 'err' },
+              { send: ['human', 'pg'], label: 'reject' },
+              { send: ['pg', 'review'], label: 'decision' },
+              { say: 1 },
+              { send: ['review', 'agent'], label: 'ToolMessage', tone: 'miss' },
+              { say: 2 },
+              { badge: 'agent', text: 'will not send' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** \`interrupt()\` is a pause button inside a node. The graph saves its place, hands a question to your app, and waits (seconds or days) until you resume it with an answer. This section is about the **API mechanics**; which actions to gate and how to run a review team is covered in the Human-in-the-Loop topic.
 
 **Mechanics**
@@ -869,6 +1379,200 @@ console.log(done.status, done.note); // rejected duplicate claim`,
     },
     {
       heading: 'Subgraphs and the Send API — composition, map-reduce fan-out and parallel branches',
+      short: {
+        id: 'send-api-eight-sections-at-once',
+        title: 'Send: 8 sections in one superstep',
+        beats: [
+          {
+            type: 'grid',
+            kicker: 'Contract review · 40 pages',
+            head: '8 *Send()* workers at once',
+            cells: 8,
+            hot: 8,
+            caption: 'split → 8 × Send(\'summarise\', { section })',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Same token cost',
+            head: 'Fan out, then *combine*',
+            rungs: [
+              {
+                label: 'Sequential: 8 × ~3 s',
+                amount: 24,
+              },
+              {
+                label: 'Send (~3.5 s) + combine (~2 s)',
+                amount: 5.5,
+              },
+            ],
+            unit: 's',
+          },
+          {
+            type: 'flow',
+            kicker: 'Map-reduce in LangGraph',
+            head: 'One superstep, one *reducer*',
+            steps: [
+              'Conditional edge returns 8 Send objects',
+              'Each worker sees only its payload',
+              'All 8 write summaries in the same superstep',
+              'A concat reducer merges them',
+              'combine runs once',
+            ],
+            sub: 'Order follows task order, not finish time: include **section.index**.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Bug seen in practice',
+            head: 'No reducer, *no run*',
+            claims: [
+              {
+                text: 'summaries: Annotation<string[]>() with no reducer',
+                ok: false,
+                note: 'InvalidUpdateError: 8 writes in one superstep',
+              },
+              {
+                text: 'summaries with a concat reducer',
+                ok: true,
+                note: 'combine sees all 8 entries',
+              },
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A router returns new Send(\'grade\', { doc }) for 6 documents. What does grade receive?',
+            options: [
+              {
+                text: 'The full parent state plus doc',
+                why: 'Each worker gets only its payload; put shared context in the payload explicitly.',
+              },
+              {
+                text: 'Only { doc }, the payload of that Send',
+                why: 'Right: that is how one node runs 6 times with different data in one superstep.',
+              },
+              {
+                text: 'An array of all 6 docs',
+                why: 'Each Send is one envelope with one payload, not the whole list.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Fan out with *Send*, merge with a *reducer*.',
+          sub: 'Use Send when the number of tasks is known only at runtime; parallel writes need a **reducer**.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'split', kind: 'chunker', label: 'split', sub: '8 sections', x: 110, y: 70 },
+          { id: 'w1', kind: 'agent', label: 'summarise', sub: 'Send: section 1', x: 340, y: 70 },
+          { id: 'w2', kind: 'agent', label: 'summarise', sub: 'Send: section 2', x: 570, y: 70 },
+          { id: 'w3', kind: 'agent', label: 'summarise', sub: 'Send: section 8', x: 455, y: 230 },
+          { id: 'state', kind: 'data', label: 'Parent state', sub: 'summaries: concat', x: 790, y: 70 },
+          { id: 'combine', kind: 'llm', label: 'combine', sub: 'runs once', x: 790, y: 230 },
+          { id: 'risk', kind: 'agent', label: 'Risk subgraph', sub: 'private messages', x: 110, y: 230, hidden: true },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A dispatcher with envelopes',
+            lines: [
+              '`split` turns a 40-page contract into 8 sections.',
+              "The conditional edge returns 8 `Send('summarise', { section })` objects.",
+              'Each worker sees **only its payload**, not the full state.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'split', text: '8 sections' },
+              { say: 1 },
+              { send: ['split', 'w1'], label: 'Send' },
+              { send: ['split', 'w2'], label: 'Send', curve: true },
+              { send: ['split', 'w3'], label: 'Send' },
+              { say: 2 },
+              { badge: 'w1', text: 'section only' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'One superstep, one merge',
+            lines: [
+              'All workers run in the **same superstep**: ≈ 3.5 s, not 8 × ~3 s = 24 s.',
+              'Their writes merge through the `summaries` concat reducer.',
+              'A plain edge to `combine` runs it once after all finish: ≈ 5.5 s in total.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'w1' },
+              { lit: 'w2' },
+              { lit: 'w3' },
+              { say: 1 },
+              { send: ['w1', 'state'], label: 'summary', curve: true },
+              { send: ['w2', 'state'], label: 'summary' },
+              { send: ['w3', 'state'], label: 'summary' },
+              { say: 2 },
+              { send: ['state', 'combine'], label: '8 entries', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: forget the reducer',
+            lines: ['`summaries: Annotation<string[]>()` with no reducer.'],
+            task: {
+              type: 'choose',
+              question: 'What happens when the 8 workers write?',
+              options: [
+                { text: '`InvalidUpdateError`: parallel writes to a last-write-wins key' },
+                {
+                  text: 'Only the last summary survives',
+                  why: 'For parallel writes in one superstep LangGraph raises an error instead.',
+                },
+                {
+                  text: 'It works; summaries are concatenated by default',
+                  why: 'No reducer means last write wins, and parallel writes conflict.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Workers share one superstep; a reducer must merge their writes.',
+            then: [{ send: ['w2', 'state'], tone: 'err' }, { badge: 'state', text: 'InvalidUpdate', tone: 'err' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: keep the order',
+            lines: ['Results follow task order, not finish time.'],
+            task: {
+              type: 'choose',
+              question: 'How does `combine` sort the summaries reliably?',
+              options: [
+                { text: 'Include `section.index` in each result' },
+                { text: 'Sort by finish time', why: 'Finish time is not the section order.' },
+                { text: 'Run the workers one by one', why: 'That brings back the 24 s.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Carry the index in the payload and sort on it.',
+          },
+          {
+            kind: 'watch',
+            title: 'A subgraph is a function call',
+            lines: [
+              'The clause-risk checker is its own compiled graph with private `messages`.',
+              'The parent calls it inside `assessRisk` with `{ text }`…',
+              '…and stores only `{ riskScore: 0.72 }`.',
+            ],
+            script: [
+              { show: 'risk' },
+              { say: 0 },
+              { badge: 'risk', text: 'own messages' },
+              { say: 1 },
+              { send: ['state', 'risk'], label: '{ text }', curve: true },
+              { say: 2 },
+              { send: ['risk', 'state'], label: 'riskScore 0.72', tone: 'ok', curve: true },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a subgraph is a function call for graphs: a team (e.g. "research") packaged as its own graph and used as one node. \`Send\` is a dispatcher handing each worker its own envelope: "summarise section 3", "summarise section 4"… all at once.
 
 **Subgraphs**
@@ -1025,6 +1729,101 @@ console.log(out.pages.length, out.totalWords); // 3 400 (with the stub)`,
     },
     {
       heading: 'Long-Term Memory and Production — Store, deployment, tracing, testing and pitfalls',
+      steps: {
+        actors: [
+          { id: 't101', kind: 'user', label: 'Thread t-101', sub: 'Monday', x: 110, y: 70 },
+          { id: 'store', kind: 'data', label: 'Store', sub: "['user-7', 'prefs']", x: 450, y: 70 },
+          { id: 'u9', kind: 'user', label: 'user-9', sub: "['user-9', 'prefs']", x: 790, y: 70 },
+          { id: 't188', kind: 'user', label: 'Thread t-188', sub: 'next Monday', x: 110, y: 230 },
+          { id: 'plan', kind: 'llm', label: 'plan node', sub: '3 dinners', x: 450, y: 230 },
+          { id: 'ckpt', kind: 'data', label: 'Checkpointer', sub: 't-188: empty', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Notepad vs filing cabinet',
+            lines: [
+              'The checkpointer is the notepad for *one* thread; the **Store** survives across threads.',
+              'Monday, `t-101`: "I went vegetarian last month."',
+              "The `remember` node writes `put(['user-7', 'prefs'], 'diet', …)`.",
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'store' },
+              { say: 1 },
+              { badge: 't101', text: 'vegetarian' },
+              { say: 2 },
+              { send: ['t101', 'store'], label: 'put diet' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A new thread remembers',
+            lines: [
+              'Next Monday, new thread `t-188`: "Plan 3 dinners."',
+              "Its checkpointer is empty, but `plan` calls `search(['user-7', 'prefs'])`.",
+              'The prompt gains "Diet: vegetarian": mushroom risotto, chickpea curry, veggie tacos.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['t188', 'plan'], label: '3 dinners' },
+              { say: 1 },
+              { badge: 'ckpt', text: 'empty' },
+              { send: ['plan', 'store'], label: 'search' },
+              { send: ['store', 'plan'], label: '1 item', tone: 'ok' },
+              { say: 2 },
+              { badge: 'plan', text: 'vegetarian', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the most common Store bug',
+            lines: ["user-9 searches `['user-9', 'prefs']` and gets nothing from user-7."],
+            task: {
+              type: 'choose',
+              question: 'Which namespace would leak the preference to everyone?',
+              options: [
+                { text: "`['prefs']`, with no user id" },
+                { text: "`['user-7', 'prefs']`", why: 'Scoped by user id: other users never see it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Namespace Store keys by the user id taken from config.',
+            then: [{ send: ['u9', 'store'], label: 'search' }, { badge: 'u9', text: 'nothing', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: ready for production?',
+            lines: ['Pitfalls: missing reducers, random thread ids, unbounded history, dev-only savers in prod.'],
+            task: {
+              type: 'choose',
+              question: 'Which pair belongs in production?',
+              options: [
+                { text: 'PostgresSaver + PostgresStore' },
+                { text: 'MemorySaver + InMemoryStore', why: 'Dev-only: lost on restart.' },
+              ],
+              answer: 0,
+            },
+            solved: 'MemorySaver and InMemoryStore are for tests and demos only.',
+          },
+          {
+            kind: 'watch',
+            title: 'Test cheap, eval nightly',
+            lines: [
+              '42 unit tests (routers and nodes with a fake model) run in 3 s and cost $0.',
+              '15 nightly end-to-end evals on the real model cost about $0.40.',
+              '`LANGSMITH_TRACING=true` gives per-node traces, tokens and latencies.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'plan', text: '42 tests, $0', tone: 'ok' },
+              { say: 1 },
+              { badge: 'plan', text: '15 evals, $0.40' },
+              { say: 2 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** the checkpointer is the notepad for *one* conversation; the **Store** is the filing cabinet that survives across all of a user's conversations.
 
 | | Checkpointer | Store |

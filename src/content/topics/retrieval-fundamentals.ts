@@ -181,6 +181,102 @@ export function andSearch(index: Map<string, Posting[]>, query: string): string[
           'Each term points directly to the documents containing it, so query cost depends on posting-list lengths, not corpus size. Alphabetical storage and vectors do not give this property, and caching all queries is impossible.',
       },
       source: 'Manning, Raghavan and Schütze — Introduction to Information Retrieval, ch. 1–2',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'damaged refunds', x: 110, y: 150 },
+          { id: 'idx', kind: 'retriever', label: 'Inverted index', sub: 'term → posting list', x: 340, y: 150 },
+          { id: 'd1', kind: 'document', label: 'd1', sub: 'refunds · damaged', x: 570, y: 70 },
+          { id: 'd3', kind: 'document', label: 'd3', sub: 'damaged packaging', x: 570, y: 230 },
+          { id: 'd2', kind: 'document', label: 'd2', sub: 'shipping', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Find, then rank',
+            lines: [
+              'Information retrieval finds relevant items for a query in a large collection.',
+              'It **ranks** them so the best come first, like a librarian handing you the three best pages.',
+              'A ranking function scores each candidate: BM25, cosine, a reranker.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'idx'], label: 'query' },
+              { say: 1 },
+              { send: ['idx', 'd1'], label: '#1', tone: 'ok' },
+              { send: ['idx', 'd3'], label: '#2' },
+              { say: 2 },
+              { lit: 'idx' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The inverted index',
+            lines: [
+              'The index maps each term to a posting list: `damaged → [d1, d3]`, `refunds → [d1]`.',
+              '"damaged refunds" reads just 2 posting lists.',
+              'd1 matches both terms, d3 matches one; d2 is never touched.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'idx' },
+              { say: 1 },
+              { send: ['q', 'idx'], label: '2 terms' },
+              { say: 2 },
+              { send: ['idx', 'd1'], label: 'both', tone: 'ok' },
+              { send: ['idx', 'd3'], label: 'one' },
+              { down: 'd2' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: rank it',
+            lines: ['d1: "Refunds for damaged items…" · d3: "Damaged packaging…" · d2: "Shipping takes 3-5 business days."'],
+            task: {
+              type: 'pick',
+              question: 'Which chunk ranks first for "damaged refunds"?',
+              answer: 'd1',
+              hints: { d3: 'd3 matches only "damaged".', d2: 'd2 shares no terms with the query and is never touched.' },
+            },
+            solved: 'd1 matches both terms, so the ranking is d1, d3.',
+            setup: [{ down: 'd2', on: false }],
+            then: [{ send: ['idx', 'd1'], tone: 'ok' }, { badge: 'd1', text: '#1', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Two families of retrievers',
+            lines: [
+              '**Lexical** retrievers match words: keyword search, BM25, learned sparse.',
+              '**Semantic** retrievers match meaning: dense embeddings.',
+              'In RAG, retrieval caps answer quality: if the right chunk is not retrieved, the LLM cannot cite it.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'idx' },
+              { say: 1 },
+              { send: ['q', 'idx'], label: 'meaning?' },
+              { say: 2 },
+              { badge: 'd1', text: 'must be found', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why it scales',
+            lines: ['With 10M chunks, the same query reads lists of 40K and 8K entries.'],
+            task: {
+              type: 'choose',
+              question: 'Why does keyword search stay fast at billions of documents?',
+              options: [
+                { text: 'A query touches only the posting lists of its own terms' },
+                { text: 'It scans every document very quickly', why: 'It does not scan: d2 was never touched.' },
+                { text: 'It returns fewer results', why: 'Speed comes from the index structure, not from returning less.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The inverted index means a query reads only its terms\' lists, not 10M documents.',
+            then: [{ send: ['q', 'idx'], label: '2 lists', tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 2
     {
@@ -319,6 +415,101 @@ export function tfidfRank(docs: Record<string, string>, query: string): string[]
           'The index contains "refund", but the unstemmed query token is "refunds"; no posting list matches. Index and query analysers must be identical. Engines stem queries only when you configure the same analyser for the query.',
       },
       source: 'PostgreSQL docs — Full Text Search; Manning et al. — IR book, ch. 6 (tf-idf)',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'ERR_CONN_RESET chrome', x: 110, y: 150 },
+          { id: 'an', kind: 'tool', label: 'Analyser', sub: 'tokenise · stem', x: 340, y: 150 },
+          { id: 'kw', kind: 'retriever', label: 'Keyword search', sub: 'Postgres FTS', x: 570, y: 70 },
+          { id: 'dense', kind: 'retriever', label: 'Dense search', sub: 'meaning only', x: 570, y: 230 },
+          { id: 'page', kind: 'document', label: 'Error-code page', sub: 'err_conn_reset', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Ctrl+F, with ranking',
+            lines: [
+              'Keyword search matches the **words** of the query against the words of documents.',
+              'It is unbeatable when the user types the exact term: an error code, a SKU, a name.',
+              'For `ERR_CONN_RESET chrome`, dense-only search put the error-code page at #9.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'an'] },
+              { send: ['an', 'kw'] },
+              { say: 1 },
+              { send: ['kw', 'page'], label: 'top 3', tone: 'ok' },
+              { say: 2 },
+              { send: ['an', 'dense'], tone: 'miss' },
+              { badge: 'dense', text: 'page at #9', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the analyser',
+            lines: ['Text analysis decides what counts as a "word".'],
+            task: {
+              type: 'order',
+              question: 'Put the analysis steps in order.',
+              items: ['Tokenise', 'Normalise (lowercase, strip accents)', 'Drop stopwords (optional)', 'Stem or lemmatise'],
+              hint: 'You need tokens before you can clean them, and stemming works on the cleaned words.',
+            },
+            solved: 'Tokenise → normalise → stopwords → stem: "refunds", "refunded" → "refund".',
+            then: [{ send: ['q', 'an'] }, { send: ['an', 'kw'], label: 'tokens', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'TF-IDF: rare terms count more',
+            lines: [
+              'Term frequency × inverse document frequency, with idf = log(N / df).',
+              '`err_conn_reset` is in 3 of 50K docs: idf ≈ **9.7**. `chrome` is in 4,000: idf ≈ **2.5**.',
+              'The rare code dominates the score, which is what the user wanted.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'kw' },
+              { say: 1 },
+              { badge: 'kw', text: 'idf 9.7 vs 2.5' },
+              { say: 2 },
+              { send: ['kw', 'page'], label: 'rare term wins', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: mismatched analysers',
+            lines: ['Documents were indexed with stemming; queries skip it.'],
+            task: {
+              type: 'choose',
+              question: 'What goes wrong?',
+              options: [
+                { text: '"Refunds" in the query never matches "refund" in the index' },
+                { text: 'Nothing: stemming is optional', why: 'Stemming is optional, but docs and queries must use the same analyser.' },
+                { text: 'Only the ranking order changes', why: 'The terms do not match at all, so the document is not found.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use the same analyser at index and query time, always.',
+            then: [{ send: ['q', 'an'], label: 'refunds → refund' }, { send: ['an', 'kw'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Where keyword search fits',
+            lines: [
+              'TF-IDF has unbounded tf and no length control; BM25 fixes both.',
+              'Use keyword search for identifiers, codes, names and legal citations.',
+              'Avoid it as the only retriever for paraphrased questions: it is half of hybrid search.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'kw', text: 'unbounded tf', tone: 'miss' },
+              { say: 1 },
+              { send: ['kw', 'page'], tone: 'ok' },
+              { say: 2 },
+              { lit: 'dense' },
+              { lit: 'kw' },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 3
     {
@@ -470,6 +661,110 @@ console.log(compareB(docs, ['refund']));
           'tf·(k1+1)/(tf + K) approaches k1 + 1 as tf grows, so 200 repeats score only slightly more than a few, and the page\'s length increases K. IDF depends on document frequency, not repeats, and BM25 does use tf.',
       },
       source: 'Robertson and Zaragoza 2009 — The Probabilistic Relevance Framework: BM25 and Beyond; Lucene BM25Similarity',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'refund damaged', x: 110, y: 150 },
+          { id: 'idf', kind: 'metric', label: 'IDF', sub: 'rare terms weigh more', x: 340, y: 70 },
+          { id: 'tf', kind: 'metric', label: 'tf saturation', sub: 'k1 = 1.2 · cap 2.2', x: 340, y: 230 },
+          { id: 'a', kind: 'document', label: 'Doc A', sub: '80 words · 9.87', x: 570, y: 70 },
+          { id: 'b', kind: 'document', label: 'Doc B', sub: '200 words · 4.87', x: 570, y: 230 },
+          { id: 'len', kind: 'metric', label: 'Length norm', sub: 'b = 0.75', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'TF-IDF with two fixes',
+            lines: [
+              'BM25 = IDF × a **saturating**, **length-normalised** term frequency.',
+              'It is still the default ranking in Lucene, Elasticsearch and OpenSearch.',
+              'IDF: "damaged" (in 10 of 1,000 chunks) gets 4.557; "refund" (in 50) gets 2.987.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'idf'] },
+              { send: ['q', 'tf'] },
+              { say: 1 },
+              { lit: 'idf' },
+              { say: 2 },
+              { badge: 'idf', text: 'damaged 4.557', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'k1: saturation',
+            lines: [
+              'The first occurrence matters most; the tenth adds little.',
+              'k1 = 1.2: tf factor 1.0 at tf 1, 1.57 at tf 3, 1.96 at tf 10, capped at 2.2.',
+              'Keyword stuffing stops paying.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'tf' },
+              { say: 1 },
+              { badge: 'tf', text: '1.0 → 1.57 → 1.96' },
+              { say: 2 },
+              { badge: 'b', text: 'refund ×6', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'b: length normalisation',
+            lines: [
+              'Long documents naturally contain more terms, so their tf is discounted.',
+              'b = 0 disables it, b = 1 normalises fully; the default is 0.75.',
+              'Doc B is 200 words (avgdl 100): its length factor is 1.75.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'len' },
+              { say: 1 },
+              { send: ['len', 'b'], curve: true, label: 'discount' },
+              { say: 2 },
+              { badge: 'b', text: 'length 1.75', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which doc wins?',
+            lines: ['Doc A: 80 words, refund×3, damaged×1. Doc B: 200 words, refund×6, damaged×0.'],
+            task: {
+              type: 'pick',
+              question: 'Which document ranks first for "refund damaged"?',
+              answer: 'a',
+              hints: { b: 'Its six "refund"s saturate and are discounted for length, and it lacks the rare term "damaged": 4.87.' },
+            },
+            solved: 'Doc A wins 9.87 to 4.87: it covers the rare term, and B\'s repeats saturate.',
+            then: [{ send: ['idf', 'a'], label: '4.90 + 4.96', tone: 'ok' }, { badge: 'a', text: '9.87', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the cap',
+            lines: ['k1 controls saturation.'],
+            task: {
+              type: 'choose',
+              question: 'With k1 = 1.2, what is the most the tf factor can reach?',
+              options: [
+                { text: '2.2 (k1 + 1)' },
+                { text: 'No limit', why: 'Unbounded tf is the TF-IDF weakness BM25 fixes.' },
+                { text: '1.2', why: 'The cap is k1 + 1, not k1.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The tf factor approaches k1 + 1 = 2.2, so repeats stop paying.',
+            then: [{ badge: 'tf', text: 'cap 2.2', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Tune on data',
+            lines: [
+              'Short, uniform RAG chunks often do well with lower b (0.3–0.5).',
+              'Very repetitive technical docs may want a lower k1.',
+              'Tune on a labelled set, never by feel.',
+            ],
+            script: [{ say: 0 }, { lit: 'len' }, { say: 1 }, { lit: 'tf' }, { say: 2 }, { send: ['q', 'a'], curve: true, label: 'labelled set' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 4
     {
@@ -636,6 +931,99 @@ export function topKCosine(
           'Embedding models compress text into semantic features; similar-looking IDs map to nearby vectors, so the exact match is not guaranteed to rank first. Exact identifiers are a job for keyword or BM25 search (or a metadata filter).',
       },
       source: 'Karpukhin et al. 2020 — DPR; Thakur et al. 2021 — BEIR',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'money back: blender', x: 110, y: 150 },
+          { id: 'emb', kind: 'embedder', label: 'Embedder', sub: 'same model both sides', x: 340, y: 150 },
+          { id: 'vdb', kind: 'vector-db', label: 'ANN index', sub: 'chunk vectors', x: 570, y: 150 },
+          { id: 'refund', kind: 'document', label: 'Refund policy', sub: 'BM25 0.0 · cos 0.58', x: 800, y: 70 },
+          { id: 'manual', kind: 'document', label: 'X200 manual', sub: 'BM25 6.1 · cos 0.41', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Organise by meaning',
+            lines: [
+              'An embedding model turns queries and documents into vectors.',
+              'Similar meanings land close together.',
+              '"laptop won\'t power on" sits next to "device fails to boot".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'emb'] },
+              { say: 1 },
+              { send: ['emb', 'vdb'], label: 'vector' },
+              { say: 2 },
+              { badge: 'vdb', text: 'nearby meaning', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The bi-encoder',
+            lines: [
+              'Offline: embed every chunk and store the vectors in an ANN index.',
+              'Online: embed the query with the **same model** and fetch the nearest neighbours.',
+              '"How do I get my money back for a broken blender?" finds the refund policy at #1.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['refund', 'vdb'], curve: true, label: 'offline' },
+              { say: 1 },
+              { send: ['q', 'emb'] },
+              { send: ['emb', 'vdb'], label: 'same model' },
+              { say: 2 },
+              { send: ['vdb', 'refund'], label: '#1', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: zero word overlap',
+            lines: ['The refund policy shares no words with the question after stopwords.'],
+            task: {
+              type: 'pick',
+              question: 'Which chunk does dense retrieval rank first for the blender question?',
+              answer: 'refund',
+              hints: { manual: 'It shares the word "blender" (BM25 likes it, 6.1), but its cosine is only 0.41.' },
+            },
+            solved: 'Dense matches meaning: the refund policy scores 0.58 with zero word overlap.',
+            then: [{ send: ['vdb', 'refund'], tone: 'ok' }, { badge: 'refund', text: '0.58', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Where dense is weak',
+            lines: [
+              'Exact identifiers, rare names, negation, numbers and new jargon.',
+              '"X200-B error E4": dense ranks a generic troubleshooting page above the X200 manual.',
+              'BEIR: many dense models underperform BM25 out of domain, so modern systems go hybrid.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'manual' },
+              { say: 1 },
+              { send: ['vdb', 'manual'], label: 'not #1', tone: 'miss' },
+              { say: 2 },
+              { badge: 'vdb', text: 'use hybrid', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a new embedding model',
+            lines: ['Queries and chunks must live in one vector space.'],
+            task: {
+              type: 'choose',
+              question: 'You switch to a new embedding model. What must you do?',
+              options: [
+                { text: 'Re-embed every chunk with the new model' },
+                { text: 'Embed only new queries with the new model', why: 'The query must be embedded with the same model as the chunks.' },
+                { text: 'Nothing: vectors are model-independent', why: 'Each model has its own space; old vectors do not line up.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Same model on both sides: re-embed everything when you change models.',
+            then: [{ send: ['refund', 'emb'], curve: true, label: 're-embed' }, { send: ['emb', 'vdb'], tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 5
     {
@@ -784,10 +1172,205 @@ export class SparseIndex {
           'SPLADE predicts weights over the whole vocabulary, including terms not present in the text. Shared expansion terms create a non-zero dot product. It remains sparse (not dense cosine) and is not n-gram based.',
       },
       source: 'Formal et al. 2021 — SPLADE (SIGIR) and SPLADE v2',
+      steps: {
+        actors: [
+          { id: 'passage', kind: 'document', label: 'Passage', sub: 'Refunds for damaged…', x: 110, y: 70 },
+          { id: 'splade', kind: 'embedder', label: 'SPLADE', sub: 'BERT MLM head', x: 340, y: 70 },
+          { id: 'inv', kind: 'retriever', label: 'Inverted index', sub: 'sparse · dot product', x: 570, y: 150 },
+          { id: 'q', kind: 'user', label: 'Query', sub: 'reimbursed? broken', x: 110, y: 230 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25', sub: 'counted weights', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A shopping list',
+            lines: [
+              'A sparse vector has one dimension per vocabulary term (~30K), but only a handful are non-zero.',
+              'BM25 is sparse with **counted** weights.',
+              'Learned sparse retrievers have weights **predicted** by a transformer.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'inv' },
+              { say: 1 },
+              { send: ['q', 'bm25'] },
+              { say: 2 },
+              { send: ['passage', 'splade'] },
+              { send: ['splade', 'inv'], label: 'term weights' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What SPLADE learns',
+            lines: [
+              '**Re-weighting:** important terms get higher weights than plain tf would give.',
+              '**Expansion:** related terms that never appear get weight: refund → return, money, reimbursement.',
+              'A FLOPS regulariser keeps vectors sparse, so they still live in an inverted index.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['passage', 'splade'] },
+              { badge: 'splade', text: 'refund 2.41' },
+              { say: 1 },
+              { badge: 'splade', text: 'reimbursement 0.37', tone: 'ok' },
+              { say: 2 },
+              { send: ['splade', 'inv'], label: '~80 terms' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: retrieved with no shared word',
+            lines: ['Query: "can I get reimbursed for a broken toaster". BM25 scores the passage **0**.'],
+            task: {
+              type: 'choose',
+              question: 'Why does SPLADE still retrieve the passage?',
+              options: [
+                { text: 'Expansion gave the passage weight on "reimbursement", and the query on "damaged" and "refund"' },
+                { text: 'The passage contains the word "reimbursed"', why: '"reimbursed" and "broken" never appear in the passage.' },
+                { text: 'SPLADE searches an ANN index of dense vectors', why: 'SPLADE vectors are sparse and live in an inverted index.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Dot product over shared expanded terms ≈ 3.6, where BM25 found nothing.',
+            then: [{ send: ['q', 'inv'], curve: true, label: 'expanded query' }, { badge: 'inv', text: '≈ 3.6', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Score = dot product',
+            lines: [
+              'Shared terms: reimbursement, damaged, refund.',
+              '1.6×0.37 + 0.7×2.18 + 0.6×2.41 ≈ **3.6**.',
+              'Learned sparse sits between BM25 and dense: semantic-ish and explainable.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'inv'], curve: true },
+              { say: 1 },
+              { badge: 'inv', text: '≈ 3.6', tone: 'ok' },
+              { say: 2 },
+              { badge: 'bm25', text: '0', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: counted weights',
+            lines: ['Compare the two sparse retrievers.'],
+            task: {
+              type: 'pick',
+              question: 'Which retriever handles exact terms and is explainable, but gives no weight to synonyms?',
+              answer: 'bm25',
+              hints: {
+                splade: 'Learned sparse partly handles synonyms through expansion.',
+                inv: 'The inverted index serves both; it is not a weighting scheme.',
+              },
+            },
+            solved: 'BM25 weights are counted; SPLADE weights are learned and include expansions.',
+            then: [{ send: ['q', 'bm25'] }, { badge: 'bm25', text: 'exact terms', tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 6
     {
       heading: 'Hybrid Search — lexical and semantic, together',
+      short: {
+        id: 'hybrid-search-two-experts',
+        title: 'Hybrid search: two experts, one list',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Illustrative benchmark · 300 support questions',
+            value: 90,
+            suffix: '%',
+            unit: 'recall@20 with hybrid (RRF)',
+            sub: 'BM25 alone: **80%**. Dense alone: **81%**. Together: about 9–10 points better.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'ID-style queries · error codes, product IDs',
+            head: 'Exact codes need *exact words*',
+            rungs: [
+              {
+                label: 'BM25 only',
+                amount: 94,
+              },
+              {
+                label: 'Dense only',
+                amount: 68,
+              },
+              {
+                label: 'Hybrid (RRF)',
+                amount: 93,
+              },
+            ],
+            unit: '% recall@20',
+            sub: 'BM25 nails **"E1043"**, **"SKU-88213"** and names.',
+          },
+          {
+            type: 'ladder',
+            kicker: 'Natural-language queries',
+            head: 'Meaning needs *embeddings*',
+            rungs: [
+              {
+                label: 'BM25 only',
+                amount: 71,
+              },
+              {
+                label: 'Dense only',
+                amount: 89,
+              },
+              {
+                label: 'Hybrid (RRF)',
+                amount: 88,
+              },
+            ],
+            unit: '% recall@20',
+            sub: 'Dense nails **"my money back for a broken blender"**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'The pipeline',
+            head: 'Search twice, *fuse*, rerank',
+            steps: [
+              'BM25 top 50 and dense top 50, in parallel',
+              'Fuse with RRF: Σ 1/(60 + rank)',
+              'Cross-encoder reranks the fused top 50–100',
+              'Top 5–20 go to the LLM',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'The price',
+            value: 48,
+            unit: 'ms latency, up from 35 ms',
+            sub: 'Small, because the two searches run **in parallel**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Support docs full of error codes, product IDs and plain prose. Which retriever?',
+            answer: 2,
+            options: [
+              {
+                text: 'Dense only',
+                why: 'Dense scored 68% on ID-style queries: it blurs exact codes.',
+              },
+              {
+                text: 'BM25 only',
+                why: 'BM25 scored 71% on natural-language queries: it misses paraphrases.',
+              },
+              {
+                text: 'Hybrid: BM25 + dense, fused',
+                why: 'The failure modes are complementary, so hybrid wins overall: 90% vs 80–81%.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Complementary failures are *the whole reason* it works.',
+          sub: 'Run lexical and dense **in parallel**, fuse with RRF (k = 60), then rerank.',
+        },
+      },
       body: `**Hybrid search** runs a lexical retriever (BM25 or learned sparse) and a dense retriever in parallel and merges their results. It is like asking both a proof-reader who checks exact words and a subject expert who understands meaning: each catches what the other misses.
 
 **Pipeline**
@@ -942,6 +1525,110 @@ export async function hybrid(query: string) {
           'The exact error code is a rare, high-IDF token that BM25 matches precisely while embeddings blur it with similar codes. The other queries are natural-language questions where dense retrieval already does well.',
       },
       source: 'Qdrant docs — Hybrid queries; Anthropic 2024 — Contextual Retrieval (embeddings + BM25)',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'codes or questions', x: 110, y: 150 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25', sub: 'top 50', x: 340, y: 70 },
+          { id: 'dense', kind: 'retriever', label: 'Dense', sub: 'top 50', x: 340, y: 230 },
+          { id: 'fuse', kind: 'tool', label: 'RRF fusion', sub: 'Σ 1/(60 + rank)', x: 570, y: 150 },
+          { id: 'rerank', kind: 'reranker', label: 'Cross-encoder', sub: 'rerank top 50–100', x: 800, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'top 5–20', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Proof-reader and subject expert',
+            lines: [
+              'BM25 nails "E1043", "SKU-88213" and names.',
+              'Dense nails "my money back for a broken blender".',
+              'Each catches what the other misses: run both.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'bm25'], label: 'E1043', tone: 'ok' },
+              { say: 1 },
+              { send: ['q', 'dense'], label: 'broken blender', tone: 'ok' },
+              { say: 2 },
+              { send: ['bm25', 'fuse'] },
+              { send: ['dense', 'fuse'] },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline',
+            lines: ['Two retrievers, one list, one reranker.'],
+            task: {
+              type: 'order',
+              question: 'Put the hybrid search steps in order.',
+              items: ['Run BM25 and dense in parallel', 'Fuse the lists with RRF', 'Rerank the fused top 50–100', 'Send the top 5–20 to the LLM'],
+              hint: 'You need two lists before you can fuse them, and you rerank the fused list.',
+            },
+            solved: 'Retrieve in parallel → fuse → rerank → LLM.',
+            then: [
+              { send: ['q', 'bm25'] },
+              { send: ['q', 'dense'] },
+              { send: ['bm25', 'fuse'] },
+              { send: ['dense', 'fuse'] },
+              { send: ['fuse', 'rerank'] },
+              { send: ['rerank', 'llm'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The benchmark',
+            lines: [
+              'BM25 only: 94% recall@20 on ID-style queries, 71% on natural language.',
+              'Dense only: 68% on IDs, 89% on natural language.',
+              'Hybrid (RRF): 93% and 88%, 90% overall; latency 35 → 48 ms because the searches run in parallel.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'bm25', text: 'IDs 94%', tone: 'ok' },
+              { say: 1 },
+              { badge: 'dense', text: 'NL 89%', tone: 'ok' },
+              { say: 2 },
+              { send: ['bm25', 'fuse'] },
+              { send: ['dense', 'fuse'] },
+              { badge: 'fuse', text: '90% overall', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why hybrid wins',
+            lines: ['Hybrid loses at most a point on each slice but wins overall by about 9–10 points.'],
+            task: {
+              type: 'choose',
+              question: 'Why does hybrid beat both single retrievers overall?',
+              options: [
+                { text: 'Their failure modes are complementary' },
+                { text: 'Dense is always better; BM25 only adds speed', why: 'BM25 wins the ID-style slice (94% vs 68%).' },
+                { text: 'Running two searches makes each one more accurate', why: 'Each retriever is unchanged; fusion combines what each finds.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Complementary failure modes are the whole reason hybrid works.',
+            then: [{ send: ['bm25', 'fuse'], tone: 'ok' }, { send: ['dense', 'fuse'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When to use it',
+            lines: [
+              'Use hybrid by default for production RAG over mixed content: codes, names and prose.',
+              'Pure dense is fine only for purely conversational corpora with no identifiers.',
+              'Measure per-slice recall: ID queries vs natural language.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['fuse', 'rerank'] },
+              { send: ['rerank', 'llm'], tone: 'ok' },
+              { say: 1 },
+              { lit: 'dense' },
+              { say: 2 },
+              { badge: 'fuse', text: 'per slice', tone: 'ok' },
+            ],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

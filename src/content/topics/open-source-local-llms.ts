@@ -36,6 +36,83 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Open-Source LLMs — open-weights families, licences and how to choose',
+      steps: {
+        actors: [
+          { id: 'team', kind: 'user', label: 'Your team', sub: 'data, hardware, task', x: 110, y: 70 },
+          { id: 'licence', kind: 'guard', label: 'Licence', sub: 'what binds you', x: 340, y: 70 },
+          { id: 'hw', kind: 'server', label: 'Hardware', sub: 'params × bytes', x: 570, y: 70 },
+          { id: 'board', kind: 'metric', label: 'Leaderboards', sub: 'shortlist 2–3', x: 800, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Open weights', sub: 'you run it', x: 340, y: 230 },
+          { id: 'evals', kind: 'judge', label: 'Your eval set', sub: 'at your quantisation', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Buying a car, not taking taxis',
+            lines: [
+              'You own the running costs, can modify it and park it anywhere (on-prem, air-gapped).',
+              'You also maintain it.',
+              'And the **licence** still tells you where you may drive.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['team', 'model'], label: 'run it yourself', curve: true },
+              { say: 1 },
+              { badge: 'model', text: 'you maintain', ms: 1000 },
+              { say: 2 },
+              { lit: 'licence' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: open-weights vs open-source',
+            lines: ['Few releases (e.g. OLMo) meet the OSI\'s Open Source AI Definition.'],
+            task: {
+              type: 'choose',
+              question: 'What do most "open" LLMs publish?',
+              options: [
+                { text: 'Weights and inference code, under custom licences' },
+                { text: 'Weights, training data and the full recipe', why: 'Most do not publish the training data or full recipe.' },
+                { text: 'Only an API', why: 'An API-only model is not open weights at all.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Open weights ≠ open source: the licence text is what binds you.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: how to choose',
+            lines: ['Filter first, then shortlist, then decide on your own data.'],
+            task: {
+              type: 'order',
+              question: 'Order the steps for choosing an open model.',
+              items: ['Filter by licence and data residency', 'Filter by hardware (memory = params × bytes)', 'Shortlist 2–3 on public leaderboards', 'Decide with your own eval set'],
+              hint: 'Hard constraints first; the final call uses your eval set at the quantisation you will run.',
+            },
+            solved: 'Licence → hardware → leaderboard shortlist → your own eval set.',
+            then: [{ send: ['team', 'licence'], label: '1' }, { send: ['licence', 'hw'], label: '2' }, { send: ['hw', 'board'], label: '3' }, { send: ['board', 'evals'], label: '4', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Memory and MoE',
+            lines: [
+              'Memory = params × bytes per param.',
+              'An **MoE** model needs *all* its experts in memory, not just the active ones.',
+            ],
+            script: [{ say: 0 }, { send: ['model', 'hw'], label: 'params × bytes', curve: true }, { say: 1 }, { badge: 'hw', text: 'all experts', tone: 'miss', ms: 1200 }],
+          },
+          {
+            kind: 'watch',
+            title: 'When open weights win',
+            lines: [
+              'Data cannot leave your network.',
+              'You need fine-tuning or full control of versions.',
+              'Very high volume makes per-token API pricing expensive, or you need offline/edge.',
+            ],
+            script: [{ say: 0 }, { lit: 'model' }, { say: 1 }, { badge: 'model', text: 'pinned version', ms: 1000 }, { say: 2 }, { badge: 'model', text: 'offline', tone: 'ok', ms: 1000 }],
+          },
+        ],
+      },
       body: `**Intuition:** an open-weights model is like buying a car instead of taking taxis: you own the running costs, can modify it and can park it anywhere (on-prem, air-gapped), but you also maintain it, and the licence still tells you where you may drive.
 
 **Open-weights vs open-source.** Most "open" LLMs publish weights and inference code but not the training data or full recipe, under custom licences. The OSI's Open Source AI Definition (2024) also requires data information and training code; few releases (e.g. OLMo) meet it. The licence text is what binds you.
@@ -161,6 +238,87 @@ assert licence_gate({"license": "gemma"}, {"commercial": True}) == "review"`,
     },
     {
       heading: 'Local LLM Deployment — Ollama, llama.cpp and LM Studio',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'user', label: 'Your app', sub: 'OpenAI SDK code', x: 110, y: 70 },
+          { id: 'ollama', kind: 'server', label: 'Ollama', sub: ':11434', x: 340, y: 70 },
+          { id: 'gpu', kind: 'server', label: 'GPU VRAM', sub: 'offloaded layers', x: 570, y: 70 },
+          { id: 'cpu', kind: 'server', label: 'CPU', sub: 'spilled layers', x: 800, y: 70 },
+          { id: 'llamacpp', kind: 'server', label: 'llama-server', sub: 'llama.cpp, :8080', x: 340, y: 230 },
+          { id: 'lms', kind: 'server', label: 'LM Studio', sub: ':1234/v1', x: 570, y: 230 },
+          { id: 'vllm', kind: 'server', label: 'vLLM / SGLang', sub: 'multi-user GPU', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Docker for models',
+            lines: [
+              'One command downloads a quantised model and serves an API on **localhost**.',
+              'Your existing OpenAI-SDK code just changes the **base URL**.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'ollama' },
+              { badge: 'ollama', text: 'pull + serve', ms: 1000 },
+              { say: 1 },
+              { send: ['app', 'ollama'], label: 'base URL' },
+              { send: ['ollama', 'app'], label: 'reply', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the silent truncation',
+            lines: ['A long prompt to Ollama comes back as if the start was never there.'],
+            task: {
+              type: 'choose',
+              question: 'What is the likely cause?',
+              options: [
+                { text: 'The default context is only a few thousand tokens; set `num_ctx` or `OLLAMA_CONTEXT_LENGTH`' },
+                { text: 'The model spilled to CPU', why: 'CPU spill makes it slower, not shorter; truncation comes from the context setting.' },
+                { text: 'Too many parallel requests', why: 'Concurrency limits throughput; the prompt was cut by the default context length.' },
+              ],
+              answer: 0,
+            },
+            solved: "Ollama's default context is small and longer prompts are silently truncated: set `num_ctx`.",
+            then: [{ send: ['app', 'ollama'], label: 'num_ctx set', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'When the model does not fit',
+            lines: [
+              'If the model does not fit in VRAM, layers spill to the CPU.',
+              'Speed drops **5–20×**; `ollama ps` shows the CPU/GPU split.',
+              'On a Mac, unified memory helps, but the GPU can wire only ~65–75% of RAM by default.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ollama', 'gpu'], label: 'layers' },
+              { send: ['ollama', 'cpu'], label: 'the rest', tone: 'miss', curve: true },
+              { say: 1 },
+              { badge: 'cpu', text: '5–20× slower', tone: 'err', ms: 1100 },
+              { say: 2 },
+              { badge: 'gpu', text: '~65–75% of RAM', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: dozens of users',
+            lines: ['An internal tool grows from a handful of users to dozens at once.'],
+            task: {
+              type: 'pick',
+              question: 'Where should it move?',
+              answer: 'vllm',
+              hints: {
+                ollama: 'Ollama handles a few parallel requests; it suits small tools under ~10 concurrent users.',
+                llamacpp: 'llama.cpp handles a few parallel requests; it is for max control, edge and CI.',
+                lms: 'LM Studio is a desktop GUI for trying models.',
+              },
+            },
+            solved: 'A few users → Ollama/llama.cpp; dozens of concurrent users → vLLM/SGLang.',
+            then: [{ send: ['app', 'vllm'], label: 'many users', tone: 'ok', curve: true }],
+          },
+        ],
+      },
       body: `**Intuition:** local runtimes are "Docker for models": one command downloads a quantised model and exposes an API on localhost that your existing OpenAI-SDK code can call by changing the base URL.
 
 | Tool | Best for | API | Notes |
@@ -333,6 +491,209 @@ console.log(await findLocalLLM());`,
     },
     {
       heading: 'Quantization — GGUF, GPTQ, AWQ and FP8 with memory maths',
+      short: {
+        id: 'quantize-70b-memory-maths',
+        title: 'Fitting a 70B model: the memory maths',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'Llama-3.1-70B · 70.6B params',
+            head: 'Same model, *fewer bits*',
+            rungs: [
+              {
+                label: 'BF16',
+                amount: 141,
+              },
+              {
+                label: 'FP8',
+                amount: 71,
+              },
+              {
+                label: 'AWQ 4-bit (~4.25 bpw)',
+                amount: 37.5,
+              },
+            ],
+            unit: 'GB of weights',
+            sub: 'GB ≈ params × bits / 8, then add **KV cache** and overhead.',
+          },
+          {
+            type: 'counter',
+            kicker: 'FP8 on one H100 80 GB',
+            prefix: '~',
+            value: 7,
+            unit: 'GB left for KV cache',
+            sub: '≈ 22k tokens in fp16, **~45k** with FP8 KV.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Where each one fits',
+            head: 'Pick the format for the *target*',
+            claims: [
+              {
+                text: 'BF16, 141 GB',
+                ok: true,
+                note: '2 × H100 80 GB',
+              },
+              {
+                text: 'AWQ 4-bit, 37.5 GB',
+                ok: true,
+                note: '1 × 48 GB L40S',
+              },
+              {
+                text: 'GGUF Q4_K_M, 42.8 GB',
+                ok: true,
+                note: 'a 64 GB Mac, 16k context',
+              },
+              {
+                text: 'Q2_K, ≈ 25 GB',
+                ok: false,
+                note: 'SQL exact-match 81% → 62%: rejected',
+              },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Quality guide',
+            head: 'How low can you *go*?',
+            items: [
+              {
+                label: '8-bit: essentially lossless',
+                keep: true,
+              },
+              {
+                label: 'Good 4-bit: ~1–3% on typical benchmarks',
+                keep: true,
+              },
+              {
+                label: '≤ 3 bits: math, code, long context degrade',
+              },
+            ],
+            keepLabel: 'SHIP',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'One 80 GB H100, a 70B model, many concurrent users. Best default quantisation?',
+            answer: 1,
+            options: [
+              {
+                text: 'GGUF Q4_K_M through llama.cpp',
+                why: 'llama.cpp is not built for high-concurrency datacenter batching.',
+              },
+              {
+                text: 'FP8 weights (optionally FP8 KV cache) in vLLM or SGLang',
+                why: 'Near lossless, fits 70B in ~71 GB, and uses H100 FP8 tensor cores for fast prefill and batched decode.',
+              },
+              {
+                text: 'Q2_K to maximise KV-cache space',
+                why: 'It costs too much quality.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'A bigger model at *4-bit* usually wins.',
+          sub: 'It beats a smaller 16-bit model in the same memory; **gate every format** on your own eval.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'weights', kind: 'data', label: 'Weights', sub: 'params × bits / 8', x: 110, y: 70 },
+          { id: 'bf16', kind: 'metric', label: 'BF16', sub: '16 bits, baseline', x: 340, y: 70 },
+          { id: 'q4', kind: 'metric', label: '4-bit', sub: 'Q4_K_M · AWQ · GPTQ', x: 570, y: 70 },
+          { id: 'fp8', kind: 'metric', label: 'FP8', sub: 'weights + activations', x: 800, y: 70 },
+          { id: 'mem', kind: 'server', label: 'GPU memory', sub: '+ KV cache, overhead', x: 340, y: 230 },
+          { id: 'kv', kind: 'cache', label: 'KV cache', sub: 'FP8: 2× context', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A high-quality JPEG',
+            lines: [
+              'Store each weight with fewer bits and accept a tiny loss in fidelity.',
+              'The file is **2–4× smaller** and also loads and runs faster.',
+              'Faster because decoding is limited by how fast weights stream from memory.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['bf16', 'q4'], label: 'fewer bits' },
+              { say: 1 },
+              { badge: 'q4', text: '2–4× smaller', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { send: ['mem', 'q4'], label: 'stream weights', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: memory maths',
+            lines: ['`weights_GB ≈ params × bits_per_weight / 8 / 1e9`'],
+            task: {
+              type: 'choose',
+              question: 'What else must you add on top of the weights?',
+              options: [
+                { text: 'The KV cache and ~1–2 GB overhead' },
+                { text: 'Nothing: the formula is the total', why: 'The formula covers weights only; add the KV cache and overhead.' },
+                { text: 'A second copy of the weights', why: 'Inference holds one copy; what you add is the KV cache and ~1–2 GB overhead.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Total ≈ weights + KV cache + ~1–2 GB overhead.',
+            then: [{ send: ['weights', 'mem'], label: 'weights', curve: true }, { send: ['kv', 'mem'], label: '+ KV cache' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Weight-only vs weight+activation',
+            lines: [
+              '4-bit GGUF/GPTQ/AWQ quantise **weights only**: great for memory-bound decode.',
+              '**FP8** and W8A8 also quantise activations, speeding up compute-bound prefill.',
+            ],
+            script: [{ say: 0 }, { lit: 'q4' }, { badge: 'q4', text: 'decode', ms: 900 }, { say: 1 }, { lit: 'fp8' }, { badge: 'fp8', text: 'prefill', ms: 900 }],
+          },
+          {
+            kind: 'watch',
+            title: 'How much quality you lose',
+            lines: [
+              '**8-bit** is essentially lossless.',
+              'Good **4-bit** loses ~1–3% on typical benchmarks.',
+              '**≤ 3 bits** degrades sharply, especially math, code and long context.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'fp8', text: 'lossless', tone: 'ok', ms: 900 },
+              { say: 1 },
+              { badge: 'q4', text: '~1–3% loss', tone: 'miss', ms: 900 },
+              { say: 2 },
+              { badge: 'weights', text: '≤3 bits: bad', tone: 'err', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: same memory budget',
+            lines: ['You have a fixed amount of memory.'],
+            task: {
+              type: 'choose',
+              question: 'Which usually gives better answers in the same memory?',
+              options: [
+                { text: 'A larger model at 4-bit' },
+                { text: 'A smaller model at 16-bit', why: 'Good 4-bit loses only ~1–3%, so a larger model at 4-bit usually wins.' },
+                { text: 'A larger model at 2-bit', why: 'At ≤ 3 bits quality degrades sharply.' },
+              ],
+              answer: 0,
+            },
+            solved: 'A larger model at 4-bit usually beats a smaller model at 16-bit in the same memory.',
+          },
+          {
+            kind: 'watch',
+            title: 'Which format where',
+            lines: [
+              '**GGUF** for local and edge; **AWQ/GPTQ 4-bit** when GPU memory or cost matters.',
+              '**FP8** by default on modern datacenter GPUs.',
+              'Quantising the **KV cache** to FP8 doubles context capacity.',
+            ],
+            script: [{ say: 0 }, { lit: 'q4' }, { say: 1 }, { lit: 'fp8' }, { say: 2 }, { badge: 'kv', text: '2× context', tone: 'ok', ms: 1100 }],
+          },
+        ],
+      },
       body: `**Intuition:** quantisation is saving a photo as a high-quality JPEG: store each weight with fewer bits, accept a tiny loss in fidelity, and get a file 2–4× smaller that also loads and runs faster, because LLM decoding is limited by how fast weights stream from memory.
 
 **Memory maths:** \`weights_GB ≈ params × bits_per_weight / 8 / 1e9\`, then add KV cache and ~1–2 GB overhead.

@@ -52,7 +52,7 @@ function AccuracyTable({ caption, children }: { caption: string; children: React
 const HOW: [string, string][] = [
   ['Drill the wrong answers.', 'The mistakes drill asks only questions whose latest answer was wrong. Drills never count towards passing.'],
   ['Answer it right once.', 'A question leaves this list as soon as your most recent answer is correct. Miss it again and it comes back.'],
-  ['Revise the section.', 'Each miss is matched to the Learn section it most likely tests, so “Revise §n” opens the right page.'],
+  ['Revise the section.', 'Each miss is matched to the Learn section it most likely tests, so “Revise section n” opens the right page.'],
   ['Retake the full exam.', 'Only a full-length exam updates your score and can pass the topic.'],
 ];
 
@@ -120,7 +120,7 @@ function WeakCard({ w, i, maxWrong, featured }: { w: TopicWeakness; i: number; m
               <span className="rev-count">{ws.missed.length} missed</span>
               <span className="rev-heading">{ws.heading}</span>
               <Link to={`/topic/${w.topic.id}?tab=learn&s=${ws.index}`} className="rev-link">
-                Revise §{ws.index + 1} <ArrowRight size={13} aria-hidden />
+                Revise section {ws.index + 1} <ArrowRight size={13} aria-hidden />
               </Link>
             </li>
           ))}
@@ -128,7 +128,7 @@ function WeakCard({ w, i, maxWrong, featured }: { w: TopicWeakness; i: number; m
             <li key={`steps-${st.index}`}>
               <span className="rev-count warn">{st.missed} in steps</span>
               <span className="rev-heading">
-                §{st.index + 1} {st.heading}: <em>Your turn</em> step{st.missed === 1 ? '' : 's'} needed a hint
+                Section {st.index + 1}: {st.heading}: <em>Your turn</em> step{st.missed === 1 ? '' : 's'} needed a hint
               </span>
               <Link to={`/topic/${w.topic.id}?tab=learn&s=${st.index}`} className="rev-link">
                 Redo the steps <ArrowRight size={13} aria-hidden />
@@ -186,14 +186,14 @@ export function WeakAreasPage() {
   if (!answered && !weak.length) {
     return (
       <div className="page diag">
-        <header className="diag-head rise">
+        <header className="diag-head rise" data-guide="weak-head">
           <p className="eyebrow">Diagnostics</p>
           <h1>
             <span className="gtext">Weak areas</span>
           </h1>
         </header>
         <div className="diag-empty-grid">
-          <section className="diag-empty glass rise d1" aria-labelledby="diag-empty-title">
+          <section className="diag-empty glass rise d1" aria-labelledby="diag-empty-title" data-guide="weak-empty">
             <span className="diag-orb" aria-hidden>
               <Crosshair size={26} />
             </span>
@@ -225,7 +225,7 @@ export function WeakAreasPage() {
   const overallPct = pct(overall);
   return (
     <div className="page diag">
-      <header className="diag-head rise">
+      <header className="diag-head rise" data-guide="weak-head">
         <p className="eyebrow">Diagnostics</p>
         <h1>
           <span className="gtext">Weak areas</span>
@@ -254,7 +254,7 @@ export function WeakAreasPage() {
         </div>
       </dl>
 
-      <section className="diag-accuracy rise d2" aria-label="Accuracy">
+      <section className="diag-accuracy rise d2" aria-label="Accuracy" data-guide="weak-accuracy">
         <div className="diag-panel glass">
           <AccuracyTable caption="Accuracy by difficulty">
             {levels.map((d) => (
@@ -277,13 +277,13 @@ export function WeakAreasPage() {
       </section>
 
       <div className="diag-body">
-        <section className="diag-focus rise d3" aria-labelledby="focus-title">
+        <section className="diag-focus rise d3" aria-labelledby="focus-title" data-guide="weak-focus">
           <div className="diag-focus-head">
             <h2 id="focus-title">
               Focus list <span className="diag-count">{pad(weak.length)}</span>
             </h2>
             {totalWrong > 0 && (
-              <Link to="/practice" className="btn btn-primary">
+              <Link to="/practice" className="btn btn-primary" data-guide="weak-drill">
                 Practise all {totalWrong} mistake{totalWrong === 1 ? '' : 's'} <ArrowRight size={16} aria-hidden />
               </Link>
             )}
@@ -349,7 +349,7 @@ export function PracticePage() {
     const clear = answered > 0;
     return (
       <div className="page drill-empty">
-        <section className={`drill-hero glass rise ${clear ? 'clear' : ''}`} aria-labelledby="drill-title">
+        <section className={`drill-hero glass rise ${clear ? 'clear' : ''}`} aria-labelledby="drill-title" data-guide="drill-hero">
           <div className="drill-hero-glow" aria-hidden />
           <span className={`diag-orb ${clear ? 'good' : ''}`} aria-hidden>
             {clear ? <CircleCheck size={28} /> : <Sparkles size={28} />}
@@ -374,7 +374,7 @@ export function PracticePage() {
             </Link>
           </div>
         </section>
-        <section className="drill-explain rise d1" aria-labelledby="drill-explain-title">
+        <section className="drill-explain rise d1" aria-labelledby="drill-explain-title" data-guide="drill-explain">
           <p className="lbl" id="drill-explain-title">
             What fills this drill
           </p>

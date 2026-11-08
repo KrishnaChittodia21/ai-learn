@@ -192,7 +192,7 @@ function STEPS(): Step[] {
           <p className="tour-note">The challenges open once every topic exam is passed.</p>
           <p className="tour-note">
             Along the way you earn <strong>achievements</strong>: badges for milestones that climb from bronze to diamond. They live on
-            the Achievements page and the Trophy shelf on Today.
+            the Achievements page and the Trophy shelf on Track.
           </p>
         </>
       ),
@@ -205,20 +205,20 @@ function STEPS(): Step[] {
           <p className="tour-lead">The glass header at the top of every page holds everything.</p>
           <dl className="tour-defs">
             <div>
-              <dt>Today</dt>
-              <dd>Your next step, where you left off, and your study record.</dd>
+              <dt>Dashboard</dt>
+              <dd>Your next step, where you left off, and today's Short.</dd>
+            </div>
+            <div>
+              <dt>Track</dt>
+              <dd>Coverage, pace, weak spots, streak, badges and your study record.</dd>
             </div>
             <div>
               <dt>Syllabus</dt>
               <dd>Every level, phase and topic as a map, with your status beside each.</dd>
             </div>
             <div>
-              <dt>Practice</dt>
-              <dd>Drill the exam questions you got wrong.</dd>
-            </div>
-            <div>
               <dt>Weak areas</dt>
-              <dd>The sections behind your mistakes, and how to fix them.</dd>
+              <dd>The sections behind your mistakes, and a timed drill of the questions you got wrong.</dd>
             </div>
             <div>
               <dt>Challenges</dt>

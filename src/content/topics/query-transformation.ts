@@ -36,6 +36,221 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Query Rewriting — making the query standalone and searchable',
+      steps: {
+        actors: [
+          { id: 'hist', kind: 'data', label: 'Chat history', sub: 'laptop policy, hires', x: 110, y: 70 },
+          { id: 'user', kind: 'user', label: 'User', sub: 'and for contractors?', x: 110, y: 230 },
+          { id: 'rw', kind: 'llm', label: 'Rewriter', sub: 'small model', x: 340, y: 150 },
+          { id: 'ret', kind: 'retriever', label: 'Retriever', sub: 'no chat memory', x: 570, y: 150 },
+          { id: 'doc', kind: 'document', label: 'Contractor doc', sub: 'equipment addendum', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The retriever has no memory',
+            lines: [
+              'After asking about the laptop policy for new hires, the user types "and for contractors?".',
+              'The retriever sees only that text.',
+              'It returns the onboarding checklist and invoice rules; the laptop policy is not in the top 10.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'hist' },
+              { lit: 'user' },
+              { say: 1 },
+              { send: ['user', 'ret'], curve: true, label: 'and for contractors?' },
+              { say: 2 },
+              { badge: 'ret', text: 'wrong docs', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Rewrite to standalone',
+            lines: [
+              'An LLM resolves pronouns and ellipsis using the chat history.',
+              '"and for contractors?" becomes **"laptop policy for contractors"**.',
+              'The contractor addendum ranks #1: cosine 0.81 vs 0.44, for ~250 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['hist', 'rw'], label: 'history' },
+              { send: ['user', 'rw'], label: 'message' },
+              { say: 1 },
+              { send: ['rw', 'ret'], label: 'laptop policy…' },
+              { say: 2 },
+              { send: ['ret', 'doc'], label: '#1', tone: 'ok' },
+              { badge: 'doc', text: '0.81', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who fixes it?',
+            lines: ['"and for contractors?" only makes sense with the conversation.'],
+            task: {
+              type: 'pick',
+              question: 'Which part uses the chat history to make the query standalone?',
+              answer: 'rw',
+              hints: {
+                ret: 'The retriever has no chat memory; it only sees the text it is given.',
+                doc: 'The document is what we want to find.',
+                hist: 'The history is the input the rewriter reads.',
+                user: 'The user wrote the short follow-up.',
+              },
+            },
+            solved: 'The rewriter turns the follow-up into a standalone search query.',
+            then: [{ send: ['hist', 'rw'] }, { send: ['rw', 'ret'], label: 'standalone', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Guardrails',
+            lines: [
+              'Keep entities, numbers and quoted strings verbatim.',
+              'Output only the query; if the message is already standalone, return it unchanged.',
+              'On error or timeout, fall back to the original query.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'rw', text: 'IDs verbatim', tone: 'ok' },
+              { say: 1 },
+              { send: ['rw', 'ret'], label: 'query only' },
+              { say: 2 },
+              { down: 'rw' },
+              { send: ['user', 'ret'], curve: true, label: 'original', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: already standalone',
+            lines: ['A new message: "What does error code E-1043 mean?"'],
+            task: {
+              type: 'choose',
+              question: 'What should the rewriter return?',
+              options: [
+                { text: 'The message unchanged' },
+                { text: 'A version with "E-1043" replaced by a description', why: 'Keep IDs, numbers and quoted text verbatim.' },
+                {
+                  text: 'A paraphrase merged with the earlier laptop question',
+                  why: 'It is already standalone; pulling in old context would change its meaning.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Standalone in, unchanged out: rewriting is for follow-ups, typos and very short queries.',
+            then: [{ send: ['user', 'rw'] }, { send: ['rw', 'ret'], label: 'unchanged', tone: 'ok' }],
+          },
+        ],
+      },
+      short: {
+        id: 'and-for-contractors-rewrite',
+        title: 'Rewriting "and for contractors?"',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'A multi-turn chat',
+            head: 'The retriever has *no memory*',
+            steps: [
+              'User: "What\'s the laptop policy for new hires?"',
+              'Bot: "14-inch laptop, refreshed every 3 years."',
+              'User: "and for contractors?"',
+              'Retriever embeds only "and for contractors?"',
+            ],
+            broken: 3,
+          },
+          {
+            type: 'claims',
+            kicker: 'Without rewriting',
+            head: 'Results for *"and for contractors?"*',
+            claims: [
+              {
+                text: 'Contractor onboarding checklist',
+                ok: false,
+                note: 'contractors, not laptops',
+              },
+              {
+                text: 'Invoice rules',
+                ok: false,
+                note: 'off topic',
+              },
+              {
+                text: 'Laptop policy',
+                ok: false,
+                note: 'not in the top 10',
+              },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'The rewriter',
+            head: 'Make it *standalone*',
+            steps: [
+              'Resolve "for contractors" with chat history',
+              'Keep IDs, numbers and quotes verbatim',
+              'Output only the query',
+              '"laptop policy for contractors"',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Contractor equipment addendum',
+            head: 'Now it ranks *#1*',
+            rungs: [
+              {
+                label: '"and for contractors?"',
+                amount: 0.44,
+              },
+              {
+                label: '"laptop policy for contractors"',
+                amount: 0.81,
+              },
+            ],
+            unit: 'cosine',
+            sub: 'Cost: one small-model call, ~60 tokens in + 15 out, **~250 ms**.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Guardrails',
+            head: 'A bad rewrite must not *destroy recall*',
+            items: [
+              {
+                label: 'Fall back to the original on error or timeout',
+                keep: true,
+              },
+              {
+                label: 'Fuse original + rewritten retrieval',
+                keep: true,
+              },
+              {
+                label: 'Let the rewrite drop IDs and numbers',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The message is already a standalone query. What should the rewriter return?',
+            answer: 1,
+            options: [
+              {
+                text: 'A longer, more detailed query',
+                why: 'Extra words can drift the meaning; a standalone query needs no rewrite.',
+              },
+              {
+                text: 'The message unchanged',
+                why: 'The guardrail: if it is already standalone, return it as is.',
+              },
+              {
+                text: 'A summary of the whole chat',
+                why: 'The rewriter outputs only the search query, not the history.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Retrievers have *no chat memory*.',
+          sub: 'Rewrite every multi-turn query into a **standalone** one, keeping IDs and numbers verbatim.',
+        },
+      },
       body: `Users talk to chatbots like people: "and for contractors?", "wat abt the EU one". A retriever sees only that text, with no memory of the conversation. **Query rewriting** uses an LLM (or rules) to turn it into a clear, standalone search query, like a reference librarian restating your question before heading to the shelves.
 
 **What a rewriter does**
@@ -182,6 +397,104 @@ export function needsRewrite(message: string, hasHistory: boolean): boolean {
     // ---------------------------------------------------------------- 2
     {
       heading: 'Query Expansion — adding the words the documents actually use',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'laid off severance', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM expander', sub: 'related terms', x: 340, y: 70 },
+          { id: 'rm3', kind: 'tool', label: 'RM3 feedback', sub: 'terms from top-k', x: 340, y: 230 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25', sub: 'original terms ×2', x: 570, y: 150 },
+          { id: 'doc', kind: 'document', label: 'HR policy', sub: 'Involuntary Separ…', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Different words, same idea',
+            lines: [
+              'The user says "laid off"; the HR policy says "involuntary separation".',
+              'BM25 top-3: "Layoffs FAQ for managers", "Severance tax form", "Office closures".',
+              'The policy "Involuntary Separation Benefits" ranks #14.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { lit: 'doc' },
+              { say: 1 },
+              { send: ['q', 'bm25'], curve: true, label: 'laid off severance' },
+              { say: 2 },
+              { badge: 'doc', text: 'rank #14', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Expand the query',
+            lines: [
+              'The LLM adds: involuntary separation, termination, redundancy, separation pay, notice period.',
+              'The original terms are boosted ×2.',
+              'The policy ranks **#1**; recall@10 on a 120-question HR slice: 64% → 79%.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'llm'] },
+              { send: ['llm', 'bm25'], label: '+ separation, …' },
+              { say: 1 },
+              { badge: 'bm25', text: 'original ×2' },
+              { say: 2 },
+              { send: ['bm25', 'doc'], label: '#1', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why boost the original?',
+            lines: ['The expansion terms are added alongside the user\'s own words.'],
+            task: {
+              type: 'choose',
+              question: 'Why weight the original terms higher than the expansions?',
+              options: [
+                { text: 'So expansion adds recall without hijacking the query' },
+                { text: 'So BM25 runs faster', why: 'Boosting changes scores, not speed.' },
+                { text: 'Because expansion terms are usually wrong', why: 'They helped here; they are just secondary to what the user typed.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Original terms lead; expansion terms widen recall. Rerank afterwards to recover precision.',
+            then: [{ send: ['llm', 'bm25'], label: 'extra terms' }, { send: ['bm25', 'doc'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Three ways to expand',
+            lines: [
+              '**Thesaurus**: curated synonyms in the analyser; precise, high maintenance.',
+              '**RM3**: assume the top-k results are relevant and add their most distinctive terms; no LLM.',
+              '**LLM / query2doc**: best quality, adds latency; 3–15% BM25 gains reported on MS MARCO and TREC DL.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'bm25' },
+              { say: 1 },
+              { send: ['bm25', 'rm3'], curve: true, label: 'top-k' },
+              { send: ['rm3', 'bm25'], label: 'terms' },
+              { say: 2 },
+              { send: ['llm', 'bm25'], label: 'pseudo-doc' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the risky one',
+            lines: ['One method trusts the first results to be right.'],
+            task: {
+              type: 'pick',
+              question: 'Which expansion method can drift when the first results are bad?',
+              answer: 'rm3',
+              hints: {
+                llm: 'LLM expansion does not rely on first results; its cost is latency.',
+                bm25: 'BM25 is the retriever being helped, not an expansion method.',
+              },
+            },
+            solved: 'RM3 assumes the top-k are relevant, so bad first results feed it bad terms.',
+            then: [{ send: ['bm25', 'rm3'], curve: true, tone: 'miss' }, { badge: 'rm3', text: 'drift', tone: 'miss' }],
+          },
+        ],
+      },
       body: `Users and authors use different words: the user says "laid off", the HR policy says "involuntary separation". **Query expansion** adds related terms so the query meets the documents halfway, like a good search engine silently adding "OR synonym".
 
 **Three ways to expand**
@@ -349,6 +662,105 @@ export function rm3Lite(
     // ---------------------------------------------------------------- 3
     {
       heading: 'Multi-Query Retrieval — several phrasings, one fused result',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'Why is my build slow?', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'Variant writer', sub: '3–5 phrasings', x: 340, y: 150 },
+          { id: 'ret', kind: 'retriever', label: 'Retriever', sub: 'one search each', x: 570, y: 70 },
+          { id: 'fuse', kind: 'tool', label: 'RRF fusion', sub: 'RAG-Fusion, k = 60', x: 570, y: 230 },
+          { id: 'doc', kind: 'document', label: 'Build caching', sub: 'guide', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'One query is one guess',
+            lines: [
+              'Embedding similarity is sensitive to wording.',
+              'An LLM writes 3–5 different phrasings: vocabulary, specificity, angle.',
+              'Retrieve for the original **and** each variant, in parallel.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { say: 1 },
+              { send: ['q', 'llm'] },
+              { badge: 'llm', text: '3 variants' },
+              { say: 2 },
+              { send: ['llm', 'ret'], count: 4 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Fuse the lists',
+            lines: [
+              'RRF across the lists rewards documents found by several variants.',
+              'The original query\'s #1 was an unrelated "Slow laptop FAQ".',
+              'Recall@10 on a 150-question set: 71% → 82%.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ret', 'fuse'], label: '4 lists' },
+              { say: 1 },
+              { badge: 'ret', text: 'Slow laptop FAQ', tone: 'miss' },
+              { say: 2 },
+              { send: ['fuse', 'doc'], label: '#1', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who wins the fusion?',
+            lines: ['"Build caching guide": ranks 4, 1, 2, 3. "Docker layer caching": 5 and 1. "Slow laptop FAQ": 1, in the original list only.'],
+            task: {
+              type: 'choose',
+              question: 'Which document does RRF put first?',
+              options: [
+                { text: 'Build caching guide' },
+                { text: 'Slow laptop FAQ', why: 'Only one list found it: RRF 0.0164.' },
+                { text: 'Docker layer caching', why: 'Two lists found it: 0.0318, behind a document every list found.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Found by every list, the build caching guide scores 0.0640 and ranks first.',
+            then: [{ send: ['ret', 'fuse'], count: 4 }, { send: ['fuse', 'doc'], tone: 'ok' }, { badge: 'doc', text: '0.0640', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline',
+            lines: ['Keep the original query alongside the variants.'],
+            task: {
+              type: 'order',
+              question: 'Put the multi-query steps in order.',
+              items: [
+                'Generate 3–5 variants',
+                'Retrieve for the original and each variant in parallel',
+                'Fuse the lists with RRF',
+                'Optionally rerank the fused set',
+              ],
+              hint: 'You need the variants before you can search with them, and the lists before you can fuse.',
+            },
+            solved: 'Variants → parallel retrieval → RRF → rerank.',
+            then: [{ send: ['q', 'llm'] }, { send: ['llm', 'ret'], count: 3 }, { send: ['ret', 'fuse'] }, { send: ['fuse', 'doc'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Costs, and when to skip',
+            lines: [
+              'One LLM call (~200–600 ms) plus N parallel retrievals, so little extra latency.',
+              'Use it for ambiguous or broad questions, and pair it with a reranker.',
+              'Skip it for precise lookups ("SKU-88213 price"): variants only add noise.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: '~200–600 ms' },
+              { say: 1 },
+              { send: ['fuse', 'doc'], tone: 'ok' },
+              { say: 2 },
+              { down: 'llm' },
+              { send: ['q', 'ret'], curve: true, label: 'SKU-88213' },
+            ],
+          },
+        ],
+      },
       body: `A single query is one guess at how the answer is phrased. **Multi-query retrieval** asks an LLM for 3–5 different phrasings, retrieves for each **in parallel**, and fuses the results. It is like asking several colleagues to search the wiki independently and merging what they find.
 
 **Pipeline**
@@ -510,6 +922,117 @@ export async function dedupeVariants(
     // ---------------------------------------------------------------- 4
     {
       heading: 'Query Decomposition — breaking complex questions into retrievable parts',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Question', sub: 'US vs India leave', x: 110, y: 150 },
+          { id: 'dec', kind: 'llm', label: 'Decomposer', sub: 'sub-questions', x: 340, y: 150 },
+          { id: 'us', kind: 'retriever', label: 'Sub-question 1', sub: 'e.g. US leave', x: 570, y: 70 },
+          { id: 'in', kind: 'retriever', label: 'Sub-question 2', sub: 'e.g. India leave', x: 570, y: 230 },
+          { id: 'synth', kind: 'llm', label: 'Synthesiser', sub: 'cites [1] [2]', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'No single chunk answers it',
+            lines: [
+              '"How does our parental leave in the US compare with India?" needs two documents.',
+              'Single-query retrieval returned only the US handbook; India ranked #13.',
+              'The answer came out one-sided.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { say: 1 },
+              { send: ['q', 'us'], curve: true, label: 'one query' },
+              { badge: 'in', text: 'rank #13', tone: 'miss' },
+              { say: 2 },
+              { badge: 'synth', text: 'one-sided', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Split, retrieve, combine',
+            lines: [
+              'The decomposer writes self-contained sub-questions.',
+              'Both are retrieved at once: US 12 weeks paid; India 26 weeks maternity, 4 paternity.',
+              'Cost: 1 extra LLM call (~400 ms) + 2 parallel retrievals.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'dec'] },
+              { say: 1 },
+              { send: ['dec', 'us'], label: 'US leave' },
+              { send: ['dec', 'in'], label: 'India leave' },
+              { say: 2 },
+              { send: ['us', 'synth'], tone: 'ok' },
+              { send: ['in', 'synth'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which shape?',
+            lines: ['Parallel for comparisons and multi-part questions; sequential for multi-hop.'],
+            task: {
+              type: 'choose',
+              question: '"Which team owns the service that caused last Friday\'s outage?" How should it be decomposed?',
+              options: [
+                { text: 'Sequential: find the service first, then ask who owns it' },
+                {
+                  text: 'Parallel: ask both sub-questions at once',
+                  why: 'The second question needs the first answer (the service name) before it can be asked.',
+                },
+                { text: 'Not at all: one query is enough', why: 'No single chunk links the outage to the owning team.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Multi-hop is sequential: answer step 1, feed it into step 2.',
+            then: [
+              { send: ['dec', 'us'], label: 'which service?' },
+              { send: ['us', 'dec'], label: 'payments-api' },
+              { send: ['dec', 'in'], label: 'who owns it?' },
+              { send: ['in', 'synth'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Synthesise with labels',
+            lines: [
+              'Give the LLM each sub-question with its retrieved evidence, labelled.',
+              'Ask for an answer that cites per sub-question.',
+              '"India offers 26 weeks of maternity leave versus 12 weeks paid parental leave in the US [1][2]."',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['us', 'synth'], label: '[1]' },
+              { send: ['in', 'synth'], label: '[2]' },
+              { say: 1 },
+              { lit: 'synth' },
+              { say: 2 },
+              { badge: 'synth', text: '26 vs 12 weeks', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: gate it',
+            lines: ['Decomposition multiplies cost and latency.'],
+            task: {
+              type: 'choose',
+              question: 'A user asks "What is the US parental leave policy?" What should the decomposer do?',
+              options: [
+                { text: 'Return no sub-questions and run the plain query' },
+                {
+                  text: 'Split it into several narrower sub-questions',
+                  why: 'A simple lookup gains nothing; you pay extra calls for the same chunk.',
+                },
+                { text: 'Add an India sub-question for completeness', why: 'That answers a question the user did not ask.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Gate decomposition: simple lookups go straight to retrieval ("return [] if it is simple").',
+            then: [{ down: 'dec' }, { send: ['q', 'us'], curve: true, tone: 'ok' }],
+          },
+        ],
+      },
       body: `Some questions cannot be answered by any single chunk: "Compare the parental leave policies of our US and India offices" or "Which team owns the service that caused last Friday's outage?". **Query decomposition** splits them into sub-questions, retrieves for each, and combines the answers, like a project manager breaking a request into tasks.
 
 **Two shapes**
@@ -530,7 +1053,7 @@ Decomposer output (parallel):
 1. "parental leave policy United States duration"
 2. "parental leave policy India duration"
 
-Retrieval: sub-q 1 → "US Benefits Handbook §4.2: 12 weeks paid"; sub-q 2 → "India HR Policy 2026: 26 weeks maternity, 4 weeks paternity".
+Retrieval: sub-q 1 → "US Benefits Handbook section 4.2: 12 weeks paid"; sub-q 2 → "India HR Policy 2026: 26 weeks maternity, 4 weeks paternity".
 
 Synthesis: "India offers 26 weeks of maternity leave versus 12 weeks paid parental leave in the US [1][2]…"
 
@@ -672,6 +1195,106 @@ export async function twoHop(
     // ---------------------------------------------------------------- 5
     {
       heading: 'HyDE — embed a hypothetical answer instead of the question',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Question', sub: 'refunds: how long?', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'writes an answer', x: 340, y: 70 },
+          { id: 'emb', kind: 'embedder', label: 'Embedder', sub: 'answer-shaped vector', x: 340, y: 230 },
+          { id: 'vdb', kind: 'vector-db', label: 'Dense index', sub: '8K help chunks', x: 570, y: 150 },
+          { id: 'doc', kind: 'document', label: 'Refund policy', sub: '5–7 business days', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Questions don\'t look like answers',
+            lines: [
+              '"how long do refunds take" is short and interrogative.',
+              'The policy says "Refunds are processed within 5–7 business days of receipt".',
+              'Query-only retrieval: the true policy chunk ranks 6, cosine 0.52.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'q' },
+              { say: 1 },
+              { lit: 'doc' },
+              { say: 2 },
+              { send: ['q', 'emb'], curve: true },
+              { send: ['emb', 'vdb'] },
+              { badge: 'doc', text: 'rank 6', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Embed a hypothetical answer',
+            lines: [
+              'Prompt: "Write a passage that answers: {question}".',
+              'Embed that passage instead of the question.',
+              'Run normal dense retrieval: the policy chunk ranks **1**, cosine 0.83.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'llm'] },
+              { say: 1 },
+              { send: ['llm', 'emb'], label: 'fake passage' },
+              { say: 2 },
+              { send: ['emb', 'vdb'] },
+              { send: ['vdb', 'doc'], label: '#1', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a wrong hypothesis',
+            lines: ['The hypothetical passage says "5 to 10 business days"; the policy says 5–7.'],
+            task: {
+              type: 'choose',
+              question: 'Is the wrong number a problem?',
+              options: [
+                { text: 'No: the passage only steers retrieval; the real chunk supplies the facts' },
+                { text: 'Yes: the final answer will say 5 to 10 days', why: 'The answer cites the retrieved real chunk, not the hypothesis.' },
+                { text: 'Yes: retrieval will miss the policy', why: 'The real chunk ranked #1; topic and vocabulary matter, not the exact number.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Wrong facts in the hypothesis are tolerable: retrieval finds the real document.',
+            then: [{ send: ['vdb', 'doc'], tone: 'ok' }, { badge: 'doc', text: '5–7 days', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Costs and limits',
+            lines: [
+              'HyDE adds an LLM generation (often 300–1,000 ms) before retrieval starts.',
+              'Avoid it for exact lookups and for topics the LLM knows nothing about.',
+              'Averaging with the query embedding also works: rank 1, cosine 0.78.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: '300–1,000 ms', tone: 'miss' },
+              { say: 1 },
+              { badge: 'llm', text: 'IDs? unknown?', tone: 'miss' },
+              { say: 2 },
+              { send: ['q', 'emb'], curve: true, label: '+ query' },
+              { send: ['emb', 'vdb'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where the wrong facts live',
+            lines: ['One part is allowed to be wrong.'],
+            task: {
+              type: 'pick',
+              question: 'Which part produces text that may contain wrong facts, without harm to retrieval?',
+              answer: 'llm',
+              hints: {
+                doc: 'The real document is where the facts come from.',
+                emb: 'The embedder only encodes the text it is given.',
+                vdb: 'The index holds real chunks.',
+              },
+            },
+            solved: 'The LLM\'s hypothetical passage carries the relevance pattern; the real chunk carries the facts.',
+            then: [{ send: ['llm', 'emb'], label: 'answer-shaped' }, { send: ['emb', 'vdb'] }, { send: ['vdb', 'doc'], tone: 'ok' }],
+          },
+        ],
+      },
       body: `Questions and answers look different: "how long do refunds take?" is short and interrogative, while the policy says "Refunds are processed within 5–7 business days of receipt". **HyDE** (Hypothetical Document Embeddings, Gao et al. 2022) asks an LLM to *write a plausible answer passage* first, then embeds that passage and searches with it. You are matching answer-shaped text to answer-shaped text.
 
 **Steps**
@@ -815,6 +1438,105 @@ export async function hydeOrPlain(
     // ---------------------------------------------------------------- 6
     {
       heading: 'Self-Query Retrieval — turning natural language into filters plus a search',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Request', sub: 'Q3 sev-1 payments', x: 110, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'Query parser', sub: 'query + filter', x: 340, y: 70 },
+          { id: 'val', kind: 'guard', label: 'Validator (app)', sub: 'schema · allow-list', x: 340, y: 230 },
+          { id: 'vdb', kind: 'vector-db', label: 'Vector DB', sub: 'filter inside index', x: 570, y: 150 },
+          { id: 'out', kind: 'data', label: 'Results', sub: '7 matching reports', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Embeddings blur constraints',
+            lines: [
+              '"Incident reports about payments from Q3 2026 with severity 1" mixes meaning with hard constraints.',
+              'A $250 jacket is semantically almost identical to a $90 one.',
+              'Unfiltered search returned 20 results; only 4 were Q3 severity-1 payment incidents.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'user' },
+              { say: 1 },
+              { send: ['user', 'vdb'], curve: true, label: 'meaning only' },
+              { say: 2 },
+              { send: ['vdb', 'out'], label: '4 of 20', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A query plus a filter',
+            lines: [
+              'The LLM returns `{ query: "payments service incident", filter: { service, severity, date range } }`.',
+              'The filter is validated, translated and applied **inside** the index.',
+              '7 matching reports, all correct: precision@10 0.30 → 0.70.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'] },
+              { say: 1 },
+              { send: ['llm', 'val'], label: 'filter' },
+              { send: ['val', 'vdb'], label: 'validated', tone: 'ok' },
+              { say: 2 },
+              { send: ['vdb', 'out'], label: '7 reports', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the steps',
+            lines: ['LangChain\'s `SelfQueryRetriever` implements this flow.'],
+            task: {
+              type: 'order',
+              question: 'Put the self-query steps in order.',
+              items: [
+                'Describe the filterable fields to the LLM',
+                'LLM returns a query plus a structured filter',
+                'Validate against a schema and allow-lists',
+                'Search with the filter applied inside the index',
+              ],
+              hint: 'The LLM must know the fields before it can fill them, and nothing it returns is used unchecked.',
+            },
+            solved: 'Describe fields → structured output → validate → filtered search.',
+            then: [{ send: ['user', 'llm'] }, { send: ['llm', 'val'] }, { send: ['val', 'vdb'] }, { send: ['vdb', 'out'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'LLM output is untrusted input',
+            lines: [
+              'Never interpolate it into SQL: map it to parameterised conditions on allow-listed fields.',
+              'Clamp ranges.',
+              'Inject tenant and permission filters yourself, never from the LLM.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'val'], label: 'untrusted', tone: 'miss' },
+              { say: 1 },
+              { badge: 'val', text: 'clamp', tone: 'ok' },
+              { say: 2 },
+              { badge: 'val', text: '+ tenant, ACL', tone: 'ok' },
+              { send: ['val', 'vdb'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: tenant filter',
+            lines: ['Every search must be scoped to the user\'s tenant and permissions.'],
+            task: {
+              type: 'pick',
+              question: 'Which part should add the tenant and permission filters?',
+              answer: 'val',
+              hints: {
+                llm: 'Never take tenant or permission filters from the LLM.',
+                vdb: 'The DB applies filters it is given; your code must supply these.',
+                user: 'The request is untrusted text.',
+              },
+            },
+            solved: 'Your own code injects tenant and permission filters after validating the LLM\'s output.',
+            then: [{ badge: 'val', text: '+ tenant', tone: 'ok' }, { send: ['val', 'vdb'], tone: 'ok' }],
+          },
+        ],
+      },
       body: `"Show me **red** waterproof jackets **under $100** released **this year**" mixes a semantic need ("waterproof jacket") with hard constraints (colour, price, date). Embeddings blur constraints: a $250 jacket is semantically almost identical to a $90 one. **Self-query retrieval** has an LLM split the request into a **semantic query** and a **structured metadata filter**, then runs a filtered vector search. It is like a shop assistant who hears your request and goes straight to the right aisle and price range.
 
 **How it works**

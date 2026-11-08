@@ -48,6 +48,7 @@
 .ph-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-right: 8px; }
 .ph-toolbar .chip { display: inline-flex; align-items: center; gap: 6px; }
 .ph-q { margin-bottom: 18px; }
+.ph-scen { margin-bottom: 28px; }
 .ph-q-topic { display: inline-block; margin-bottom: 6px; font: 500 0.75rem var(--mono); color: var(--muted); text-decoration: none; }
 .ph-q-topic:hover { color: var(--text); }
 

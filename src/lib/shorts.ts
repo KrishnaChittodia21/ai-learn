@@ -10,7 +10,7 @@ export interface ShortEntry {
   section: number;
 }
 
-/** Every Short in course order (topics are already sorted by phase and order). Shorts unlock in this order. */
+/** Every Short in course order (topics are already sorted by phase and order). */
 export const shortsFrom = (topics: TopicMeta[]): ShortEntry[] =>
   topics.flatMap((topic) => topic.sections.flatMap((s, section) => (s.short ? [{ short: s.short, topic, section }] : [])));
 
@@ -58,6 +58,7 @@ export function beatMs(b: ShortBeat): number {
 
 /** "1:35": the whole Short at 1×, counting the quiz as 15 s and the end card as 6 s */
 export function shortLength(s: Short): string {
+  if (s.length) return s.length;
   const ms = s.beats.reduce((a, b) => a + (b.type === 'quiz' ? 15_000 : beatMs(b)), 0) + 6000;
   const sec = Math.round(ms / 1000);
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
@@ -136,7 +137,7 @@ export function barFill(beats: ShortBeat[], s: PlayerState, i: number): number {
   return Math.min(1, (s.elapsed * s.speed) / beatMs(beat));
 }
 
-// ---------- Short of the day and daily unlocks ----------
+// ---------- Short of the day ----------
 type Watched = Progress['shorts'];
 const seenAt = (w: Watched, e: ShortEntry) => w?.[e.short.id]?.watchedAt;
 const dayNum = (day: string) => Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000);
@@ -154,26 +155,6 @@ export function shortOfTheDay(all: ShortEntry[], watched: Watched, today: string
   const order = [...all.slice(start), ...all.slice(0, start)];
   const next = order.find((e) => !seenAt(watched, e));
   return next ? { entry: next, watched: false } : { entry: order[0], watched: true };
-}
-
-/** local days with any study activity */
-export const studyDays = (p: Pick<Progress, 'activityDays'>) => new Set(p.activityDays ?? []).size;
-
-/**
- * The Shorts this learner can open: one per study day, in course order, plus the Short of the day (always open)
- * and anything already watched.
- */
-export function unlockedShorts(all: ShortEntry[], p: Pick<Progress, 'activityDays' | 'shorts'>, today: string): Set<string> {
-  const open = new Set(all.slice(0, studyDays(p)).map((e) => e.short.id));
-  const sotd = shortOfTheDay(all, p.shorts, today);
-  if (sotd) open.add(sotd.entry.short.id);
-  for (const e of all) if (seenAt(p.shorts, e)) open.add(e.short.id);
-  return open;
-}
-
-/** the Short unlocked by studying today (shown as NEW until watched), if today counts */
-export function unlockedToday(all: ShortEntry[], p: Pick<Progress, 'activityDays'>, today: string): ShortEntry | undefined {
-  return p.activityDays?.includes(today) ? all[studyDays(p) - 1] : undefined;
 }
 
 // ---------- content check (scripts/validate-content.mjs; tests/shorts.test.ts) ----------

@@ -1,6 +1,6 @@
 // Dashboard metrics: pure aggregations of Progress + content for the charts on the dashboard.
 // No React and no storage access, so they can be unit-tested outside the browser.
-import type { Difficulty, TopicMeta } from '../types';
+import type { TopicMeta } from '../types';
 import type { Phase } from '../content/phases';
 import type { Progress } from './progress';
 import { topicStatus } from './stats';
@@ -102,45 +102,6 @@ export function mcqAccuracy(p: Progress, topics: TopicMeta[]): Accuracy {
   return Object.values(byDifficulty).reduce((acc, a) => ({ seen: acc.seen + a.seen, correct: acc.correct + a.correct }), { seen: 0, correct: 0 });
 }
 
-export interface LevelAccuracy {
-  level: Difficulty;
-  seen: number;
-  correct: number;
-  pct: number;
-}
-
-/** accuracy per difficulty, only for levels with answered questions */
-export function difficultyAccuracy(p: Progress, topics: TopicMeta[]): LevelAccuracy[] {
-  const { byDifficulty } = accuracyBreakdown(p, topics);
-  return (Object.keys(byDifficulty) as Difficulty[])
-    .map((level) => ({ level, ...byDifficulty[level], pct: byDifficulty[level].seen ? Math.round((byDifficulty[level].correct / byDifficulty[level].seen) * 100) : 0 }))
-    .filter((x) => x.seen > 0);
-}
-
-export interface RatingCounts {
-  nailed: number;
-  partial: number;
-  missed: number;
-  rated: number;
-  total: number;
-}
-
-/** interview self-ratings across all topics */
-export function ratingCounts(p: Progress, topics: TopicMeta[]): RatingCounts {
-  const c = { nailed: 0, partial: 0, missed: 0, rated: 0, total: 0 };
-  for (const t of topics) {
-    for (const q of t.interviewQuestions) {
-      c.total++;
-      const r = p.iq[q.id];
-      if (r) {
-        c[r]++;
-        c.rated++;
-      }
-    }
-  }
-  return c;
-}
-
 /** YYYY-MM-DD shifted by `delta` days (local calendar) */
 export function shiftDay(day: string, delta: number): string {
   const [y, m, d] = day.split('-').map(Number);
@@ -196,8 +157,6 @@ export function practiceVolume(p: Progress, topics: TopicMeta[], companyTotal: n
   let ccTotal = 0;
   let boe = 0;
   let boeTotal = 0;
-  let iq = 0;
-  let iqTotal = 0;
   for (const t of topics) {
     const r = new Set(p.sections[t.id] ?? []);
     sections += t.sections.length;
@@ -206,8 +165,6 @@ export function practiceVolume(p: Progress, topics: TopicMeta[], companyTotal: n
     cc += t.codeChallenges.filter((c) => p.cc[c.id]).length;
     boeTotal += t.envelopeQuestions.length;
     boe += t.envelopeQuestions.filter((q) => p.boe[q.id]).length;
-    iqTotal += t.interviewQuestions.length;
-    iq += t.interviewQuestions.filter((q) => p.iq[q.id]).length;
   }
   const company = Object.keys(p.company).length;
   const row = (id: string, label: string, done: number, total: number, href: string): VolumeRow => ({
@@ -221,7 +178,6 @@ export function practiceVolume(p: Progress, topics: TopicMeta[], companyTotal: n
   return [
     row('learn', 'Learn sections read', read, sections, '/contents'),
     row('code', 'Code & answer labs', cc, ccTotal, '/contents'),
-    row('interview', 'Interview Qs rated', iq, iqTotal, '/contents'),
     row('envelope', 'Estimation drills', boe, boeTotal, '/contents'),
     row('company', 'Architecture challenges', company, companyTotal, '/challenges'),
   ].filter((r) => r.total > 0);

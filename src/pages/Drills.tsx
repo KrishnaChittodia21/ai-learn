@@ -26,7 +26,7 @@ export default function DrillsPage() {
   const passed = DRILLS.filter((d) => p.drills?.[d.id]?.passedAt).length;
   return (
     <div className="page dr-page">
-      <header className="dr-head">
+      <header className="dr-head" data-guide="drills-intro">
         <p className="eyebrow">Practice · from scratch</p>
         <h1>
           Build it <span className="gtext">from scratch</span>
@@ -38,7 +38,7 @@ export default function DrillsPage() {
           <strong>{passed}</strong> of {DRILLS.length} passed
         </p>
       </header>
-      <ol className="dr-list">
+      <ol className="dr-list" data-guide="drills-list">
         {DRILLS.map((d, i) => {
           const s = status(p, d.id);
           const topic = TOPIC_BY_ID.get(d.topic);
@@ -139,11 +139,11 @@ function DrillView({ drill }: { drill: Drill }) {
         </p>
       </header>
 
-      <section className="dr-problem" aria-label="Problem">
+      <section className="dr-problem" aria-label="Problem" data-guide="drill-problem">
         <Markdown>{drill.problem}</Markdown>
       </section>
 
-      <section className="dr-work" aria-label="Your code">
+      <section className="dr-work" aria-label="Your code" data-guide="drill-work">
         <div className="tp-ex-bar">
           <span>Write TypeScript over plain arrays; no imports. Saved as you type. Ctrl/⌘ + Enter runs the tests.</span>
           <button className="btn-ghost btn-xs" type="button" onClick={() => setDraft(draftKey(drill.id), drill.starter)}>
@@ -178,7 +178,7 @@ function DrillView({ drill }: { drill: Drill }) {
         </div>
       </section>
 
-      <div className="dr-results" aria-live="polite" aria-atomic="true">
+      <div className="dr-results" aria-live="polite" aria-atomic="true" data-guide="drill-results">
         {outcome && !outcome.ok && (
           <p className="dr-error" role="alert">
             {outcome.error}

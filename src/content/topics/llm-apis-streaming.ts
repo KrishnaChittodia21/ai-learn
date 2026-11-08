@@ -34,6 +34,108 @@ const topic: Topic = {
   sections: [
     {
       heading: 'LLM APIs — messages, roles, parameters and token accounting',
+      steps: {
+        actors: [
+          { id: 'sys', kind: 'document', label: 'system', sub: 'standing instructions', x: 110, y: 70 },
+          { id: 'hist', kind: 'data', label: 'messages', sub: 'whole conversation', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model API', sub: 'forgetful function', x: 570, y: 70 },
+          { id: 'usage', kind: 'metric', label: 'usage receipt', sub: 'input + output tokens', x: 800, y: 70 },
+          { id: 'app', kind: 'server', label: 'Your app', sub: 'resends every turn', x: 110, y: 230 },
+          { id: 'retry', kind: 'guard', label: 'Retry policy', sub: 'backoff + jitter', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A smart, forgetful function',
+            lines: [
+              'You hand the API the **entire** conversation every time: system instructions plus messages.',
+              'It hands back the next message plus a receipt: `usage`.',
+              'Nothing is remembered between calls unless you resend it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'sys'], label: 'rules' },
+              { send: ['app', 'hist'], label: 'history', curve: true },
+              { send: ['hist', 'llm'], label: 'full request' },
+              { say: 1 },
+              { send: ['llm', 'usage'], label: 'reply + usage', tone: 'ok' },
+              { say: 2 },
+              { down: 'llm' },
+              { down: 'llm', on: false },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Input grows every turn',
+            lines: [
+              'Turn 1: 600-token system prompt + 40-token question = 640 input tokens, **$0.0046**.',
+              'Turn 5 also carries 4 prior Q&A pairs: ~1,520 input tokens, **$0.0073**, already 60% more.',
+              'Log usage per request from day one.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['hist', 'llm'], label: '640 tokens' },
+              { badge: 'usage', text: '$0.0046', ms: 1000 },
+              { say: 1 },
+              { send: ['hist', 'llm'], label: '~1,520 tokens', tone: 'miss' },
+              { badge: 'usage', text: '$0.0073', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { lit: 'usage' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cut mid-sentence',
+            lines: ['Turn 5 returned `stop_reason: "max_tokens"` with `max_tokens` set to 180.'],
+            task: {
+              type: 'choose',
+              question: 'How do you fix the truncated answer?',
+              options: [
+                { text: 'Raise max_tokens to 600' },
+                { text: 'Lower the temperature', why: 'Temperature controls randomness, not length.' },
+                { text: 'Keep 180: a higher cap costs more', why: 'You pay for tokens generated, not the cap: short answers cost the same.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Raising the cap fixed it at no extra cost for short answers: you pay for tokens generated, not the cap.',
+            then: [{ send: ['hist', 'llm'], label: 'max_tokens: 600' }, { send: ['llm', 'usage'], label: 'end_turn', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which errors to retry',
+            lines: ['Some errors are your bug; some are transient.'],
+            task: {
+              type: 'choose',
+              question: 'Which errors should you retry with exponential backoff and jitter?',
+              options: [
+                { text: '429, 500/503 and 529 overloaded_error' },
+                { text: '400', why: '400 is your bug (bad schema, context too long): retrying sends the same bad request.' },
+                { text: '401/403', why: 'Those are auth errors: retrying will not fix credentials.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Retry rate limits and provider-side errors with backoff and jitter; fix 400s and auth errors.',
+            then: [{ send: ['llm', 'retry'], label: '429', tone: 'miss' }, { send: ['retry', 'llm'], label: 'backoff', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Wrap it once you need more',
+            lines: [
+              'The official SDKs already retry twice by default.',
+              'For one provider, use its SDK directly.',
+              'Wrap it behind your own `chat()` interface (or a gateway) once you need fallbacks, logging and cost control.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'retry', text: '2 retries', ms: 1000 },
+              { say: 1 },
+              { send: ['app', 'llm'], label: 'SDK', curve: true },
+              { say: 2 },
+              { badge: 'app', text: 'chat()', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** an LLM API is a very smart but completely forgetful function. You hand it the *entire* conversation every time, it hands back the next message plus a receipt (token usage). Nothing is remembered between calls unless you resend it.
 
 **The request.** All major APIs share the same core shape:
@@ -232,6 +334,205 @@ export async function withRetry<T>(
     },
     {
       heading: 'Streaming Responses — SSE, deltas, TTFT and cancellation',
+      short: {
+        id: 'streaming-first-word-in-half-a-second',
+        title: 'Streaming: first word in 0.55 s',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Same prompt · same model · 640 output tokens',
+            value: 0.55,
+            decimals: 2,
+            suffix: ' s',
+            unit: 'until the first word appears, streaming',
+            sub: 'Without streaming, the first text arrives at **8.6 s**, together with the whole answer.',
+          },
+          {
+            type: 'race',
+            kicker: 'Decode speed ~80 tok/s',
+            head: 'The writer is not *faster*',
+            lanes: [
+              {
+                label: 'Non-streaming · first text',
+                seconds: 8.6,
+                tone: 'pink',
+              },
+              {
+                label: 'Streaming · first text',
+                seconds: 0.55,
+                tone: 'good',
+              },
+            ],
+            sub: 'Both finish at **8.6 s**. Total ≈ TTFT + output tokens ÷ decode speed; users judge speed by TTFT.',
+          },
+          {
+            type: 'flow',
+            kicker: 'On the wire · Server-Sent Events',
+            head: 'Events, each ended by a *blank line*',
+            steps: [
+              'Content-Type: text/event-stream',
+              'content_block_delta → text_delta "Our"',
+              'message_delta: stop_reason, usage',
+              'message_stop',
+            ],
+            sub: 'Anthropic can also send an **error** event mid-stream, after HTTP 200.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Where streams break',
+            head: 'Keep the stream *honest*',
+            items: [
+              {
+                label: 'Handle error events inside the read loop',
+                keep: true,
+              },
+              {
+                label: 'Abort upstream when the client disconnects',
+                keep: true,
+              },
+              {
+                label: 'JSON.parse each partial tool-call delta',
+              },
+              {
+                label: 'Proxy buffering and gzip on the SSE route',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'counter',
+            kicker: 'In testing · 18% closed the tab early',
+            value: 115,
+            unit: 'wasted output tokens per request, before abort()',
+            sub: '18% × 640 ≈ 115: roughly **18% of the output bill**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Users say answers "feel instant", but average end-to-end duration did not change. Why?',
+            options: [
+              {
+                text: 'Streaming is broken; it should also halve total time',
+                why: 'Streaming changes when tokens are delivered, not how fast they are produced.',
+              },
+              {
+                text: 'First-token time fell; the model still makes the same tokens at the same speed',
+                why: 'Right: perceived latency falls to TTFT, while total is still TTFT + output tokens ÷ decode speed.',
+              },
+              {
+                text: 'Streaming only helps at temperature 0',
+                why: 'Temperature has nothing to do with it; an unchanged total is what correct streaming looks like.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Streaming moves the *first word*, not the last.',
+          sub: 'Perceived latency falls to **TTFT**; total time is unchanged. Abort upstream when the client leaves.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'Model', sub: '~80 tokens/s', x: 110, y: 70 },
+          { id: 'server', kind: 'server', label: 'Your server', sub: 're-emits SSE', x: 340, y: 70 },
+          { id: 'browser', kind: 'user', label: 'Browser', sub: 'fetch + stream reader', x: 570, y: 70 },
+          { id: 'ttft', kind: 'metric', label: 'TTFT', sub: 'first visible text', x: 800, y: 70 },
+          { id: 'args', kind: 'data', label: 'Tool args buffer', sub: 'partial JSON', x: 340, y: 230 },
+          { id: 'abort', kind: 'guard', label: 'Abort upstream', sub: 'on disconnect', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Read over the writer\'s shoulder',
+            lines: [
+              'Without streaming you wait for the whole letter before it is delivered.',
+              'With streaming you read word by word. The writer is not faster; you start reading sooner.',
+              'Refund-policy answer: first visible text at 8.6 s without streaming, **0.55 s** with it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'browser'], label: 'whole answer', curve: true, tone: 'miss' },
+              { say: 1 },
+              { send: ['llm', 'server'], label: 'delta', count: 3 },
+              { send: ['server', 'browser'], label: 'delta', count: 3 },
+              { say: 2 },
+              { badge: 'ttft', text: '0.55 s', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Latency anatomy',
+            lines: [
+              'Total ≈ **TTFT** (network + queueing + reading the prompt) + output tokens ÷ decode speed.',
+              'A 600-token answer at 60 tok/s takes ~10 s, but the first word shows in ~0.5 s.',
+              'Users judge speed by TTFT.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'server'], label: 'first token' },
+              { badge: 'ttft', text: '200–800 ms', ms: 1000 },
+              { say: 1 },
+              { send: ['llm', 'server'], label: 'decode', count: 3 },
+              { say: 2 },
+              { lit: 'ttft' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Server-Sent Events',
+            lines: [
+              'The response is `text/event-stream`: text events separated by a blank line, with `event:` and `data:` lines.',
+              'Anthropic text arrives as `content_block_delta` events carrying a `text_delta`.',
+              'An `error` event can arrive **mid-stream**, after HTTP 200: handle errors inside the loop.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'server'], label: 'event: …' },
+              { say: 1 },
+              { send: ['llm', 'server'], label: 'text_delta "Our"', tone: 'ok' },
+              { send: ['server', 'browser'], label: '"Our"', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'server'], label: 'overloaded_error', tone: 'err' },
+              { badge: 'server', text: 'after 200!', tone: 'err', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: streamed tool arguments',
+            lines: ['Tool-call arguments stream too, as partial JSON strings.'],
+            task: {
+              type: 'choose',
+              question: 'When do you JSON.parse the tool arguments?',
+              options: [
+                { text: 'Concatenate the deltas and parse once the block ends' },
+                { text: 'Parse each delta as it arrives', why: 'Each delta is only a fragment of the JSON string: it will not parse on its own.' },
+                { text: 'Parse the HTTP body after the 200', why: 'The body is a stream of events; the arguments are complete only when their block ends.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Buffer input_json_delta fragments and parse only when the block ends.',
+            then: [{ send: ['llm', 'args'], label: 'partial JSON', count: 3, curve: true }, { badge: 'args', text: 'block ends', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the user closed the tab',
+            lines: ['In testing, 18% of users closed the tab before the answer finished.'],
+            task: {
+              type: 'pick',
+              question: 'Which part stops you paying for tokens nobody will read?',
+              answer: 'abort',
+              hints: {
+                browser: 'Closing the tab alone did not stop the provider stream: those streams still generated all ~640 tokens.',
+                llm: 'The model keeps generating unless your server aborts the upstream request.',
+                ttft: 'TTFT is about how soon text appears, not about wasted tokens.',
+              },
+            },
+            solved: 'On client disconnect, abort upstream: it saved roughly 18% of the output bill.',
+            then: [{ down: 'browser' }, { send: ['abort', 'llm'], label: 'abort()', tone: 'ok', curve: true }],
+          },
+        ],
+      },
       body: `**Intuition:** without streaming you wait for the whole letter to be written before the postman delivers it. With streaming you read over the writer's shoulder, word by word. The writer is not faster; you just start reading sooner.
 
 **Latency anatomy.** Total time ≈ **TTFT** (time to first token: network + queueing + reading the prompt, typically 200–800 ms) + output tokens ÷ decode speed (often 50–150 tokens/s). A 600-token answer at 60 tok/s takes ~10 s total but shows its first word in ~0.5 s. Users judge speed by TTFT.

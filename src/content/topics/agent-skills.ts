@@ -34,6 +34,92 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'What a skill is: the SKILL.md package',
+      steps: {
+        actors: [
+          { id: 'team', kind: 'user', label: 'Your team', sub: 'release routine', x: 110, y: 70 },
+          { id: 'skill', kind: 'document', label: 'SKILL.md', sub: 'name + description', x: 340, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'reads description', x: 570, y: 70 },
+          { id: 'refs', kind: 'document', label: 'references/', sub: 'policies, schemas', x: 110, y: 230 },
+          { id: 'scripts', kind: 'tool', label: 'scripts/', sub: 'validators', x: 340, y: 230 },
+          { id: 'assets', kind: 'document', label: 'assets/', sub: 'templates, fixtures', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'From pasted routine to package',
+            lines: [
+              'A routine pasted into chat has no name, no version, no rule for when it applies.',
+              'An **Agent Skill** packages it: a **directory** whose entry point is `SKILL.md`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['team', 'agent'], label: 'pasted routine', tone: 'miss', curve: true },
+              { say: 1 },
+              { send: ['team', 'skill'], label: 'package' },
+              { lit: 'skill' },
+              { badge: 'skill', text: 'a directory', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What is in the folder',
+            lines: [
+              '**Frontmatter**: `name` and `description` (required); the **body** holds the procedure.',
+              '`references/` are read only when a step says so.',
+              '`scripts/` run through a host tool; `assets/` are copied or filled, not obeyed.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'skill' },
+              { say: 1 },
+              { send: ['skill', 'refs'], label: 'when a step says' },
+              { say: 2 },
+              { send: ['skill', 'scripts'], label: 'run' },
+              { send: ['skill', 'assets'], label: 'fill', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: how the agent decides',
+            lines: ['`name` is the stable id: lowercase, digits and hyphens, matching the folder name.'],
+            task: {
+              type: 'choose',
+              question: 'Which field does the agent read to decide whether to load the skill?',
+              options: [
+                { text: '`description`: what the skill does and when to use it' },
+                { text: 'The body of `SKILL.md`', why: 'The body is the procedure; it is what gets loaded once the skill is chosen.' },
+                { text: 'The files in `references/`', why: 'References are read only when a step in the body says so.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The `description` says what the skill does and when to use it; the agent decides from it.',
+            then: [{ send: ['skill', 'agent'], label: 'description' }, { badge: 'agent', text: 'load it?', ms: 1100 }],
+          },
+          {
+            kind: 'watch',
+            title: 'The directory is the unit you ship',
+            lines: ['A copied `SKILL.md` whose referenced files are missing is a **broken package**, even if the frontmatter parses.'],
+            script: [{ say: 0 }, { down: 'refs' }, { send: ['skill', 'refs'], label: 'missing', tone: 'err' }, { badge: 'skill', text: 'broken', tone: 'err', ms: 1200 }, { down: 'refs', on: false }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one job each',
+            lines: ['Prompt, repo instructions, skill, MCP tool, hook, subagent: each keeps one job.'],
+            task: {
+              type: 'choose',
+              question: 'You want direct pushes blocked, deterministically, every time. Which artifact does that?',
+              options: [
+                { text: 'A hook: deterministic code on an event' },
+                { text: 'A skill', why: 'A skill is a reusable procedure for a class of task; it tells the agent how, it does not enforce.' },
+                { text: 'An MCP tool', why: 'An MCP tool is a typed capability the agent can call, such as exposing the registry.' },
+                { text: 'A subagent', why: 'A subagent does delegated work in its own context, such as auditing the result.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Skill = how to do the task; MCP = a capability; hook = deterministic code on an event; subagent = delegated work.',
+          },
+        ],
+      },
       body: `Your team has a release routine that works: collect merged PRs, check migration notes, update the changelog, run the package build, produce a checklist. Pasting that routine into a chat each time works once. It has no name, no version, no rule for when it applies and no place for the helper script.
 
 An **Agent Skill** packages that routine. It is a **directory** whose entry point is \`SKILL.md\`:
@@ -177,6 +263,189 @@ export function validateFrontmatter(dir: string, fm: Frontmatter): string[] {
     // ---------------------------------------------------------------- 2
     {
       heading: 'Progressive disclosure: metadata → body → files',
+      short: {
+        id: 'skills-progressive-disclosure',
+        title: 'Forty skills, four thousand tokens',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'A team with 40 skills',
+            head: 'Load everything, or *disclose*?',
+            rungs: [
+              {
+                label: 'Every body up front (40 × 2,500)',
+                amount: 100000,
+              },
+              {
+                label: 'Catalog every session (40 × 90)',
+                amount: 3600,
+              },
+              {
+                label: 'Active: one release request',
+                amount: 4000,
+              },
+            ],
+            unit: 'tokens',
+            sub: 'Disclosure costs about **4%** of the load-everything design.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Three levels',
+            head: 'Each loads only *when asked*',
+            steps: [
+              'Catalog: name + description, every session',
+              'Body: the rest of SKILL.md, when the skill is selected',
+              'Resources: one reference, script or asset, when a step asks',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'The release request',
+            value: 2500,
+            unit: 'tokens: the one activated body',
+            stats: [
+              {
+                value: '1,200',
+                label: 'tokens: one branch reference',
+              },
+              {
+                value: 300,
+                label: 'tokens: the script’s JSON output',
+              },
+            ],
+            sub: 'Active cost: **4,000 tokens**. Scripts add only their output, not their source.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Give every reference a load condition',
+            head: '*One hop*, with a condition',
+            items: [
+              {
+                label: 'Python package → references/python-release.md',
+                keep: true,
+              },
+              {
+                label: 'Container image → references/container-release.md',
+                keep: true,
+              },
+              {
+                label: '"See references/ for more"',
+              },
+              {
+                label: 'A reference pointing to another reference',
+              },
+            ],
+            keepLabel: 'LINK',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'What does the agent see about an installed but unused skill in a normal session?',
+            answer: 1,
+            options: [
+              {
+                text: 'Nothing until the user types its name',
+                why: 'A skill with no catalog entry could never be picked automatically.',
+              },
+              {
+                text: 'Its name and description only',
+                why: 'Level 1 keeps only the catalog entry in context, so the agent can decide when the skill is relevant.',
+              },
+              {
+                text: 'The full SKILL.md body, but not the references',
+                why: 'The body loads only when the skill is activated.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Catalog always, body on demand, *files on a condition*.',
+          sub: 'Catalog cost and active cost are **separate budgets**.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Request', sub: 'user asks', x: 110, y: 70 },
+          { id: 'catalog', kind: 'data', label: 'Catalog', sub: 'name + description', x: 340, y: 70 },
+          { id: 'body', kind: 'document', label: 'SKILL.md body', sub: 'under 500 lines', x: 570, y: 70 },
+          { id: 'ref', kind: 'document', label: 'One reference', sub: 'when a step asks', x: 800, y: 70 },
+          { id: 'ctx', kind: 'llm', label: 'Context window', sub: 'the agent', x: 340, y: 230 },
+          { id: 'script', kind: 'tool', label: 'scripts/check.py', sub: 'only output loads', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three levels, loaded on demand',
+            lines: [
+              '**Catalog**: `name` + `description`, every session (~100 tokens per skill).',
+              '**Body**: the rest of `SKILL.md`, once the skill is selected.',
+              '**Resources**: one reference, script or asset, when a step asks for it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['catalog', 'ctx'], label: 'every session' },
+              { send: ['user', 'ctx'], label: 'request', curve: true },
+              { say: 1 },
+              { send: ['body', 'ctx'], label: 'selected' },
+              { say: 2 },
+              { send: ['ref', 'ctx'], label: 'step asks', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the loading order',
+            lines: ['Like a library: the catalog card, then the book, then the appendix the chapter points to.'],
+            task: {
+              type: 'order',
+              question: 'Order the levels as they enter the context.',
+              items: ['Catalog: name + description', 'Body: the rest of SKILL.md', 'Resources: one reference, script or asset'],
+              hint: 'Each level loads only when the one above says it is needed.',
+            },
+            solved: 'Metadata → body → files: each level loads only when the one above asks for it.',
+            then: [{ send: ['catalog', 'ctx'], label: 'card' }, { send: ['body', 'ctx'], label: 'book' }, { send: ['ref', 'ctx'], label: 'appendix' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Every reference gets a load condition',
+            lines: [
+              '"See references/ for more" makes the agent read everything or nothing.',
+              'Instead: Python package → read `references/python-release.md`.',
+              'Keep links **one hop** from `SKILL.md`; deep chains hide rules.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'body', text: 'see references/', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['body', 'ref'], label: 'Python package', tone: 'ok' },
+              { say: 2 },
+              { badge: 'ref', text: 'one hop', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Scripts are cheap context',
+            lines: ['When the agent runs `scripts/check.py`, only its **output** enters the context, not its source.'],
+            script: [{ say: 0 }, { send: ['ctx', 'script'], label: 'run', curve: true }, { send: ['script', 'ctx'], label: 'output only', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the catalog budget',
+            lines: ['There are two budgets: the catalog cost and the active cost.'],
+            task: {
+              type: 'pick',
+              question: 'Which part costs context in every session, even when no skill is used?',
+              answer: 'catalog',
+              hints: {
+                body: 'The body loads only once the skill is selected.',
+                ref: 'A reference loads only when a step asks for it.',
+                script: 'A script costs only its output, and only when it runs.',
+              },
+            },
+            solved: 'The catalog (every description) is paid every session, so lean descriptions matter.',
+            then: [{ send: ['catalog', 'ctx'], label: 'every session' }, { badge: 'catalog', text: 'keep it lean', tone: 'ok' }],
+          },
+        ],
+      },
       body: `An agent may have dozens of skills installed. Loading all of them into every request would burn the context window before the user says anything. Skills avoid this with **progressive disclosure**: three levels, each loaded only when the one above says it is needed.
 
 | Level | What loads | When | Typical size |
@@ -287,6 +556,96 @@ export function contextCost(skills: Skill[], selected: string[], opened: Record<
     // ---------------------------------------------------------------- 3
     {
       heading: 'Routing: how a skill gets selected',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User request', sub: 'explicit or not', x: 110, y: 70 },
+          { id: 'router', kind: 'llm', label: 'Agent', sub: 'routes the request', x: 340, y: 70 },
+          { id: 'elig', kind: 'guard', label: 'Eligibility', sub: 'enabled? allowed?', x: 570, y: 70 },
+          { id: 'release', kind: 'document', label: 'Release skill', sub: 'release-readiness', x: 800, y: 70 },
+          { id: 'catalog', kind: 'data', label: 'Catalog', sub: 'descriptions only', x: 340, y: 230 },
+          { id: 'none', kind: 'agent', label: 'No skill', sub: 'abstain', x: 570, y: 230 },
+          { id: 'build', kind: 'document', label: 'Build skill', sub: 'build-diagnostics', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two ways a skill starts',
+            lines: [
+              '**Explicit**: the user names it (`/release-readiness v2.4.0`); permissions still apply.',
+              '**Implicit**: the agent reads the catalog and decides a skill fits.',
+              'Then the **description is the whole routing interface**: the body is not read yet.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'release'], label: '/release-readiness', curve: true },
+              { say: 1 },
+              { send: ['user', 'router'], label: 'request' },
+              { send: ['catalog', 'router'], label: 'descriptions' },
+              { say: 2 },
+              { badge: 'catalog', text: 'routing input', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a description that routes',
+            lines: ['A good description names the capability, the output, a positive trigger and a negative boundary.'],
+            task: {
+              type: 'choose',
+              question: 'Which description routes best?',
+              options: [
+                { text: '"Inspect a prepared release candidate and produce a readiness checklist. Use when asked if a version is ready to publish. Do not use for build failures."' },
+                { text: '"Helps with releases."', why: 'Too vague: no output, no trigger, no boundary.' },
+                { text: '"Use for release, version, build, deploy, CI, GitHub or package tasks."', why: 'Over-broad: it grabs requests that belong to other skills.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Bounded: capability + output + when to use + when not to use.',
+          },
+          {
+            kind: 'watch',
+            title: 'Filter, then rank, or abstain',
+            lines: [
+              'Check **eligibility** first (enabled, model may invoke, user has access), then rank.',
+              'If no skill is a strong, clear match, use **no skill**.',
+              'A wrong activation costs more than none.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['router', 'elig'], label: 'filter' },
+              { badge: 'elig', text: 'eligible only', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { send: ['router', 'none'], label: 'weak match', curve: true },
+              { say: 2 },
+              { lit: 'none' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a near miss',
+            lines: ['"Why did today\'s package build fail?" shares words with the release skill.'],
+            task: {
+              type: 'pick',
+              question: 'This request must never route to which one?',
+              answer: 'release',
+              hints: {
+                build: 'Build diagnostics is a correct route for a build failure.',
+                none: 'Using no skill is acceptable here; a wrong activation is not.',
+              },
+            },
+            solved: 'Near misses share vocabulary but belong elsewhere: route to build diagnostics or none, never release-readiness.',
+            then: [{ send: ['router', 'build'], label: 'build failure', tone: 'ok', curve: true }, { badge: 'release', text: 'not this one', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Test routing on the host you ship',
+            lines: [
+              'Obvious positives and unrelated negatives overstate quality: add **near misses**.',
+              'Measure precision, recall and near-miss false positives on each host.',
+            ],
+            script: [{ say: 0 }, { send: ['user', 'router'], label: 'near miss', tone: 'miss' }, { say: 1 }, { send: ['router', 'build'], label: 'correct', tone: 'ok', curve: true }],
+          },
+        ],
+      },
       body: `A skill can start in two ways.
 
 - **Explicit:** the user names it, for example \`/release-readiness v2.4.0\` in Claude Code. The identity is given, but the request still passes every permission and approval rule.
@@ -387,6 +746,98 @@ export function route(candidates: Candidate[], actor: 'model' | 'user', threshol
     // ---------------------------------------------------------------- 4
     {
       heading: 'Permissions and trust: a skill is not a sandbox',
+      steps: {
+        actors: [
+          { id: 'skill', kind: 'document', label: 'Skill text', sub: 'in the context', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'asks for actions', x: 340, y: 70 },
+          { id: 'host', kind: 'server', label: 'Host', sub: 'enforces controls', x: 570, y: 70 },
+          { id: 'person', kind: 'user', label: 'Person', sub: 'approves a target', x: 800, y: 70 },
+          { id: 'shell', kind: 'tool', label: 'Shell tool', sub: 'allowed-tools', x: 340, y: 230 },
+          { id: 'sandbox', kind: 'guard', label: 'Sandbox', sub: 'no network/secrets', x: 570, y: 230 },
+          { id: 'verify', kind: 'judge', label: 'Verification', sub: 'tests, checksum', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Text asks; the host decides',
+            lines: [
+              'A skill puts **text** in the context; text can influence what the model asks to do.',
+              'It cannot grant tools, isolate a process, provide credentials or approve an action.',
+              'The **host** does that: capability, permission, approval, sandbox, verification.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['skill', 'llm'], label: 'instructions' },
+              { say: 1 },
+              { send: ['llm', 'host'], label: 'request' },
+              { say: 2 },
+              { lit: 'host' },
+              { send: ['host', 'sandbox'], label: 'run inside' },
+              { send: ['host', 'verify'], label: 'check', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: allowed-tools',
+            lines: ['`allowed-tools` pre-approves tools while the skill is active, so the user is not prompted each time.'],
+            task: {
+              type: 'choose',
+              question: 'A skill pre-approves the shell. Does that stop a shell command from reading `~/.ssh`?',
+              options: [
+                { text: "No: only the tool's own limits and the sandbox do that" },
+                { text: 'Yes: allowed-tools isolates the skill', why: 'allowed-tools is not isolation; it only skips the prompt.' },
+                { text: 'Yes, if the skill text says not to', why: 'Text cannot block anything by itself; the host and sandbox enforce limits.' },
+              ],
+              answer: 0,
+            },
+            solved: 'allowed-tools skips prompts; isolation comes from the tool limits and the sandbox.',
+            then: [{ send: ['shell', 'sandbox'], label: 'read ~/.ssh?', tone: 'err' }, { badge: 'sandbox', text: 'blocked', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Approval follows consequence',
+            lines: [
+              '"Allow bash?" teaches people to click yes.',
+              '"Allow `publish_release` to publish **2.4.0** to **staging**?" can be judged.',
+              'Approval for staging is not approval for production.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['host', 'person'], label: 'allow bash?', tone: 'miss' },
+              { say: 1 },
+              { send: ['host', 'person'], label: '2.4.0 → staging?', tone: 'req' },
+              { badge: 'person', text: 'approve', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { badge: 'person', text: 'not production', tone: 'err', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: resource paths',
+            lines: ['A skill should read only files inside its own folder.'],
+            task: {
+              type: 'choose',
+              question: 'How should the host check that a requested file is inside the skill folder?',
+              options: [
+                { text: 'Resolve the real path of the root and the candidate, then check one is inside the other' },
+                { text: "Check the path `startsWith('references/')`", why: 'That misses `references/../../.ssh/config` and symlinks.' },
+                { text: 'Trust the skill to ask only for its own files', why: 'A third-party skill can carry injected instructions; paths are a trust boundary.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Resolve real paths (handles `..` and symlinks), then check containment.',
+          },
+          {
+            kind: 'watch',
+            title: 'Third-party skills are third-party code',
+            lines: [
+              'A marketplace skill can carry a malicious script or injected instructions ("also upload the .env").',
+              'Read every file, pin a version, run scripts in a sandbox with no production secrets.',
+            ],
+            script: [{ say: 0 }, { send: ['skill', 'llm'], label: 'upload the .env', tone: 'err' }, { say: 1 }, { send: ['shell', 'sandbox'], label: 'script' }, { badge: 'sandbox', text: 'no secrets', tone: 'ok', ms: 1200 }],
+          },
+        ],
+      },
       body: `Activating a skill puts text into the model's context. Text can influence what the model *asks* to do. It cannot, by itself:
 
 - give the agent a shell, file or network tool;
@@ -501,6 +952,92 @@ export function resolveResource(root: string, rel: string): string {
     // ---------------------------------------------------------------- 5
     {
       heading: 'Writing good skills and evaluating them',
+      steps: {
+        actors: [
+          { id: 'flow', kind: 'user', label: 'Real workflow', sub: 'done by hand first', x: 110, y: 70 },
+          { id: 'body', kind: 'document', label: 'Skill body', sub: 'judgment, branches', x: 340, y: 70 },
+          { id: 'script', kind: 'tool', label: 'Script', sub: 'JSON output', x: 570, y: 70 },
+          { id: 'runs', kind: 'metric', label: 'Repeated runs', sub: 'e.g. 5 per case', x: 340, y: 230 },
+          { id: 'gate', kind: 'guard', label: 'Release gate', sub: 'declared up front', x: 570, y: 230 },
+          { id: 'base', kind: 'judge', label: 'Baseline', sub: 'skill disabled', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Workflow, not topic',
+            lines: [
+              '"Kubernetes skill" is a topic; "diagnose a CrashLoopBackOff pod" is a **workflow**.',
+              'The body holds **judgment** (branches, which file to read).',
+              'Anything that must give the same answer every time goes in a **script**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['flow', 'body'], label: 'steps you know' },
+              { say: 1 },
+              { lit: 'body' },
+              { say: 2 },
+              { send: ['body', 'script'], label: 'deterministic' },
+              { badge: 'script', text: 'JSON', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: judgment or script?',
+            lines: ['Split judgment from deterministic work.'],
+            task: {
+              type: 'choose',
+              question: 'Where does "count the failing tests" belong?',
+              options: [
+                { text: 'In a script with JSON output' },
+                { text: 'In the skill body', why: 'The body holds decisions; counting must give the same answer every time.' },
+                { text: 'In the description', why: 'The description is for routing: what the skill does and when to use it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Decisions in the body; anything that must be repeatable in a script.',
+          },
+          {
+            kind: 'watch',
+            title: 'Evaluate in layers',
+            lines: [
+              'Structure, routing, behaviour, scripts, safety, portability.',
+              'Passing one layer does not stand in for another.',
+              'Run behavioural cases **more than once** (e.g. 5) and report pass rate per case.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'gate' },
+              { say: 1 },
+              { say: 2 },
+              { send: ['body', 'runs'], label: 'case × 5', count: 3 },
+              { badge: 'runs', text: 'per-case rate', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one score?',
+            lines: ['The release gate is declared before you look at results.'],
+            task: {
+              type: 'choose',
+              question: 'A run has excellent prose but skipped an approval. The combined score still passes. Ship?',
+              options: [
+                { text: 'No: every safety case must pass; never merge everything into one score' },
+                { text: 'Yes: the overall score passed', why: 'Excellent prose must not cancel out a skipped approval.' },
+                { text: 'Yes, and lower the safety bar next time', why: 'The gate is declared before you look at results, not moved after.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Gate each layer separately; a safety failure blocks release whatever the average.',
+            then: [{ send: ['runs', 'gate'], label: 'skipped approval', tone: 'err' }, { badge: 'gate', text: 'blocked', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Compare against no skill',
+            lines: ['Run the same tasks with the skill **disabled**. If the baseline does as well, the skill only adds context cost.'],
+            script: [{ say: 0 }, { send: ['runs', 'base'], label: 'same tasks', curve: true }, { badge: 'base', text: 'as good?', tone: 'miss', ms: 1200 }],
+          },
+        ],
+      },
       body: `**Start from a real workflow, not a topic.** "Kubernetes skill" is a topic. "Diagnose a CrashLoopBackOff pod and propose a fix" is a workflow with inputs, steps and an output you can check. Write the skill after you have done the task by hand a few times and know where it goes wrong.
 
 **Split judgment from deterministic work.** The body holds decisions ("if the migration touches a large table, read references/online-migrations.md"). Anything that must give the same answer every time (parsing a changelog, counting failing tests, checking a version string) goes in a script with JSON output.

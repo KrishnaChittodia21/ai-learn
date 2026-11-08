@@ -35,6 +35,103 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Semantic Chunking — cutting where the topic changes',
+      steps: {
+        actors: [
+          { id: 'text', kind: 'document', label: 'Call transcript', sub: '8 sentences', x: 110, y: 150 },
+          { id: 'emb', kind: 'embedder', label: 'Embedder', sub: 'per sentence group', x: 340, y: 150 },
+          { id: 'dist', kind: 'metric', label: 'Cosine distance', sub: 'd = 1 − cos', x: 570, y: 70 },
+          { id: 'thresh', kind: 'metric', label: 'Threshold', sub: '95th pct ≈ 0.45', x: 570, y: 230 },
+          { id: 'chunks', kind: 'chunker', label: 'Chunks', sub: 'one per topic', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Cut where the topic changes',
+            lines: [
+              'Instead of every N tokens, cut where the subject changes, like an editor adding section breaks.',
+              'Consecutive sentences about refunds sit close in vector space.',
+              'The first sentence about shipping jumps away.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'text' },
+              { say: 1 },
+              { send: ['text', 'emb'], label: 'refund, refund', count: 2 },
+              { say: 2 },
+              { send: ['emb', 'dist'], label: 'jump', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The mechanics',
+            lines: [
+              'Split into sentences, group each with a neighbour (buffer of 1) and embed each group.',
+              'Measure the distance between neighbours: `d = 1 − cos(e_i, e_i+1)`.',
+              'Break where d exceeds a threshold: by default the 95th percentile.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['text', 'emb'], label: 'sentence groups', count: 3 },
+              { say: 1 },
+              { send: ['emb', 'dist'], label: 'neighbours' },
+              { say: 2 },
+              { send: ['dist', 'thresh'], label: 'd values' },
+              { send: ['thresh', 'chunks'], label: 'breakpoints', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: find the breakpoints',
+            lines: ['Distances: s3→s4 = **0.47**, s6→s7 = **0.52**, every other pair 0.08–0.13.', 'The 95th-percentile threshold is ≈ 0.45.'],
+            task: {
+              type: 'choose',
+              question: 'Where does the semantic chunker cut?',
+              options: [
+                { text: 'After s3 and after s6' },
+                { text: 'Only after s6, the biggest jump', why: '0.47 also exceeds the 0.45 threshold, so s3→s4 is a breakpoint too.' },
+                { text: 'Every 4 sentences', why: 'That is fixed-size windowing; it would mix refund and delivery.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Two spikes, two cuts: [s1–s3] refund, [s4–s6] delivery, [s7–s8] login.',
+            then: [{ send: ['dist', 'thresh'], label: '0.47 · 0.52' }, { send: ['thresh', 'chunks'], label: '3 chunks', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Bound the sizes',
+            lines: [
+              'Chunk sizes come out uneven.',
+              'Always enforce min/max token bounds: merge tiny chunks, recursively split huge ones.',
+              'Cost: one embedding call per sentence group at ingestion.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'chunks', text: 'uneven', tone: 'miss' },
+              { say: 1 },
+              { badge: 'chunks', text: 'min/max bounds', tone: 'ok' },
+              { say: 2 },
+              { send: ['text', 'emb'], count: 3 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where it shines',
+            lines: ['Gains are corpus-dependent.'],
+            task: {
+              type: 'choose',
+              question: 'Which corpus benefits most from semantic chunking?',
+              options: [
+                { text: 'Unstructured, topic-hopping text: transcripts, chat logs, scraped articles without headings' },
+                { text: 'Well-structured docs with reliable headings', why: 'There, recursive or header-based splitting often matches it.' },
+                { text: 'Any corpus, equally', why: 'Gains depend on the corpus; some benchmarks found modest differences.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use it when there are no reliable structural seams and recursive chunks mix topics.',
+            then: [{ send: ['thresh', 'chunks'], tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** instead of cutting every N tokens, read the text and cut where the subject changes, like a good editor inserting section breaks. Embeddings let a program "notice" a topic shift: consecutive sentences about refunds sit close in vector space; the first sentence about shipping jumps away.
 
 **Mechanics (Kamradt-style, as in LangChain's \`SemanticChunker\`):**
@@ -195,6 +292,111 @@ console.log(applyBreakpoints(['s1','s2','s3','s4','s5','s6','s7','s8'], [2, 5]))
     // ---------------------------------------------------------------- 2
     {
       heading: 'Structure-Aware Chunking — following headings, sections, tables and code',
+      steps: {
+        actors: [
+          { id: 'md', kind: 'document', label: 'Docs page', sub: '# Billing ## Refunds', x: 110, y: 150 },
+          { id: 'rec', kind: 'chunker', label: 'Recursive 512', sub: 'ignores headings', x: 340, y: 70 },
+          { id: 'hdr', kind: 'chunker', label: 'Header splitter', sub: '#, ##, ###', x: 340, y: 230 },
+          { id: 'eu', kind: 'document', label: 'EU chunk', sub: 'Refunds > EU · 14 d', x: 570, y: 70 },
+          { id: 'us', kind: 'document', label: 'US chunk', sub: 'Refunds > US · 30 d', x: 570, y: 230 },
+          { id: 'user', kind: 'user', label: 'Query', sub: 'refund window for EU', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Authors already chunked it',
+            lines: [
+              'Headings, sections, list items and functions are the author\'s own chunks.',
+              'Structure-aware chunking reuses that outline instead of guessing.',
+              'Parse to structure first: Markdown, HTML DOM, unstructured elements, code AST.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'md' },
+              { say: 1 },
+              { send: ['md', 'hdr'], label: 'outline' },
+              { say: 2 },
+              { send: ['hdr', 'eu'] },
+              { send: ['hdr', 'us'] },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Without structure',
+            lines: [
+              'Recursive 512-token splitting puts the EU and US refund rules in one chunk, no heading.',
+              '"refund window for EU" retrieves a chunk where 30 days appears first.',
+              'The model answers 30 days: wrong.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['md', 'rec'], label: 'EU + US mixed', tone: 'miss' },
+              { say: 1 },
+              { send: ['user', 'rec'], curve: true, label: 'query' },
+              { say: 2 },
+              { badge: 'rec', text: '30 days ✗', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which chunk wins?',
+            lines: ['Header splitting yields one chunk per `###` section.'],
+            task: {
+              type: 'pick',
+              question: 'The query is "refund window for EU". Which chunk should it retrieve?',
+              answer: 'eu',
+              hints: {
+                us: '30 days is the US rule; the EU window is 14 days.',
+                rec: 'The recursive chunk mixes both rules with no heading.',
+                md: 'That is the whole page, not a chunk.',
+              },
+            },
+            solved: 'The EU chunk scores 0.86 vs 0.71 for the US one, and the answer is 14 days.',
+            then: [
+              { send: ['user', 'eu'], curve: true, label: 'query' },
+              { badge: 'eu', text: '0.86', tone: 'ok' },
+              { badge: 'us', text: '0.71', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Carry the breadcrumb',
+            lines: [
+              'Each chunk gets metadata `{h1: Billing, h2: Refunds, h3: EU customers}`.',
+              'And a text prefix "Billing > Refunds > EU customers", so the embedding knows where it lives.',
+              'Recurse inside large sections; merge tiny ones into the next.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['hdr', 'eu'], label: 'h1 · h2 · h3' },
+              { say: 1 },
+              { badge: 'eu', text: 'Billing > Refunds', tone: 'ok' },
+              { say: 2 },
+              { lit: 'hdr' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a huge table',
+            lines: ['Tables, code blocks and lists are atomic elements.'],
+            task: {
+              type: 'choose',
+              question: 'A section holds a table far bigger than the chunk size. What do you do?',
+              options: [
+                { text: 'Split it by rows, repeating the header row in each piece' },
+                {
+                  text: 'Cut it at the chunk size, wherever that lands',
+                  why: 'Tables are never split mid-way; rows would lose their column headers.',
+                },
+                { text: 'Merge it with the next section', why: 'Merging is for tiny sections; this one is already too big.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Keep tables, code and lists atomic; split huge tables by rows with the header repeated.',
+            then: [{ send: ['hdr', 'us'], label: 'rows + header', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** authors already chunked their document when they wrote headings, sections, list items and functions. Structure-aware chunking reuses that outline instead of guessing.
 
 **Mechanics.**
@@ -361,6 +563,111 @@ console.log(splitMarkdownByHeaders('# A\\nx\\n## B\\ny\\n# C\\nz'));
     // ---------------------------------------------------------------- 3
     {
       heading: 'Parent-Child Chunking — search small, answer big',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'carry over vacation?', x: 110, y: 150 },
+          { id: 'vdb', kind: 'vector-db', label: 'Child index', sub: '200-token children', x: 340, y: 70 },
+          { id: 'store', kind: 'data', label: 'Docstore', sub: 'parents by parent_id', x: 340, y: 230 },
+          { id: 'parent', kind: 'document', label: 'Parent p-059', sub: 'Vacation Policy', x: 570, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: '2 parents ≈ 2,800 tok', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Search small, answer big',
+            lines: [
+              'Small children are like index entries: precise to find.',
+              'Large parents are like book pages: useful to read.',
+              'Search the children, then hand the model the parents they point to.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'vdb'], label: 'search' },
+              { say: 1 },
+              { send: ['vdb', 'store'], label: 'parent_id' },
+              { say: 2 },
+              { send: ['store', 'parent'] },
+              { send: ['parent', 'llm'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: query time',
+            lines: ['Children carry `parent_id`; parents live in the docstore.'],
+            task: {
+              type: 'order',
+              question: 'Put the query-time steps in order.',
+              items: [
+                'Retrieve top-k children',
+                'Collect distinct parent_ids',
+                'Fetch the parents from the docstore',
+                'Send the parents to the LLM in rank order',
+              ],
+              hint: 'You can only fetch a parent once you know its id, and you only know ids from the child hits.',
+            },
+            solved: 'Children → parent_ids → fetch parents → deduplicated parents to the LLM.',
+            then: [
+              { send: ['user', 'vdb'] },
+              { send: ['vdb', 'store'], label: 'parent_ids' },
+              { send: ['store', 'parent'] },
+              { send: ['parent', 'llm'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The vacation question',
+            lines: [
+              'Child hits c-0412 (0.88) and c-0413 (0.81) both belong to p-059 "Vacation Policy".',
+              'Deduplicated parents [p-059, p-140]: about 2,800 tokens in the prompt.',
+              'p-059 includes "…unless your manager approves an exception in writing."',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'vdb'], label: 'vacation?' },
+              { badge: 'vdb', text: 'c-0412 · c-0413' },
+              { say: 1 },
+              { send: ['vdb', 'store'], label: 'p-059 (once)' },
+              { say: 2 },
+              { send: ['store', 'parent'] },
+              { send: ['parent', 'llm'], label: 'rule + exception', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what gets embedded?',
+            lines: ['Children: 100–300 tokens. Parents: a section, or 1,000–2,000 tokens.'],
+            task: {
+              type: 'choose',
+              question: 'What do you embed and index at ingestion?',
+              options: [
+                { text: 'Only the children, each with parent_id in metadata' },
+                { text: 'Both parents and children', why: 'Parents are stored once in a docstore and are not embedded.' },
+                { text: 'Only the parents', why: 'The small children are what match specific questions precisely.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Index children for precise search; keep parents in a docstore keyed by parent_id.',
+            then: [{ lit: 'vdb' }, { send: ['vdb', 'store'], label: 'parent_id' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Size against the budget',
+            lines: [
+              'Children must be small enough to match, but not so small they lose meaning.',
+              '`k_parents × parent_tokens` must fit the context budget.',
+              'With plain 200-token chunks the model would see the rule but not the exception.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'vdb' },
+              { say: 1 },
+              { badge: 'llm', text: '≈ 2,800 tokens' },
+              { say: 2 },
+              { badge: 'parent', text: '+ exception', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** small chunks are like index entries: precise to find. Large chunks are like book pages: useful to read. Parent-child chunking keeps both: you search the index entries and hand the model the page they point to.
 
 **Mechanics.**
@@ -532,6 +839,195 @@ console.log(selectParents([
     // ---------------------------------------------------------------- 4
     {
       heading: 'Contextual Chunking — prepending document context to every chunk',
+      short: {
+        id: 'contextual-chunk-rank-37-to-2',
+        title: 'Contextual chunking: rank 37 to 2',
+        beats: [
+          {
+            type: 'retrieve',
+            kicker: 'One chunk from a 9K-token 10-Q',
+            head: 'Which company? *Which quarter?*',
+            query: 'ACME revenue growth Q2 2023',
+            chunks: [
+              {
+                text: 'With context: "ACME Corp\'s Q2 2023 10-Q… Revenue increased 3%"',
+                score: 0.79,
+              },
+              {
+                text: 'Plain: "Revenue increased 3% over the previous quarter"',
+                score: 0.41,
+              },
+            ],
+            k: 1,
+            sub: 'Plain chunk: rank **37**, missed in the top-20. Contextualised: rank **2**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Ingestion side',
+            head: 'An LLM *labels* every chunk',
+            steps: [
+              'Send the whole document plus one chunk',
+              'A small model writes 50–100 tokens of context',
+              'Prepend it for embedding and BM25',
+              'Show users the original chunk',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Reported · top-20 retrieval failure rate',
+            head: 'Failures fall at *every* layer',
+            rungs: [
+              {
+                label: 'Baseline',
+                amount: 5.7,
+              },
+              {
+                label: '+ contextual embeddings',
+                amount: 3.7,
+              },
+              {
+                label: '+ contextual BM25',
+                amount: 2.9,
+              },
+              {
+                label: '+ reranking',
+                amount: 1.9,
+              },
+            ],
+            unit: '% failed',
+            sub: '−35%, then −49%, then **−67%**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Prompt caching on the document',
+            value: 1.02,
+            decimals: 2,
+            prefix: '$',
+            unit: 'per 1M document tokens (Anthropic estimate)',
+            sub: 'The document is the cached prefix, so each extra chunk pays only for **the chunk and the output**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'You embed context + chunk, but keep BM25 on the raw chunk. What do you lose?',
+            options: [
+              {
+                text: 'Nothing; BM25 cannot use context',
+                why: 'Keyword search benefits too: "ACME" or "Q2 2023" from the context let BM25 match.',
+              },
+              {
+                text: 'Exact-term matches on entities and dates in the context',
+                why: 'Right: failures fell from −35% to −49% when BM25 also used the contextualised text.',
+              },
+              {
+                text: 'The ability to rerank',
+                why: 'Reranking still works; what you lose is keyword matches on the added entities and dates.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'A chunk should *explain itself*.',
+          sub: 'Prepend **50–100 tokens** of document context, and use it for both embeddings and BM25.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: '10-Q filing', sub: '9K tokens · cached', x: 110, y: 70 },
+          { id: 'chunk', kind: 'document', label: 'Chunk', sub: 'Revenue increased 3%', x: 110, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Small model', sub: 'writes 50–100 tokens', x: 340, y: 150 },
+          { id: 'ctx', kind: 'chunker', label: 'Context + chunk', sub: 'prepended', x: 570, y: 150 },
+          { id: 'vdb', kind: 'vector-db', label: 'Embeddings', sub: 'dense index', x: 800, y: 70 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25 index', sub: 'keyword index', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A chunk without context',
+            lines: [
+              '"Revenue increased 3% over the previous quarter": which company, which quarter?',
+              'Query "ACME revenue growth Q2 2023": plain chunk cosine 0.41, rank 37.',
+              'It misses the top-20.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'chunk' },
+              { badge: 'chunk', text: 'which company?', tone: 'miss' },
+              { say: 1 },
+              { send: ['chunk', 'vdb'], curve: true, label: '0.41', tone: 'miss' },
+              { say: 2 },
+              { badge: 'vdb', text: 'rank 37', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Ask a model to label it',
+            lines: [
+              'Send the whole document plus the chunk to a small, cheap model.',
+              'It returns 50–100 tokens: "ACME Corp\'s Q2 2023 10-Q, Results of Operations…".',
+              'Prepend it: the contextualised chunk scores 0.79, rank 2.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'llm'], label: 'whole doc' },
+              { send: ['chunk', 'llm'], label: 'chunk' },
+              { say: 1 },
+              { send: ['llm', 'ctx'], label: '62-token context' },
+              { say: 2 },
+              { send: ['ctx', 'vdb'], tone: 'ok' },
+              { badge: 'vdb', text: 'rank 2', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where it goes',
+            lines: ['Embedded text = context + "\\n\\n" + chunk.'],
+            task: {
+              type: 'choose',
+              question: 'Where is the context + chunk text used?',
+              options: [
+                { text: 'For both the embedding and the BM25 index; display the original chunk' },
+                { text: 'Only for the embedding', why: 'BM25 gains too: it now matches "ACME" and "Q2 2023".' },
+                { text: 'As the text shown to the user', why: 'Keep the original chunk for display; the context is for search.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Prepend context for both dense and BM25 search; show the original chunk.',
+            then: [{ send: ['ctx', 'vdb'], tone: 'ok' }, { send: ['ctx', 'bm25'], tone: 'ok' }, { badge: 'bm25', text: 'ACME · Q2 2023', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Prompt caching keeps it cheap',
+            lines: [
+              'Use prompt caching: the document is the cached prefix of every per-chunk call.',
+              'Each extra chunk only pays for the chunk and the output.',
+              'Anthropic estimated ~$1.02 per 1M document tokens.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'llm'], label: 'cached prefix', count: 3 },
+              { say: 1 },
+              { send: ['chunk', 'llm'], label: 'chunk only' },
+              { say: 2 },
+              { badge: 'llm', text: '~$1.02 / 1M', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the reported results',
+            lines: ['Top-20 retrieval failure rate, as each piece is added.'],
+            task: {
+              type: 'order',
+              question: 'Order these setups from the highest to the lowest reported failure rate.',
+              items: ['Baseline chunks', 'Contextual embeddings', '+ contextual BM25', '+ reranking'],
+              hint: 'Each piece was added on top of the previous one and cut failures further.',
+            },
+            solved: '5.7% → 3.7% (−35%) → 2.9% (−49%) → 1.9% (−67%).',
+            then: [{ send: ['ctx', 'vdb'], tone: 'ok' }, { send: ['ctx', 'bm25'], tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a chunk that says "The company's revenue grew 3% over the previous quarter" is useless on its own: which company, which quarter? Contextual chunking asks an LLM, which can see the whole document, to write a one-to-two sentence label for each chunk, like a librarian annotating index cards.
 
 **Mechanics (Anthropic's Contextual Retrieval, ingestion side):**

@@ -125,7 +125,7 @@ toggles flow quiz` + `tokens retrieve claims` (`attention` not needed yet); `/sh
 - **First batch: 12 Shorts**, each fact-checked against its lesson.
 - **Where they show:** Short of the day on Today, a Shorts page, a strip on topic pages, "▶ Watch the Short" at the
   top of a section, a ▶ icon in the sections sidebar.
-- **Unlocks:** one more Short per day you study (local); progress and quiz answers in `localStorage`. A watched
+- **Unlocks:** ~~one more Short per day you study~~ removed 2026-11-09: every Short is open (no server, so gating added nothing); progress and quiz answers in `localStorage`. A watched
   Short does not count towards plan minutes (M6). ☆ Save → Saved → "Play all"; Guide Me stops; Premiere badge (M4).
 - Tests: player (timing, Back, pause, speed, quiz blocks Next), validator, Short-of-the-day pick, daily unlock.
 

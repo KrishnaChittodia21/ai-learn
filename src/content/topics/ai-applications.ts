@@ -33,6 +33,223 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Text-to-SQL — schema linking, generation and query guarding',
+      short: {
+        id: 'text-to-sql-guard-the-query',
+        title: 'Text-to-SQL: guard the query',
+        beats: [
+          {
+            type: 'toggles',
+            kicker: 'The validator · before anything runs',
+            head: 'Parse to an AST, *allow only reads*',
+            items: [
+              {
+                label: 'A single SELECT',
+                keep: true,
+              },
+              {
+                label: 'Tables in the allowlist',
+                keep: true,
+              },
+              {
+                label: 'LIMIT injected',
+                keep: true,
+              },
+              {
+                label: 'DROP or UPDATE',
+              },
+              {
+                label: 'Multi-statements',
+              },
+              {
+                label: 'pg_sleep or dblink',
+              },
+            ],
+            keepLabel: 'ALLOW',
+          },
+          {
+            type: 'counter',
+            kicker: 'Schema linking · 240 tables',
+            prefix: '~',
+            value: 1.8,
+            decimals: 1,
+            suffix: 'k',
+            unit: 'prompt tokens, down from ~60k',
+            sub: 'It picks **orders, order_items, products, customers**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Top 3 products · Germany · last quarter',
+            head: 'Why *0 rows*?',
+            steps: [
+              'Schema linking picks 4 tables',
+              'SQL filters c.country = \'Germany\'',
+              '0 rows',
+              'Sample values in the schema (\'DE\',\'FR\',\'US\') fix it',
+            ],
+            broken: 1,
+          },
+          {
+            type: 'claims',
+            kicker: 'Second attempt',
+            head: 'Checked, then run *read-only*',
+            claims: [
+              {
+                text: 'Single SELECT',
+                ok: true,
+              },
+              {
+                text: 'Tables in the allowlist',
+                ok: true,
+              },
+              {
+                text: 'LIMIT present',
+                ok: true,
+              },
+            ],
+            sub: 'Ran in **140 ms** under the analyst_ro role.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Your validator only allows SELECT. Why do you still need a read-only database role?',
+            answer: 1,
+            options: [
+              {
+                text: 'SELECT statements are slower without it',
+                why: 'The role is a safety layer, not a speed setting.',
+              },
+              {
+                text: 'Validators have gaps; the role is enforced by the database itself',
+                why: 'Data-modifying CTEs or side-effect functions can slip past a parser; the role still holds.',
+              },
+              {
+                text: 'The LLM sees the role name and behaves better',
+                why: 'Safety comes from what the database enforces, not from what the model sees.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Validate the AST *and* run least-privilege.',
+          sub: 'Both, not either: **each layer holds** when another fails.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Question', sub: 'from an analyst', x: 110, y: 70 },
+          { id: 'link', kind: 'retriever', label: 'Schema linking', sub: '3–8 relevant tables', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: '{sql, tables_used}', x: 570, y: 70 },
+          { id: 'val', kind: 'guard', label: 'AST validator', sub: 'single SELECT', x: 800, y: 70 },
+          { id: 'ans', kind: 'document', label: 'Answer', sub: 'rows + the SQL', x: 340, y: 230 },
+          { id: 'db', kind: 'data', label: 'Database', sub: 'read-only role', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A junior analyst',
+            lines: [
+              'The model knows SQL but not your database.',
+              'Give it the right part of the schema and a few worked examples.',
+              'Check its query before it runs, under a strictly read-only login.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'llm'], label: 'question', tone: 'req', curve: true },
+              { badge: 'llm', text: 'which tables?', tone: 'miss' },
+              { say: 1 },
+              { send: ['q', 'link'] },
+              { send: ['link', 'llm'], label: 'schema + examples', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'val'], label: 'SQL' },
+              { send: ['val', 'db'], label: 'read-only', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the biggest lever',
+            lines: ['Accuracy drops sharply as schemas grow.'],
+            task: {
+              type: 'choose',
+              question: 'On a warehouse with hundreds of tables, what is the biggest accuracy lever?',
+              options: [
+                { text: 'Schema linking: retrieve only the relevant tables' },
+                {
+                  text: 'Put all 240 tables in the prompt',
+                  why: 'Linking shrank one prompt from ~60k to ~1.8k tokens, and big schemas hurt accuracy.',
+                },
+                { text: 'More repair retries', why: 'Repair fixes DB errors, but the model first needs the right tables.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Schema linking is the biggest accuracy lever on real databases.',
+            then: [{ send: ['link', 'llm'], label: '4 of 240 tables', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Sample values fix filters',
+            lines: [
+              'First attempt filtered on `country = \'Germany\'` and got 0 rows.',
+              'Sample values in the schema ("\'DE\', \'FR\', \'US\'") fixed it.',
+              'On a DB error, send the error back once or twice to repair.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['val', 'db'] },
+              { badge: 'db', text: '0 rows', tone: 'err' },
+              { say: 1 },
+              { send: ['link', 'llm'], label: 'sample values' },
+              { send: ['llm', 'val'], label: 'country = \'DE\'', tone: 'ok' },
+              { say: 2 },
+              { send: ['db', 'llm'], label: 'error', tone: 'err', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline',
+            lines: ['Seven steps from question to answer.'],
+            task: {
+              type: 'order',
+              question: 'Put the core steps in order.',
+              items: [
+                'Schema linking',
+                'Prompt with schema, glossary and examples',
+                'Generate SQL',
+                'Validate the AST',
+                'Execute with a read-only role',
+                'Answer and show the SQL',
+              ],
+              hint: 'You need the right tables before prompting, and validation before anything runs.',
+            },
+            solved: 'Link → prompt → generate → validate → execute → answer (repairing on DB errors).',
+            then: [
+              { send: ['q', 'link'] },
+              { send: ['link', 'llm'] },
+              { send: ['llm', 'val'] },
+              { send: ['val', 'db'] },
+              { send: ['db', 'ans'], label: 'rows', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Defence in depth',
+            lines: [
+              'AST allowlist: a single SELECT, known tables, an injected LIMIT.',
+              'A read-only DB role stops DROP/UPDATE even if validation misses it.',
+              'statement_timeout + LIMIT stop runaway joins; row-level security stops cross-tenant leaks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'val'], label: 'SQL' },
+              { badge: 'val', text: 'SELECT only', tone: 'ok' },
+              { say: 1 },
+              { send: ['val', 'db'], label: 'DROP?', tone: 'err' },
+              { badge: 'db', text: 'read-only', tone: 'ok' },
+              { say: 2 },
+              { badge: 'db', text: 'timeout + RLS', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** text-to-SQL is a junior analyst who knows SQL but not your database. Give them the right part of the schema, a few worked examples and a strictly read-only login, and check their query before it runs.
 
 **Pipeline.**
@@ -189,6 +406,109 @@ console.log(isSafeSelect('WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x'
     },
     {
       heading: 'AI Chatbots — session state, memory, routing and escalation',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'message', x: 110, y: 70 },
+          { id: 'router', kind: 'judge', label: 'Router', sub: 'intent classifier', x: 340, y: 70 },
+          { id: 'rag', kind: 'retriever', label: 'Help-doc RAG', sub: 'answers how-tos', x: 570, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'Backend tools', sub: 'with the user\'s auth', x: 800, y: 70 },
+          { id: 'memory', kind: 'cache', label: 'Memory', sub: 'turns + summary', x: 110, y: 230 },
+          { id: 'state', kind: 'data', label: 'Session state', sub: 'your code owns it', x: 340, y: 230 },
+          { id: 'human', kind: 'user', label: 'Human agent', sub: 'escalation', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Not an LLM in a chat box',
+            lines: [
+              'A receptionist: the **router**.',
+              'A notebook: **state and memory**.',
+              'Specialists: **tools and RAG**. A manager to call: **human escalation**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'router'], label: 'message' },
+              { say: 1 },
+              { lit: 'state' },
+              { lit: 'memory' },
+              { say: 2 },
+              { send: ['router', 'rag'] },
+              { send: ['router', 'tools'] },
+              { badge: 'human', text: 'on call' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who owns state?',
+            lines: ['Session state: conversation id, user entitlements, intent, filled slots, escalation flags.'],
+            task: {
+              type: 'choose',
+              question: 'Who owns the session state?',
+              options: [
+                { text: 'Your code; the LLM only reads it' },
+                { text: 'The LLM, which updates it as it chats', why: 'The LLM reads state; your code owns and writes it.' },
+                { text: 'Nobody: the transcript is enough', why: 'State such as order id and escalation flags must be tracked explicitly.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Your code owns state; the LLM reads it.',
+            then: [{ send: ['state', 'router'], label: 'state', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Memory with a budget',
+            lines: [
+              'The last N turns verbatim.',
+              'A rolling **summary** of older turns.',
+              'Long-term facts retrieved per turn, all within a token budget (e.g. ≤ 6k).',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'memory' },
+              { badge: 'memory', text: 'last N turns' },
+              { say: 1 },
+              { badge: 'memory', text: '+ summary' },
+              { say: 2 },
+              { send: ['memory', 'router'], label: '≤ 6k tokens', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Route by intent',
+            lines: [
+              'A cheap classifier maps the message to an intent: billing, order status, technical, out-of-scope.',
+              'How-to questions go to RAG; account actions go to tools with the **user\'s** auth, not a god token.',
+              'Regulated steps (refunds, cancellations) run as scripted flows.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'router'], label: 'message' },
+              { badge: 'router', text: 'order_status 0.93' },
+              { say: 1 },
+              { send: ['router', 'rag'], label: 'how-to' },
+              { send: ['router', 'tools'], label: 'getShipment', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: escalate?',
+            lines: ['State: failures 1, sentiment −0.6.', 'getShipment says the parcel is "lost in transit".'],
+            task: {
+              type: 'pick',
+              question: 'Who should handle this customer next?',
+              answer: 'human',
+              hints: {
+                rag: 'Help docs cannot reissue a lost parcel, and the user is already frustrated.',
+                tools: 'The tool already answered: lost. Policy says escalate.',
+                router: 'Routing is done; the policy now says escalate.',
+              },
+            },
+            solved: 'Escalate early, with summary, intent, slots and transcript, so the agent does not re-ask.',
+            then: [{ send: ['state', 'human'], label: 'summary + slots', tone: 'ok', curve: true }, { lit: 'human' }],
+          },
+        ],
+      },
       body: `**Intuition:** a production chatbot is not "an LLM in a chat box"; it is a small service with a receptionist (router), a notebook (state and memory), specialists (tools and RAG) and a manager to call (human escalation).
 
 **Architecture.**
@@ -341,6 +661,103 @@ export function buildPrompt(s: Session, budgetTokens: number) {
     },
     {
       heading: 'Enterprise Search — connectors, hybrid retrieval and ACL-aware answers',
+      steps: {
+        actors: [
+          { id: 'src', kind: 'document', label: 'Sources', sub: 'Drive · Confluence…', x: 110, y: 70 },
+          { id: 'conn', kind: 'tool', label: 'Connectors', sub: 'content + ACLs', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Hybrid index', sub: 'BM25 + vectors + ACL', x: 570, y: 70 },
+          { id: 'user', kind: 'user', label: 'Caller', sub: 'user + groups', x: 110, y: 230 },
+          { id: 'idp', kind: 'guard', label: 'Identity (IdP)', sub: 'resolves groups', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'cites permitted only', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'RAG with a bouncer',
+            lines: ['The same question must return different results for the CFO and an intern.', 'And it must never leak that a hidden document exists.'],
+            script: [
+              { say: 0 },
+              { send: ['user', 'index'], label: 'question', tone: 'req', curve: true },
+              { send: ['index', 'llm'], label: 'permitted chunks', tone: 'ok' },
+              { say: 1 },
+              { badge: 'llm', text: 'no hint of hidden', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Index permissions with content',
+            lines: [
+              'Connectors pull content **and permissions**.',
+              'ACLs are normalised to user and group ids (nested groups expanded).',
+              'Every chunk stores `allowed_principals`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['src', 'conn'], label: 'docs + ACLs' },
+              { say: 1 },
+              { badge: 'conn', text: 'groups expanded' },
+              { say: 2 },
+              { send: ['conn', 'index'], label: 'chunks + ACL' },
+              { lit: 'index' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'At query time',
+            lines: [
+              'Resolve the caller\'s principals: user + groups, cached ~5 min.',
+              'Retrieve with a **pre-filter**: allowed_principals ∈ caller principals.',
+              'Rerank, then answer only from permitted chunks, with citations.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'idp'], label: 'who am I?' },
+              { badge: 'idp', text: 'eng, all-staff' },
+              { say: 1 },
+              { send: ['idp', 'index'], label: 'principals', tone: 'req', curve: true },
+              { badge: 'index', text: 'pre-filter', tone: 'ok' },
+              { say: 2 },
+              { send: ['index', 'llm'], label: 'top 5', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where to filter',
+            lines: ['You could filter top-k after retrieval, or inside the index query.'],
+            task: {
+              type: 'choose',
+              question: 'Why filter inside the index query?',
+              options: [
+                { text: 'Post-filtering can return zero results and leaks signal through counts, snippets or answers' },
+                { text: 'It is only a speed trick', why: 'It is about correct results and not leaking, not speed.' },
+                {
+                  text: 'It is not needed if the LLM is told to skip forbidden chunks',
+                  why: 'Forbidden chunks would still reach the model and could leak through the answer.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Index permissions with content and filter inside retrieval.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: access revoked',
+            lines: ['Someone just lost access to a document.'],
+            task: {
+              type: 'choose',
+              question: 'What keeps it out of their answers?',
+              options: [
+                { text: 'ACL sync faster than content sync, plus a deny-wins re-check at answer time' },
+                { text: 'Wait for the next full content re-index', why: 'Revoked access stays searchable until then; ACLs must sync faster.' },
+                { text: 'Tell the LLM not to mention it', why: 'Prompting is not access control; answer only from permitted chunks.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Sync ACL changes faster than content and re-check before showing.',
+            then: [{ send: ['conn', 'index'], label: 'ACL change', tone: 'req' }, { badge: 'index', text: 'deny wins', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** enterprise search is RAG with a bouncer. The same question ("what is our 2027 pricing plan?") must return different results for the CFO and an intern, and must never leak that a hidden document exists.
 
 **Pipeline.**

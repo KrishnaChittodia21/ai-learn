@@ -1,7 +1,7 @@
 /* ======================================================================
    Practice & weak areas, Neural Aurora. A diagnostic board: stat tiles with display numbers,
    glass panels of glow-meter accuracy tables (.meter-table lives in exam.css), focus cards with a
-   pulsar "wrong now" count + meter and the sections behind the misses (Revise §n), and a
+   pulsar "wrong now" count + meter and the sections behind the misses (Revise section n), and a
    how-it-clears note. The weakest topic gets the screen's one gradient border. Also the
    mistakes-drill empty state and the compact weak-areas block on Today. The running drill
    itself uses the exam HUD (exam.css).

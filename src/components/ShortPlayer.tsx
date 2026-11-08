@@ -522,7 +522,7 @@ export function ShortPlayer({
                 {marks(short.takeaway.sub)}
               </p>
               <div className="learn in" style={d(400)}>
-                <p className="lbl">Learn it properly · §{section + 1}</p>
+                <p className="lbl">Learn it properly · section {section + 1}</p>
                 <b>{sectionTitle}</b>
                 <Link className={`btn ${upNext ? '' : 'btn-primary'}`} to={lesson}>
                   <BookOpen size={15} aria-hidden /> Read the lesson

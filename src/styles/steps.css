@@ -20,7 +20,6 @@
 .rvl-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rvl-modemeta { font: var(--fs-xs) var(--mono); color: var(--muted); }
 .rvl-modemeta b { color: var(--text-2); font-weight: 500; }
-.rvl-remember { margin-left: auto; font-size: var(--fs-xs); color: var(--muted); }
 
 /* Read less: the core */
 .rvl-core { position: relative; padding: 24px 28px 22px; border-radius: var(--radius-xl); }
@@ -132,6 +131,10 @@
 .st-node.k-llm, .st-node.k-agent { --k: var(--c-nebula); }
 .st-node.k-tool { --k: var(--c-success); }
 .st-node.k-judge { --k: var(--c-error); }
+.st-node.k-server, .st-node.k-cache { --k: var(--c-ion); }
+.st-node.k-guard { --k: var(--c-error); }
+.st-node.k-data { --k: var(--c-solar); }
+.st-node.k-metric { --k: var(--c-success); }
 .st-pk circle { fill: var(--c-ion); filter: drop-shadow(0 0 6px var(--glow-ion-c)); }
 .st-pk.tone-ok circle { fill: var(--c-success); }
 .st-pk.tone-miss circle { fill: var(--c-solar); }
@@ -173,7 +176,6 @@ button.gd-card { cursor: pointer; }
   .sl-side { border-left: 0; border-top: 1px solid var(--border); }
 }
 @media (max-width: 640px) {
-  .rvl-remember { margin-left: 0; }
   .rvl-core { padding: 18px 16px; }
   .lm-body { padding: 4px 16px 18px; }
   .sl-bar, .sl-side, .sl-nav { padding-left: 14px; padding-right: 14px; }

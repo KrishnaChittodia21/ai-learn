@@ -119,6 +119,8 @@
   align-items: center;
   gap: var(--s-5);
   border-radius: var(--radius-pill);
+  /* the pill is capped at --page-max, so its contents fold by the pill's width, not the viewport's */
+  container: masthead / inline-size;
 }
 .wordmark {
   display: flex;
@@ -199,16 +201,23 @@
   margin-left: auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  flex: none;
+  /* takes the pill's spare width so the search field can grow into it */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .search-trigger {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   height: 40px;
-  min-width: 136px;
-  padding: 0 8px 0 14px;
+  /* a real field: grows into the free space (up to 280px) */
+  flex: 0 1 280px;
+  min-width: 100px;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   background: var(--tint);
@@ -225,8 +234,8 @@
   background: var(--tint-2);
   color: var(--text);
 }
-.search-trigger kbd {
-  margin-left: auto;
+.search-trigger svg {
+  flex: none;
 }
 .streak-chip {
   display: inline-flex;
@@ -419,20 +428,20 @@
 }
 
 /* ---------- responsive ---------- */
-@media (max-width: 1300px) {
+@container masthead (max-width: 810px) {
   .search-trigger {
+    flex: none;
     min-width: 0;
     width: 40px;
     padding: 0;
     justify-content: center;
   }
-  .search-trigger-text,
-  .search-trigger kbd {
+  .search-trigger-text {
     display: none;
   }
 }
 /* the streak folds to its number before the nav gets squeezed */
-@media (max-width: 1240px) {
+@container masthead (max-width: 1340px) {
   .streak-text {
     display: none;
   }
@@ -443,10 +452,7 @@
     padding: 0 12px;
   }
 }
-@media (max-width: 1120px) {
-  .masthead-inner {
-    gap: var(--s-2);
-  }
+@container masthead (max-width: 1220px) {
   .masthead-tools {
     gap: 6px;
   }
@@ -454,8 +460,49 @@
     padding: 0 8px;
   }
 }
-@media (max-width: 1000px) {
-  .masthead-inner > .wordmark .wordmark-name {
+/* the pill can't query itself, so its own gap still follows the viewport: pill width ≈ viewport − 80px here */
+@media (max-width: 1300px) {
+  .masthead-inner {
+    gap: var(--s-3);
+  }
+}
+@media (max-width: 1120px) {
+  .masthead-inner {
+    gap: var(--s-2);
+  }
+}
+@container masthead (max-width: 1100px) {
+  .wordmark .wordmark-name {
+    display: none;
+  }
+}
+@container masthead (max-width: 960px) {
+  .nav-link {
+    padding: 0 6px;
+    font-size: 0.875rem;
+  }
+  .masthead-tools {
+    gap: 4px;
+  }
+}
+/* the tab bar's short labels ("Home", "Weak") take over when the pill is narrow; only one is ever rendered */
+.primary-nav .nav-short {
+  display: none;
+}
+@container masthead (max-width: 1080px) {
+  .primary-nav .nav-full:has(+ .nav-short) {
+    display: none;
+  }
+  .primary-nav .nav-short {
+    display: inline;
+  }
+}
+/* last band before the mobile bar (≤900px viewport): theme stays reachable in Settings */
+@container masthead (max-width: 880px) {
+  .nav-link {
+    padding: 0 4px;
+  }
+  .masthead-tools .theme-toggle {
     display: none;
   }
 }
@@ -631,7 +678,8 @@
 
 /* ---------- M9: route change without the blank gap (enter only, CSS, no exit) ---------- */
 .route-in {
-  animation: route-in 200ms var(--ease-out) both;
+  /* backwards, not both: a held transform would trap position:fixed children (the Short player) */
+  animation: route-in 200ms var(--ease-out) backwards;
 }
 @keyframes route-in {
   from {

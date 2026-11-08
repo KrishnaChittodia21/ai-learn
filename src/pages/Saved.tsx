@@ -5,7 +5,9 @@ import { ArrowDownUp, BookOpen, Calculator, Check, ChevronDown, CirclePlay, Code
 import { TOPICS, TOPIC_BY_ID } from '../content';
 import { removeSaved, restoreSaved, SAVED_KINDS, SAVED_MAX, setSavedDone, useProgress, type SavedItem, type SavedKind } from '../lib/progress';
 import { showToast } from '../lib/toast';
-import { SHORT_BY_ID, useShorts } from '../lib/useShorts';
+import { SHORT_BY_ID } from '../lib/useShorts';
+import { ROLES } from '../content/roles';
+import { ROLE_SCENARIOS } from '../content/roleScenarios';
 
 interface Resolved {
   item: SavedItem;
@@ -34,6 +36,9 @@ for (const t of TOPICS) {
   for (const l of t.promptLabs ?? []) OWNER.set(`prompt-lab|${l.id}`, { topicId: t.id, title: l.title, dom: `pl-${l.id}`, tab: 'prompt-lab' });
   for (const e of t.envelopeQuestions) OWNER.set(`drill|${e.id}`, { topicId: t.id, title: e.question, dom: `boe-${e.id}`, tab: 'envelope' });
 }
+// role scenario questions live on a learning path's practice page, not on a topic
+const SCENARIO = new Map<string, { roleId: string; title: string }>();
+for (const [roleId, qs] of Object.entries(ROLE_SCENARIOS)) for (const q of qs) SCENARIO.set(q.id, { roleId, title: q.question });
 
 function resolve(item: SavedItem): Resolved {
   const gone = { item, title: 'No longer in the course', topic: TOPIC_BY_ID.get(item.topicId)?.title ?? '', href: null, kindLabel: KIND[item.kind]?.label ?? 'Item' };
@@ -45,11 +50,16 @@ function resolve(item: SavedItem): Resolved {
     const [id, i] = item.ref.split(':');
     const t = TOPIC_BY_ID.get(id);
     const s = t?.sections[Number(i)];
-    return t && s ? { item, title: s.heading.split(' — ')[0], topic: t.title, href: `/topic/${t.id}?tab=learn&s=${i}`, kindLabel: `Section §${Number(i) + 1}` } : gone;
+    return t && s ? { item, title: s.heading.split(' — ')[0], topic: t.title, href: `/topic/${t.id}?tab=learn&s=${i}`, kindLabel: `Section ${Number(i) + 1}` } : gone;
   }
   if (item.kind === 'short') {
     const e = SHORT_BY_ID.get(item.ref);
     return e ? { item, title: e.short.title, topic: e.topic.title, href: `/short/${e.short.id}`, kindLabel: 'Short' } : gone;
+  }
+  const sc = item.kind === 'interview' ? SCENARIO.get(item.ref) : undefined;
+  if (sc) {
+    const role = ROLES.find((r) => r.id === sc.roleId);
+    return role ? { item, title: sc.title, topic: `${role.title} path`, href: `/paths/${role.id}/practice`, kindLabel: 'Role scenario' } : gone;
   }
   const o = OWNER.get(`${item.kind}|${item.ref}`);
   const t = o && TOPIC_BY_ID.get(o.topicId);
@@ -77,8 +87,7 @@ export default function SavedPage() {
   // 'short' gets its chip (and Play all) once a Short is saved
   const kinds = SAVED_KINDS.filter((k) => k !== 'short' || count('short') > 0);
   const navigate = useNavigate();
-  const { open: openShorts } = useShorts();
-  const playable = open.filter((r) => r.item.kind === 'short' && r.href && openShorts.has(r.item.ref)).sort((a, b) => a.item.addedAt.localeCompare(b.item.addedAt));
+  const playable = open.filter((r) => r.item.kind === 'short' && r.href).sort((a, b) => a.item.addedAt.localeCompare(b.item.addedAt));
   const total = all.length;
   const near = total >= SAVED_MAX * 0.9;
 

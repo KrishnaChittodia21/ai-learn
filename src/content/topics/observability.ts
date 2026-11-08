@@ -35,6 +35,124 @@ const topic: Topic = {
   sections: [
     {
       heading: 'LLM Observability — what to capture and why logs are not enough',
+      steps: {
+        actors: [
+          { id: 'app', kind: 'server', label: 'Chat app', sub: 'root span: /chat', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model call', sub: 'finish_reason', x: 340, y: 70 },
+          { id: 'collector', kind: 'server', label: 'OTel Collector', sub: 'redact · sample', x: 570, y: 70 },
+          { id: 'backend', kind: 'metric', label: 'Trace backend', sub: 'Langfuse · Phoenix', x: 800, y: 70 },
+          { id: 'logs', kind: 'data', label: 'Plain logs', sub: '200 OK, 2.3 s', x: 110, y: 230 },
+          { id: 'evals', kind: 'judge', label: 'Evals/feedback', sub: 'thumbs-down rate', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A chef, not a vending machine',
+            lines: [
+              'A normal API gives the same output for the same input.',
+              'An LLM app gives a slightly different answer each time, and a wrong one can **look fine**.',
+              'Observability lets you replay exactly what the model saw and did.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'logs'], label: '200 OK' },
+              { say: 1 },
+              { send: ['app', 'llm'], label: 'same question' },
+              { badge: 'llm', text: 'looks fine?', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { send: ['app', 'collector'], label: 'spans', tone: 'ok' },
+              { send: ['collector', 'backend'], label: 'replayable trace', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Four signals',
+            lines: [
+              '**Traces**: what happened, step by step.',
+              '**Metrics**: how often, how slow, how costly (p95 TTFT, 429 rate).',
+              '**Evals / feedback**: was the output good?',
+              '**Logs / events**: raw details for forensics, like `finish_reason = length`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'collector'], label: 'trace' },
+              { say: 1 },
+              { send: ['collector', 'backend'], label: 'metrics' },
+              { say: 2 },
+              { lit: 'evals' },
+              { badge: 'evals', text: 'faithfulness 0.82', ms: 1200 },
+              { say: 3 },
+              { send: ['app', 'logs'], label: 'events' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: logs say 200 OK',
+            lines: ['Thumbs-down jumps from 3% to 9% on Tuesday. Logs show only "200 OK, 2.3 s".'],
+            task: {
+              type: 'choose',
+              question: 'What finds the cause fastest?',
+              options: [
+                { text: 'Filter traces by negative feedback and read prompt version and finish_reason' },
+                { text: 'Read more of the plain logs', why: 'The logs only say 200 OK and 2.3 s; they have no prompt version or finish reason.' },
+                { text: 'Wait for more complaints to pile up', why: 'Without prompt version on the span and finish_reason on the generation, this stays a multi-day guess.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Bad traces shared prompt v14 and finish_reason "length": v14 cut max_tokens, so rolling back fixed it.',
+            then: [
+              { send: ['collector', 'backend'], label: 'feedback = negative' },
+              { badge: 'llm', text: 'finish = length', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Instrument once, slice later',
+            lines: [
+              'Instrument every model call, retrieval, tool call and guardrail.',
+              'Use the **OpenTelemetry GenAI** conventions so any backend understands the data.',
+              'Put tenant, feature, prompt version and model version on the **root span**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'llm'], label: 'span' },
+              { say: 1 },
+              { send: ['app', 'collector'], label: 'gen_ai.* spans' },
+              { send: ['collector', 'backend'], label: 'OTLP' },
+              { say: 2 },
+              { badge: 'app', text: 'tenant · prompt v', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where business context goes',
+            lines: ['You want to slice every trace by tenant, feature and prompt version.'],
+            task: {
+              type: 'pick',
+              question: 'Which part should attach that business context?',
+              answer: 'app',
+              hints: {
+                llm: 'The model span holds the gen_ai.* details; business context belongs on the root span.',
+                collector: 'The collector redacts and samples what it receives; it does not know your tenant or prompt version.',
+                backend: 'The backend can only slice by what you sent it.',
+              },
+            },
+            solved: 'The app puts tenant, feature, prompt and model version on the root span, so everything can be sliced by them.',
+            then: [{ lit: 'app' }, { send: ['app', 'collector'], label: 'root span + context', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'From day one',
+            lines: ['Start tracing before launch.', 'Retro-fitting tracing after an incident means you cannot debug **that** incident.'],
+            script: [
+              { say: 0 },
+              { send: ['app', 'collector'], label: 'traces' },
+              { say: 1 },
+              { badge: 'logs', text: 'too late', tone: 'err', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a normal API is a vending machine (same input → same output). An LLM app is a chef: same order, slightly different dish every time, and the dish can look fine while being wrong. Observability is the kitchen camera that lets you replay *exactly* what the chef saw and did.
 
 **Four signals for GenAI systems**
@@ -220,6 +338,177 @@ export async function withGenAiSpan<T extends { usage: Usage }>(meta: Meta, fn: 
     },
     {
       heading: 'Tracing and Logging — a RAG request as a span tree',
+      steps: {
+        actors: [
+          { id: 'root', kind: 'server', label: 'POST /ask', sub: 'root span', x: 110, y: 150 },
+          { id: 'embed', kind: 'embedder', label: 'embed', sub: '38 ms · 12 tok', x: 340, y: 70 },
+          { id: 'retrieve', kind: 'vector-db', label: 'retrieve', sub: 'top_k=20 · doc ids', x: 570, y: 70 },
+          { id: 'rerank', kind: 'reranker', label: 'rerank', sub: 'kept=5', x: 800, y: 70 },
+          { id: 'chat', kind: 'llm', label: 'chat gpt-5-mini', sub: '1.92 s · finish=stop', x: 340, y: 230 },
+          { id: 'guard', kind: 'guard', label: 'guardrail', sub: 'verdict=pass', x: 570, y: 230 },
+          { id: 'logs', kind: 'data', label: 'JSON logs', sub: 'carry trace_id', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A parcel-tracking timeline',
+            lines: [
+              'A **trace** follows one request.',
+              'Each stop is a **span** with a start, an end, inputs, outputs and attributes.',
+              'Nested spans form a tree, so you can see which step was slow or wrong.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'root' },
+              { say: 1 },
+              { send: ['root', 'embed'], label: 'child span' },
+              { send: ['root', 'retrieve'], label: 'child span' },
+              { send: ['root', 'rerank'], label: 'child span', curve: true },
+              { say: 2 },
+              { send: ['root', 'chat'], label: 'child span' },
+              { badge: 'chat', text: 'slowest: 1.92 s', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the span tree',
+            lines: ['A RAG request runs its steps as child spans under the root.'],
+            task: {
+              type: 'order',
+              question: 'Put the child spans of a RAG request in order.',
+              items: ['embed', 'retrieve', 'rerank', 'chat {model}', 'guardrail'],
+              hint: 'The question becomes a vector before the search; the optional guardrail checks the answer last.',
+            },
+            solved: 'embed → retrieve → rerank → chat → guardrail, all under the POST /ask root span.',
+            then: [
+              { send: ['root', 'embed'] },
+              { send: ['root', 'retrieve'] },
+              { send: ['root', 'rerank'], curve: true },
+              { send: ['root', 'chat'] },
+              { send: ['root', 'guard'] },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What each span records',
+            lines: [
+              '**retrieve**: index, top_k, filter, returned doc **ids** and scores (ids, not full text).',
+              '**rerank**: reranker model, kept ids, score cut-off.',
+              '**chat**: gen_ai.* attributes, finish reason, usage; prompt and completion as **redacted** events.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'retrieve' },
+              { badge: 'retrieve', text: 'pol-2023-v2#4 …', ms: 1200 },
+              { say: 1 },
+              { lit: 'rerank' },
+              { say: 2 },
+              { lit: 'chat' },
+              { badge: 'chat', text: 'in=3120 out=64', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the stale policy',
+            lines: ['A user asks for the refund window and gets "30 days". The policy says 14.'],
+            task: {
+              type: 'pick',
+              question: 'Which span shows that a superseded 2023 policy was fetched?',
+              answer: 'retrieve',
+              hints: {
+                embed: 'The embed span records the model and token count, not which documents came back.',
+                rerank: 'Rerank only reorders what retrieve returned; the stale doc entered earlier.',
+                chat: 'The chat span shows tokens and finish=stop, not which documents were fetched.',
+                guard: 'The guardrail checked the output and passed.',
+              },
+            },
+            solved: "The retrieve span's doc ids showed the 2023 policy was never removed; filter on status = 'current'.",
+            then: [{ badge: 'retrieve', text: 'pol-2023 is stale', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Logs that jump to traces',
+            lines: [
+              'Structured JSON logs carry the `trace_id`, so a log line jumps to its trace.',
+              'Log **decisions** (cache hit, fallback model, guardrail blocked), not just errors.',
+              'Keep content out of plain logs; it lives in the trace, redacted.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['logs', 'root'], label: 'trace_id', curve: true },
+              { say: 1 },
+              { send: ['guard', 'logs'], label: 'blocked' },
+              { say: 2 },
+              { badge: 'logs', text: 'no content', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'trace-a-wrong-answer',
+        title: 'Trace a wrong answer in 2 minutes',
+        beats: [
+          {
+            type: 'retrieve',
+            kicker: 'Rerank span · 140 ms',
+            head: 'The *old policy* ranked first',
+            query: 'What is the refund window for damaged items?',
+            chunks: [
+              { text: 'pol-2023-v2#4 (2023 policy)', score: 0.91 },
+              { text: 'pol-2025-v5#2 (current policy)', score: 0.88 },
+            ],
+            k: 1,
+            sub: 'The bot said **30 days**; the policy says 14.',
+          },
+          {
+            type: 'flow',
+            kicker: 'One trace, a span per step',
+            head: 'Every step *leaves a record*',
+            steps: ['embed · 38 ms', 'retrieve · 95 ms, top_k=20', 'rerank · 140 ms, kept 5', 'chat gpt-5-mini · 1.92 s', 'guardrail · 40 ms, pass'],
+            broken: 1,
+            sub: 'The retrieve filter was only **{tenant: acme}**: superseded versions were never excluded.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Scores attach to the trace',
+            value: 0.41,
+            decimals: 2,
+            unit: 'faithfulness eval on this trace',
+            stats: [
+              { value: -1, label: 'user feedback' },
+              { value: '2.31 s', label: 'total' },
+            ],
+            sub: 'Diagnosis in **2 minutes**, because the doc ids were on the span.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Logging discipline',
+            head: 'Record *decisions*, not just errors',
+            items: [
+              { label: 'Doc ids and scores on the retrieve span', keep: true },
+              { label: 'trace_id in every log line', keep: true },
+              { label: 'Cache hit, fallback, guardrail block', keep: true },
+              { label: 'Raw prompt text in plain logs' },
+            ],
+            keepLabel: 'Record',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The answer is wrong, but the generate span shows the model faithfully quoting its context. Look where next?',
+            answer: 1,
+            options: [
+              { text: 'The root span latency', why: 'A timeout is an error, not a wrong answer.' },
+              { text: 'The retrieve and rerank spans', why: 'Faithful to a wrong context means the context was wrong: check the ids, filters and rerank order.' },
+              { text: 'The token usage attributes', why: 'Truncation would show finish_reason=length, not a faithful quote.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Wrong answer? Read the *retrieve span*.',
+          sub: 'One trace per request, a span per step, and **doc ids with scores** on retrieval.',
+        },
+      },
       body: `**Intuition:** a trace is a parcel-tracking timeline for one request. Each stop (embed, retrieve, rerank, generate) is a **span** with a start, an end, inputs, outputs and attributes. Nested spans form a tree, so you can see which step was slow or wrong.
 
 **Mechanics for a RAG request**
@@ -366,6 +655,102 @@ export async function runWithTrace<T>(job: Job, fn: () => Promise<T>): Promise<T
     },
     {
       heading: 'Token Usage Tracking — per-tenant token and cost attribution',
+      steps: {
+        actors: [
+          { id: 'reply', kind: 'llm', label: 'Provider reply', sub: 'response.usage', x: 110, y: 70 },
+          { id: 'norm', kind: 'server', label: 'normalise()', sub: 'per-provider fields', x: 340, y: 70 },
+          { id: 'price', kind: 'data', label: 'Price table', sub: 'versioned', x: 570, y: 70 },
+          { id: 'ledger', kind: 'data', label: 'Usage ledger', sub: 'one row per call', x: 800, y: 70 },
+          { id: 'budget', kind: 'guard', label: 'Tenant budget', sub: 'Redis counter / day', x: 340, y: 230 },
+          { id: 'metrics', kind: 'metric', label: 'Token metric', sub: 'by model, feature', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A meter per apartment',
+            lines: [
+              'Tokens are your electricity meter.',
+              'Without a meter per tenant, feature and user you get one big bill and no idea who used it.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'reply' },
+              { badge: 'reply', text: 'tokens', ms: 1000 },
+              { say: 1 },
+              { send: ['reply', 'ledger'], label: 'who used it?', curve: true, tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'From usage to cost',
+            lines: [
+              'Read usage **from the provider response**; never estimate it with a tokenizer afterwards.',
+              'Price it with a **versioned** table: uncached input, cache write, cache read, output.',
+              'Write one append-only ledger row per call, idempotent on request id.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['reply', 'norm'], label: 'usage' },
+              { say: 1 },
+              { send: ['norm', 'price'], label: 'token breakdown' },
+              { say: 2 },
+              { send: ['price', 'ledger'], label: 'cost row', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: count the cached tokens',
+            lines: ['Anthropic usage: `input_tokens` 900, `cache_read_input_tokens` 6,000, `output_tokens` 400.'],
+            task: {
+              type: 'choose',
+              question: 'How should the tracker price the input side?',
+              options: [
+                { text: '900 at the input price plus 6,000 at the cache-read price' },
+                { text: '900 at the input price only', why: 'Anthropic input_tokens excludes the cache, so this misses 6,000 cached tokens.' },
+                { text: 'All 6,900 at the full input price', why: 'That over-reports input cost by 4.6× ($0.0207 vs $0.0045): cache reads have their own price.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Each token type gets its own price: here the whole call comes to $0.0105.',
+            then: [{ send: ['norm', 'price'], label: '900 + 6,000 cached' }, { badge: 'ledger', text: '$0.0105', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: per-tenant cost',
+            lines: ['Finance wants cost per tenant.'],
+            task: {
+              type: 'pick',
+              question: 'Where do you aggregate cost per tenant?',
+              answer: 'ledger',
+              hints: {
+                metrics: 'Token metrics are labelled by model and feature, not by tenant (cardinality).',
+                price: 'The price table only holds the prices, by version.',
+                norm: 'normalise() only maps each provider’s field names to one shape.',
+              },
+            },
+            solved: 'Per-tenant cost comes from the ledger; metrics stay low-cardinality (model, feature).',
+            then: [{ send: ['norm', 'metrics'], label: 'model, feature' }, { lit: 'ledger' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Enforce budgets',
+            lines: [
+              'Check a Redis counter per tenant per day **before** the call.',
+              'Soft limit: alert.',
+              'Hard limit: downgrade the model or reject.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'budget' },
+              { send: ['budget', 'reply'], label: 'check first', curve: true },
+              { say: 1 },
+              { badge: 'budget', text: 'soft: alert', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { badge: 'budget', text: 'hard: downgrade', tone: 'err', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** tokens are your electricity meter. Without a meter per apartment (tenant, feature, user) you get one big bill and no idea who ran the air conditioning.
 
 **Mechanics**
@@ -525,6 +910,103 @@ console.log(costOf('demo', { input_tokens: 2000, cache_read_input_tokens: 8000, 
     },
     {
       heading: 'Latency Monitoring — TTFT, TPOT, p95 and SLOs',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'watching the stream', x: 110, y: 70 },
+          { id: 'pre', kind: 'retriever', label: 'Retrieve+rerank', sub: '240 ms', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'prefill → decode', x: 570, y: 70 },
+          { id: 'ttft', kind: 'metric', label: 'TTFT', sub: 'time to first token', x: 340, y: 230 },
+          { id: 'tpot', kind: 'metric', label: 'TPOT', sub: 'time per output token', x: 570, y: 230 },
+          { id: 'slo', kind: 'judge', label: 'SLO', sub: 'p95 TTFT < 1.5 s', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The waiter',
+            lines: [
+              '**TTFT**: how fast the waiter arrives (time to first token).',
+              '**TPOT**: how fast the plates keep coming (time per output token).',
+              'A 6 s answer that starts in 400 ms feels faster than a 3 s answer that starts at 2.5 s.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'question', curve: true },
+              { send: ['llm', 'user'], label: 'first token', tone: 'ok', curve: true },
+              { lit: 'ttft' },
+              { say: 1 },
+              { send: ['llm', 'user'], label: 'tokens', count: 3, curve: true },
+              { lit: 'tpot' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The latency model',
+            lines: [
+              'end-to-end ≈ pre-LLM work + TTFT + (output tokens − 1) × TPOT + post-processing.',
+              'Example: 240 ms retrieve+rerank, 650 ms TTFT, 350 tokens at 22 ms.',
+              'Decode is 7.68 s: about **8.6 s** in total, but the first text shows at **0.89 s**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'pre'], label: 'question' },
+              { say: 1 },
+              { send: ['pre', 'llm'], label: 'context' },
+              { badge: 'ttft', text: '650 ms', ms: 1000 },
+              { say: 2 },
+              { badge: 'tpot', text: '349 × 22 ms', tone: 'miss', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cut the 8.6 s',
+            lines: ['Output length dominates total time.'],
+            task: {
+              type: 'choose',
+              question: 'Which change cuts end-to-end time the most here?',
+              options: [
+                { text: 'Cap answers at 150 tokens' },
+                { text: 'Move rerank to a smaller model', why: 'That saves about 100 ms; capping output saves about 4.4 s.' },
+                { text: 'Switch to another provider', why: 'Halving output tokens often beats switching providers.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Capping answers at 150 tokens cuts decode to 3.3 s (−4.4 s); streaming makes the wait feel like 0.89 s.',
+            then: [{ badge: 'tpot', text: '149 × 22 ms', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Percentiles, not means',
+            lines: [
+              'Latency is long-tailed: the mean hides the 5% of users waiting 12 s.',
+              'Record histograms and read **p50 / p95 / p99** by model and feature.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'user', text: 'waiting 12 s', tone: 'err', ms: 1200 },
+              { say: 1 },
+              { send: ['ttft', 'slo'], label: 'p95', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the error budget',
+            lines: ['SLO: 95% of chat requests have TTFT < 1.5 s over 28 days.'],
+            task: {
+              type: 'choose',
+              question: 'What is the remaining 5%?',
+              options: [
+                { text: 'The error budget' },
+                { text: 'The burn rate', why: 'Burn rate is how fast the budget is being used up, not the budget itself.' },
+                { text: 'The p50 latency', why: 'p50 is the median; the 5% is the share of requests allowed to be slow.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The 5% is the error budget; page when the 1 h burn rate goes above 14.4×.',
+            then: [{ lit: 'slo' }, { badge: 'slo', text: 'burn > 14.4×: page', tone: 'err' }],
+          },
+        ],
+      },
       body: `**Intuition:** a streaming answer is like a waiter: users judge you first by how fast the waiter arrives (**TTFT**, time to first token), then by how fast plates keep coming (**TPOT**, time per output token). A 6-second answer that starts in 400 ms feels faster than a 3-second answer that starts at 2.5 s.
 
 **The latency model**

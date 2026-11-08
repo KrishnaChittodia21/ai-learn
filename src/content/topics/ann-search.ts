@@ -33,6 +33,88 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'ANN Search — trading exactness for speed, and measuring the trade',
+      short: {
+        id: 'ann-search-95-ms-to-1-ms',
+        title: 'ANN: 95 ms down to 1.2 ms',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: '1M chunks · 768 dims · one CPU core',
+            head: 'Exact search compares *every* vector',
+            rungs: [
+              {
+                label: 'Flat (exact)',
+                amount: 95,
+              },
+              {
+                label: 'IVF nprobe=16',
+                amount: 1.8,
+              },
+              {
+                label: 'HNSW efSearch=128',
+                amount: 1.2,
+              },
+              {
+                label: 'HNSW efSearch=32',
+                amount: 0.4,
+              },
+            ],
+            unit: 'ms p50',
+            sub: '300 test queries, k = 10. Flat search is **O(N·d)**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'HNSW · efSearch 128',
+            value: 80,
+            prefix: '~',
+            suffix: '×',
+            unit: 'faster than exact search',
+            sub: 'Recall@10 **0.98**: it misses on average 0.2 of the true top-10.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Measure the trade',
+            head: 'Recall@k against *ground truth*',
+            steps: [
+              'Take 200–1,000 real queries',
+              'Exact top-k from a flat index',
+              'ANN top-k from your index',
+              'Recall@k = overlap ÷ k',
+            ],
+          },
+          {
+            type: 'spike',
+            kicker: 'One knob per index',
+            head: 'efSearch walks the *curve*',
+            mark: 'ef 32 → 128',
+            sub: 'Recall@10 **0.90** at 0.4 ms → **0.98** at 1.2 ms. For IVF the knob is nprobe.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'An index returns 9 of the true top-10 on average. What is recall@10, and is it OK for RAG with a reranker?',
+            options: [
+              {
+                text: '0.09; unacceptable',
+                why: 'Recall@10 = 9 ÷ 10 = 0.90, not 0.09.',
+              },
+              {
+                text: '0.90; usually fine with a wider candidate set and reranking',
+                why: 'Right: missing one of ten near-equal candidates rarely matters, though many teams target ≥ 0.95.',
+              },
+              {
+                text: '1.0; ANN is exact for the top-10',
+                why: 'ANN is approximate by design: some true neighbours are silently missed.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Trade a sliver of *recall* for speed, then *measure* it.',
+          sub: 'Compute recall@k against a flat index on real queries; with reranking, **0.95+** is a common target.',
+        },
+      },
       body: `**Intuition:** finding the closest vector by comparing against every one is like checking every house in a country to find the nearest café. ANN (approximate nearest neighbour) search uses a map: look only in the right neighbourhood, accept that you occasionally miss the very closest café, and get an answer 100–1,000× faster.
 
 **Mechanics.**
@@ -179,6 +261,108 @@ console.log(pickEf([
           'Recall@10 = 9/10 = 0.90. Missing one of ten near-equal candidates rarely matters when you over-retrieve and rerank, though many teams target ≥ 0.95.',
       },
       source: 'ann-benchmarks.com; Faiss wiki — Guidelines to choose an index',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: '1M chunks × 768 dims', x: 110, y: 150 },
+          { id: 'flat', kind: 'vector-db', label: 'Flat (exact)', sub: 'all N · 95 ms', x: 340, y: 70 },
+          { id: 'ann', kind: 'vector-db', label: 'HNSW (ANN)', sub: 'efSearch 128 · 1.2 ms', x: 340, y: 230 },
+          { id: 'truth', kind: 'judge', label: 'Ground truth', sub: 'exact top-10', x: 570, y: 70 },
+          { id: 'recall', kind: 'metric', label: 'Recall@10', sub: 'overlap ÷ k', x: 570, y: 230 },
+          { id: 'rerank', kind: 'reranker', label: 'Reranker', sub: '20–100 candidates', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Every house, or a map',
+            lines: [
+              'Exact search compares the query with all N vectors: O(N·d), like checking every house for the nearest café.',
+              'ANN uses a map: look only in the right neighbourhood.',
+              'It occasionally misses the very closest, and answers 100–1,000× faster.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'flat'], label: 'all N', count: 3 },
+              { badge: 'flat', text: '95 ms', tone: 'miss' },
+              { say: 1 },
+              { send: ['q', 'ann'], label: 'neighbourhood' },
+              { say: 2 },
+              { badge: 'ann', text: '1.2 ms', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure the trade',
+            lines: [
+              '**Recall@k** = overlap between ANN top-k and exact top-k, ÷ k.',
+              'Get ground truth from a flat index on 200–1,000 real queries.',
+              'HNSW at efSearch 128: recall@10 0.98, ~80× faster than exact.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ann', 'recall'], label: 'ANN top-10' },
+              { send: ['truth', 'recall'], label: 'exact top-10' },
+              { say: 1 },
+              { send: ['flat', 'truth'], label: '300 queries' },
+              { say: 2 },
+              { badge: 'recall', text: '0.98', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: compute recall',
+            lines: ['ANN top-10 and exact top-10 share 9 results.'],
+            task: {
+              type: 'choose',
+              question: 'What is recall@10?',
+              options: [
+                { text: '0.9' },
+                { text: '0.1', why: 'That is the share it missed; recall counts the overlap.' },
+                { text: '9', why: 'Divide the overlap by k = 10.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Recall@10 = 9 ÷ 10 = 0.9.',
+            then: [{ send: ['ann', 'recall'] }, { send: ['truth', 'recall'] }, { badge: 'recall', text: '0.9', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'A curve, not a point',
+            lines: [
+              'Every index has a knob (efSearch, nprobe) that moves along a recall–latency curve.',
+              'HNSW efSearch 32: 0.4 ms, recall 0.90.',
+              'HNSW efSearch 128: 1.2 ms, recall 0.98.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'ann' },
+              { say: 1 },
+              { badge: 'recall', text: '0.90 @ 0.4 ms', tone: 'miss' },
+              { say: 2 },
+              { badge: 'recall', text: '0.98 @ 1.2 ms', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the recall target',
+            lines: ['RAG pipelines typically retrieve 20–100 candidates and rerank.'],
+            task: {
+              type: 'choose',
+              question: 'What recall@10 is a common target for RAG?',
+              options: [
+                { text: '≈ 0.95 or higher, with reranking' },
+                {
+                  text: 'Exactly 1.0',
+                  why: 'That needs exact search; at 0.95 the 10th-best chunk is occasionally swapped for the 11th, which rarely changes answers.',
+                },
+                { text: 'Around 0.8', why: 'Below ~0.9 you start losing relevant evidence.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Aim for recall@10 ≈ 0.95+ and let the reranker sort the candidates.',
+            then: [{ send: ['ann', 'rerank'], curve: true, label: 'candidates', tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 2
     {
@@ -343,6 +527,106 @@ console.log(hnswPlan({ n: 2e6, dims: 768, k: 10, recallTarget: 0.95 }));
           'efSearch is a query-time beam width: a wider beam explores more nodes, improving recall at a latency cost. M and efConstruction are build-time parameters that affect memory and build time.',
       },
       source: 'Malkov & Yashunin 2018 — HNSW; Faiss wiki; pgvector README',
+      steps: {
+        actors: [
+          { id: 'q', kind: 'user', label: 'Query', sub: 'k = 10', x: 110, y: 150 },
+          { id: 'top', kind: 'vector-db', label: 'HNSW top layer', sub: 'few long highways', x: 340, y: 70 },
+          { id: 'l0', kind: 'vector-db', label: 'HNSW layer 0', sub: 'beam of efSearch', x: 570, y: 70 },
+          { id: 'cent', kind: 'vector-db', label: 'IVF centroids', sub: 'nlist shelves', x: 340, y: 230 },
+          { id: 'lists', kind: 'vector-db', label: 'IVF lists', sub: 'scan nprobe closest', x: 570, y: 230 },
+          { id: 'out', kind: 'data', label: 'Top-10', sub: 'target recall 0.95', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'HNSW: a road network',
+            lines: [
+              'The top layer has a few long highways; lower layers add regional roads; layer 0 has every street.',
+              'Search drives greedily toward the query, dropping a layer at a time.',
+              'At layer 0 a beam search keeps the best **efSearch** candidates.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'top' },
+              { say: 1 },
+              { send: ['q', 'top'], label: 'entry point' },
+              { send: ['top', 'l0'], label: 'drop layers' },
+              { say: 2 },
+              { send: ['l0', 'out'], label: 'best efSearch', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'IVF: shelves by topic',
+            lines: [
+              'Train k-means: the **nlist** centroids are the shelves.',
+              'At query time compare with the centroids, then scan the **nprobe** closest lists.',
+              'Training data must be representative; re-train when the distribution drifts.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'cent' },
+              { say: 1 },
+              { send: ['q', 'cent'], label: 'nearest centroids' },
+              { send: ['cent', 'lists'], label: 'nprobe lists' },
+              { send: ['lists', 'out'], tone: 'ok' },
+              { say: 2 },
+              { badge: 'cent', text: 'drift: re-train', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the runtime knob',
+            lines: ['HNSW recall is a little low and you have latency to spare.'],
+            task: {
+              type: 'pick',
+              question: 'Where does efSearch, the main HNSW query-time knob, apply?',
+              answer: 'l0',
+              hints: {
+                top: 'The upper layers are a greedy descent; the efSearch beam runs at layer 0.',
+                cent: 'Centroids belong to IVF; its knob is nprobe.',
+                lists: 'nprobe is the IVF knob, not HNSW.',
+              },
+            },
+            solved: 'efSearch is the beam width at layer 0; it must be ≥ k, 40–200 is typical.',
+            then: [{ send: ['top', 'l0'] }, { badge: 'l0', text: 'efSearch 100', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Tune against a target',
+            lines: [
+              'pgvector, 2M × 768-d. HNSW m=16: ef_search 40 → 0.91 at 3 ms; 100 → 0.97 at 6 ms.',
+              'IVFFlat lists=1414: probes 38 → 0.94 at 8 ms; probes 80 → 0.97 at 15 ms.',
+              'HNSW meets 0.95 at 6 ms; IVF needs 2.5× the latency but builds 5× faster.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['l0', 'out'], label: '0.97 · 6 ms', tone: 'ok' },
+              { say: 1 },
+              { send: ['lists', 'out'], label: '0.94 · 8 ms' },
+              { say: 2 },
+              { badge: 'l0', text: 'meets 0.95', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: probes = 1',
+            lines: ['IVFFlat with lists=1414 and probes=1 gives recall 0.52 at 1 ms.'],
+            task: {
+              type: 'choose',
+              question: 'Where should you start nprobe?',
+              options: [
+                { text: 'Around √nlist (≈ 38), then tune toward the recall target' },
+                { text: 'Keep 1: it is the fastest', why: 'Recall 0.52 loses half the true neighbours.' },
+                { text: 'Set it to nlist', why: 'That scans every list: exact, and as slow as flat.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Start nprobe ≈ √nlist; recall rises and speed falls as it grows.',
+            then: [{ send: ['cent', 'lists'], label: 'probes 38', count: 3 }, { badge: 'lists', text: '0.94', tone: 'ok' }],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 3 (extra)
     {
@@ -485,6 +769,106 @@ console.log(pqPlan(1024, 200)); // { m: 128, subDim: 8, bytes: 128, ratio: 32 }`
           'The true neighbours are usually within a larger PQ candidate set; exact re-scoring of that set restores the correct order. Lowering nprobe reduces recall; re-normalising or shrinking k does not fix approximation error.',
       },
       source: 'Jégou et al. 2011 — Product Quantization; Faiss wiki — IndexIVFPQ and IndexRefineFlat',
+      steps: {
+        actors: [
+          { id: 'vec', kind: 'document', label: 'Vector', sub: '1,536-d · 6,144 B', x: 110, y: 70 },
+          { id: 'pq', kind: 'tool', label: 'PQ encoder', sub: 'm sub-vectors × 8 bit', x: 340, y: 70 },
+          { id: 'codes', kind: 'vector-db', label: 'PQ codes', sub: 'm bytes per vector', x: 570, y: 70 },
+          { id: 'q', kind: 'user', label: 'Query', sub: 'top-10', x: 110, y: 230 },
+          { id: 'refine', kind: 'reranker', label: 'Refine', sub: 'exact re-score', x: 570, y: 230 },
+          { id: 'out', kind: 'data', label: 'Top-10', sub: 'full-precision order', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A face from a catalogue',
+            lines: [
+              'Describe a face by picking from 256 noses, 256 eyes, 256 mouths…',
+              'Store only the catalogue numbers: tiny, but detail is lost.',
+              'Distances are computed from lookup tables.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['vec', 'pq'] },
+              { say: 1 },
+              { send: ['pq', 'codes'], label: 'catalogue ids' },
+              { say: 2 },
+              { send: ['q', 'codes'], curve: true, label: 'table lookups' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'PQ mechanics',
+            lines: [
+              'Split each d-dim vector into **m sub-vectors**.',
+              'k-means with 256 centroids (8 bits) per sub-space: each sub-vector becomes one byte.',
+              '1,536-d float32 = 6,144 B → with m = 96, 96 B (64× smaller).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['vec', 'pq'], label: 'm pieces' },
+              { say: 1 },
+              { badge: 'pq', text: '1 byte each' },
+              { say: 2 },
+              { send: ['pq', 'codes'], label: '96 B', tone: 'ok' },
+              { badge: 'codes', text: '64× smaller', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: code size',
+            lines: ['Each sub-vector becomes one 8-bit code.'],
+            task: {
+              type: 'choose',
+              question: 'With m = 192, how many bytes does each 1,536-d vector take?',
+              options: [
+                { text: '192 B (32× smaller)' },
+                { text: '6,144 B', why: 'That is the uncompressed float32 vector.' },
+                { text: '96 B', why: 'That is m = 96; with m = 192 there are 192 one-byte codes.' },
+              ],
+              answer: 0,
+            },
+            solved: 'PQ stores m bytes per vector: m = 192 → 192 B, 32× smaller.',
+            then: [{ send: ['pq', 'codes'], label: '192 B', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Re-rank to recover recall',
+            lines: [
+              '50M chunks in IVF-PQ: ≈ 3.6 GB RAM, but recall@10 alone ≈ 0.70.',
+              'Fetch the top-100 by PQ distance, then re-score with float32 vectors from NVMe.',
+              'Recall@10 ≈ 0.96, p95 ≈ 9 ms, at ~1/50th of the RAM of float32 HNSW.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['q', 'codes'], curve: true, label: 'PQ search' },
+              { badge: 'codes', text: 'recall 0.70', tone: 'miss' },
+              { say: 1 },
+              { send: ['codes', 'refine'], label: 'top-100' },
+              { say: 2 },
+              { send: ['refine', 'out'], label: 'top-10', tone: 'ok' },
+              { badge: 'out', text: 'recall 0.96', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: choose the index',
+            lines: ['50M chunks × 1,024 dims, and RAM is tight.'],
+            task: {
+              type: 'choose',
+              question: 'Which index fits?',
+              options: [
+                { text: 'IVF-PQ + refine (or HNSW + int8/binary + rescoring)' },
+                { text: 'float32 HNSW', why: '50M × (4,096 + 128) B ≈ 211 GB RAM: several large nodes.' },
+                { text: 'Flat (exact)', why: 'Flat suits fewer than ~100K vectors.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pick the index by N, RAM budget and recall target: compress, then re-rank.',
+            then: [{ send: ['codes', 'refine'] }, { send: ['refine', 'out'], tone: 'ok' }],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

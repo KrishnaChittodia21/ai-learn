@@ -35,6 +35,214 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Reranking — a second, smarter pass over candidates',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'carry over vacation?', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'First stage', sub: 'BM25 / bi-encoder', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Index', sub: 'HNSW / inverted', x: 340, y: 230 },
+          { id: 'reranker', kind: 'reranker', label: 'Reranker', sub: 'cross-encoder or LLM', x: 570, y: 150 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'top few chunks', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A rough sieve, then an expert',
+            lines: [
+              'The first stage is a fast but rough sieve: retrieve **wide** (50–150 candidates) for recall.',
+              'The reranker reads the shortlist carefully and reorders it for precision.',
+              'Only the top few go to the LLM.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'retriever'], label: 'query' },
+              { send: ['retriever', 'index'], label: 'search' },
+              { send: ['index', 'retriever'], label: '100 candidates', count: 3 },
+              { say: 1 },
+              { send: ['retriever', 'reranker'], label: 'shortlist' },
+              { lit: 'reranker' },
+              { say: 2 },
+              { send: ['reranker', 'llm'], label: 'top few', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why two stages?',
+            lines: ['The first stage uses precomputed indexes; the reranker only touches the shortlist.'],
+            task: {
+              type: 'choose',
+              question: 'Why not run the strong reranking model over the whole corpus?',
+              options: [
+                { text: 'It is too slow to score millions of documents per query' },
+                {
+                  text: 'It is less accurate on large corpora',
+                  why: 'It is the more accurate model; the problem is how long it takes per document.',
+                },
+                {
+                  text: 'It cannot read short chunks',
+                  why: 'It reads query and chunk together just fine; it is simply too slow for millions of pairs.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Cheap precomputed search narrows millions to ~100; the expensive model only scores those.',
+            then: [{ send: ['index', 'retriever'], label: '100' }, { send: ['retriever', 'reranker'], label: '100 → 10' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The right chunk moves up',
+            lines: [
+              'Vector top 50: the carry-over policy (max 5 days until March 31) sits at **#7** (cos 0.79).',
+              'The cross-encoder scores it **0.97**; "Vacation request process" gets 0.41.',
+              'It moves from #7 to #1; the answer goes from "couldn\'t find a policy" to "Yes, up to 5 days". About 120 ms extra.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'reranker'], label: '50 candidates' },
+              { badge: 'retriever', text: 'answer at #7', tone: 'miss', ms: 1300 },
+              { say: 1 },
+              { badge: 'reranker', text: '0.97', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { send: ['reranker', 'llm'], label: 'top 5', tone: 'ok' },
+              { badge: 'llm', text: 'Yes, up to 5 days', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the three stages',
+            lines: ['Each stage shrinks the candidate set and spends more per item.'],
+            task: {
+              type: 'order',
+              question: 'Put the stages in order.',
+              items: ['Retrieve: millions → 100 (5–50 ms)', 'Rerank: 100 → 10 (50–400 ms)', 'Generate from 10 chunks (0.5–3 s)'],
+              hint: 'The fastest, roughest stage sees the most documents; the LLM sees the fewest.',
+            },
+            solved: 'Retrieve for recall, rerank for precision, generate a faithful answer.',
+            then: [{ send: ['retriever', 'reranker'], label: '100' }, { send: ['reranker', 'llm'], label: '10', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Kinds of rerankers, and when to skip',
+            lines: [
+              'Cross-encoders, LLM-based rerankers, and rule-based ones (recency, source authority, dedupe, MMR diversity).',
+              'Almost always worth it in production RAG: usually the biggest quality win per line of code.',
+              'Skip it only under a ~50 ms latency budget or for a tiny corpus.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'reranker' },
+              { say: 1 },
+              { badge: 'reranker', text: 'biggest win', tone: 'ok', ms: 1300 },
+              { say: 2 },
+              { down: 'reranker' },
+              { send: ['retriever', 'llm'], label: '< 50 ms budget', curve: true },
+              { down: 'reranker', on: false },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'reranker-from-seven-to-one',
+        title: 'Reranking: from #7 to #1',
+        beats: [
+          {
+            type: 'retrieve',
+            kicker: 'Stage 1 · vector search, top 50',
+            head: 'The right answer sits at *#7*',
+            query: 'Can I carry over unused vacation days to next year?',
+            chunks: [
+              {
+                text: 'Vacation request process',
+                score: 0.84,
+              },
+              {
+                text: 'Holiday calendar 2026',
+                score: 0.83,
+              },
+              {
+                text: 'Carry-over policy: max 5 days until March 31 (#7)',
+                score: 0.79,
+              },
+            ],
+            k: 2,
+            sub: 'Near-misses outrank it. With top-5 sent, the LLM says **"I couldn\'t find a policy."**',
+          },
+          {
+            type: 'flow',
+            kicker: 'Two stages',
+            head: 'Retrieve *wide*, then read *carefully*',
+            steps: [
+              'Retrieve: millions → 100, 5–50 ms',
+              'Rerank: 100 → 10, 50–400 ms',
+              'Generate from 10 chunks, 0.5–3 s',
+            ],
+          },
+          {
+            type: 'retrieve',
+            kicker: 'Stage 2 · cross-encoder over the 50 pairs',
+            head: 'Read together, it *jumps to #1*',
+            query: 'Can I carry over unused vacation days to next year?',
+            chunks: [
+              {
+                text: 'Carry-over policy: max 5 days until March 31',
+                score: 0.97,
+              },
+              {
+                text: 'Vacation request process',
+                score: 0.41,
+              },
+              {
+                text: 'Holiday calendar 2026',
+                score: 0.08,
+              },
+            ],
+            k: 1,
+            sub: 'Answer: **"Yes, up to 5 days, used by March 31."** Cost: about **120 ms** extra.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Why not the strong model everywhere?',
+            head: 'Too slow for *millions*',
+            items: [
+              {
+                label: 'Precomputed index for the first pass',
+                keep: true,
+              },
+              {
+                label: 'Reranker touches only the shortlist',
+                keep: true,
+              },
+              {
+                label: 'Cross-encoder over the whole corpus',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The right chunk is not in the 100 candidates at all. Will a reranker fix it?',
+            answer: 0,
+            options: [
+              {
+                text: 'No',
+                why: 'A reranker only reorders the shortlist: it cannot fix missing recall. Fix stage 1.',
+              },
+              {
+                text: 'Yes, it rescores every document',
+                why: 'It is too slow to score millions per query; it only touches the shortlist.',
+              },
+              {
+                text: 'Yes, if you send the top 10',
+                why: 'More of the shortlist still cannot contain a chunk stage 1 never found.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Stage 1 for *recall*, stage 2 for *precision*.',
+          sub: 'Retrieve **50–150** candidates, rerank them, send only the top few.',
+        },
+      },
       body: `A first-stage retriever is a fast but rough sieve; a **reranker** is the expert who reads the shortlist carefully. You retrieve wide (50–150 candidates) for **recall**, then reorder with a stronger model for **precision**, and send only the top few to the LLM.
 
 **Why not just use the strong model everywhere?** It is too slow to score millions of documents per query. The first stage uses precomputed indexes (HNSW, inverted index); the reranker only touches the shortlist.
@@ -178,6 +386,108 @@ export function applyBoosts(docs: Scored[], now: Date): Scored[] {
     // ---------------------------------------------------------------- 2
     {
       heading: 'Cross-Encoder Reranking — reading query and document together',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'python sort desc', x: 110, y: 70 },
+          { id: 'cands', kind: 'document', label: 'Candidates', sub: 'A, B, C', x: 110, y: 230 },
+          { id: 'bi', kind: 'embedder', label: 'Bi-encoder', sub: 'separate vectors', x: 400, y: 70 },
+          { id: 'cross', kind: 'reranker', label: 'Cross-encoder', sub: '[CLS] q [SEP] d', x: 400, y: 230 },
+          { id: 'out', kind: 'metric', label: 'Ranking', sub: 'relevance scores', x: 690, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Separately vs together',
+            lines: [
+              'A **bi-encoder** embeds the query and each document separately and compares vectors.',
+              'A **cross-encoder** feeds `[CLS] query [SEP] document` through one transformer.',
+              'Every query token attends to every document token; out comes one relevance score.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'bi'], label: 'query' },
+              { send: ['cands', 'bi'], label: 'doc', curve: true },
+              { send: ['bi', 'out'], label: 'cosine' },
+              { say: 1 },
+              { send: ['user', 'cross'], label: 'query', curve: true },
+              { send: ['cands', 'cross'], label: 'doc' },
+              { say: 2 },
+              { send: ['cross', 'out'], label: 'one score', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what can be precomputed?',
+            lines: ['Precomputing document vectors is what makes a first stage fast.'],
+            task: {
+              type: 'pick',
+              question: 'Which model can embed documents ahead of time and store the vectors?',
+              answer: 'bi',
+              hints: {
+                cross: 'The cross-encoder needs the (query, doc) pair, so it runs per query: N passes for N candidates.',
+                out: 'The ranking is the output; the question is which model can work before the query arrives.',
+              },
+            },
+            solved: 'Bi-encoders precompute document vectors (first stage); cross-encoders run per pair (reranking stage).',
+            then: [{ send: ['cands', 'bi'], label: 'precomputed', curve: true }, { lit: 'bi' }],
+          },
+          {
+            kind: 'watch',
+            title: '"python list sort descending"',
+            lines: [
+              'A: "Use sorted(items, reverse=True)…"  B: "Descending stairs safely…"  C: "Python lists support… sort".',
+              'Bi-encoder cosine: A 0.71, C 0.69, B 0.52 (the shared word "descending" helps B).',
+              'Cross-encoder logits: **A 9.8**, C 3.1, B −10.9: the fine distinction is clear.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'cands' },
+              { say: 1 },
+              { send: ['bi', 'out'], label: '0.71 · 0.69 · 0.52' },
+              { say: 2 },
+              { send: ['cross', 'out'], label: '9.8 · 3.1 · −10.9', tone: 'ok' },
+              { badge: 'out', text: 'A first', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why not use it first?',
+            lines: ['A cross-encoder is notably better on fine distinctions.'],
+            task: {
+              type: 'choose',
+              question: 'Why is the cross-encoder used for reranking and not as the first stage?',
+              options: [
+                { text: 'It cannot precompute documents: it needs one pass per (query, doc) pair' },
+                { text: 'It is less accurate than a bi-encoder', why: 'It is the more accurate one; its cost per query is the problem.' },
+                {
+                  text: 'It only works in English',
+                  why: 'Multilingual cross-encoders exist (bge-reranker-v2-m3, Cohere Rerank); cost is the issue.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'N passes per query is fine for 100 candidates and impossible for a whole corpus.',
+            then: [{ send: ['cands', 'cross'], label: 'pair', count: 3 }, { send: ['cross', 'out'], label: 'scores', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Scores are relative',
+            lines: [
+              'Scores are relative within one query (logits, or 0–1 after a sigmoid).',
+              'Calibrate any threshold on your own data.',
+              'MiniLM for latency; bge-m3 or Cohere for multilingual or harder domains.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'out', text: 'per query', ms: 1300 },
+              { say: 1 },
+              { lit: 'out' },
+              { say: 2 },
+              { badge: 'cross', text: 'MiniLM · bge-m3', ms: 1400 },
+            ],
+          },
+        ],
+      },
       body: `A **bi-encoder** embeds the query and each document separately and compares vectors, like matching two people's CVs. A **cross-encoder** puts them in the same room: it feeds \`[CLS] query [SEP] document\` through one transformer, so every query token attends to every document token, and outputs one relevance score.
 
 | | Bi-encoder | Cross-encoder |
@@ -352,6 +662,101 @@ def rerank_long_docs(query: str, docs: dict[str, str]):
     // ---------------------------------------------------------------- 3
     {
       heading: 'LLM-Based Reranking — using a general LLM as the judge',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'contractors, Germany', x: 110, y: 150 },
+          { id: 'cross', kind: 'reranker', label: 'Cross-encoder', sub: 'top 10', x: 340, y: 150 },
+          { id: 'llm', kind: 'judge', label: 'LLM reranker', sub: 'listwise', x: 570, y: 150 },
+          { id: 'eu', kind: 'document', label: 'EU addendum', sub: 'contractors, EU', x: 800, y: 70 },
+          { id: 'emp', kind: 'document', label: 'Employee policy', sub: 'employees only', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A senior colleague sorts the shortlist',
+            lines: [
+              'Instead of a dedicated reranker, ask an LLM to judge relevance.',
+              'It can follow nuanced instructions: "prefer documents valid for the EU region", "the user is an admin".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'cross'], label: 'query' },
+              { send: ['cross', 'llm'], label: 'top 10' },
+              { lit: 'llm' },
+              { say: 1 },
+              { badge: 'llm', text: 'role + region', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Three styles',
+            lines: [
+              '**Pointwise**: "rate this doc 0–10", N calls; parallel, poorly calibrated.',
+              '**Pairwise**: "A or B?", O(N log N)+ calls; accurate, expensive.',
+              '**Listwise**: "rank these 20 passages", few calls (RankGPT style).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cross', 'llm'], label: 'one doc', count: 3 },
+              { say: 1 },
+              { send: ['cross', 'llm'], label: 'A vs B', count: 2 },
+              { say: 2 },
+              { send: ['cross', 'llm'], label: 'whole list', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: contractors in Germany',
+            lines: ['The cross-encoder ranked the EU contractor addendum 3rd: the employee policy shared more terms.'],
+            task: {
+              type: 'pick',
+              question: 'Given the user role and region, which document should the listwise LLM put first?',
+              answer: 'eu',
+              hints: { emp: 'It shares many words with the query, but it applies to employees only, not contractors.' },
+            },
+            solved: 'Following the role and region instruction, the LLM output `[4] > [1] > [7]`, putting the EU contractor addendum first.',
+            then: [{ send: ['llm', 'eu'], label: '#1', tone: 'ok' }, { send: ['llm', 'emp'], label: 'lower', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Sliding window, and the pitfalls',
+            lines: [
+              'A list must fit in the prompt, so RankGPT slides a window: rank passages 80–100, slide back by 10, repeat.',
+              'Strong passages "bubble up" to the top.',
+              'Pitfalls: position bias, output parsing errors, and far more latency and cost than a cross-encoder.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cross', 'llm'], label: '80–100' },
+              { send: ['cross', 'llm'], label: '70–90' },
+              { say: 1 },
+              { badge: 'llm', text: 'bubble up', ms: 1200 },
+              { say: 2 },
+              { badge: 'llm', text: '+700 ms', tone: 'miss', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where it fits',
+            lines: ['Example cost: ≈ 3K input tokens, about $0.003 per query and ~700 ms extra.'],
+            task: {
+              type: 'choose',
+              question: 'Where does an LLM reranker fit best?',
+              options: [
+                { text: 'A final pass over 10–20 candidates after a cross-encoder, for complex relevance criteria' },
+                {
+                  text: 'Scoring every candidate on a high-QPS, low-latency search',
+                  why: 'Latency and cost are much higher than a cross-encoder; keep it for low QPS or a short list.',
+                },
+                { text: 'Replacing the first-stage retriever', why: 'It reads passages in the prompt; it cannot search millions of documents.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use the LLM for nuanced criteria on a short list, low QPS, or offline labelling to train a cheaper cross-encoder.',
+            then: [{ send: ['cross', 'llm'], label: 'top 10' }, { send: ['llm', 'eu'], label: '#1', tone: 'ok' }],
+          },
+        ],
+      },
       body: `Instead of a dedicated reranker, you can ask an LLM to judge relevance, like asking a senior colleague to sort the shortlist. It can follow nuanced instructions ("prefer documents valid for the EU region", "the user is an admin").
 
 **Three styles:**
@@ -503,6 +908,103 @@ export async function llmRerank(query: string, passages: string[]): Promise<numb
     // ---------------------------------------------------------------- 4
     {
       heading: 'Reciprocal Rank Fusion (RRF) — merging ranked lists by position',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'reset MFA token', x: 110, y: 150 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25', sub: 'D1, D2, D3', x: 340, y: 70 },
+          { id: 'dense', kind: 'retriever', label: 'Dense', sub: 'D3, D1, D4', x: 340, y: 230 },
+          { id: 'rrf', kind: 'metric', label: 'RRF', sub: '1 / (60 + rank)', x: 570, y: 150 },
+          { id: 'out', kind: 'data', label: 'Fused list', sub: 'one ranking', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Points by finishing position',
+            lines: [
+              'Several ranked lists (BM25, dense, multi-query) need to become one.',
+              '**RRF** ignores raw scores and rewards documents that rank highly in *any* list.',
+              'Like a league that awards points by finishing position, not lap time.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'bm25'], label: 'query' },
+              { send: ['user', 'dense'], label: 'query' },
+              { say: 1 },
+              { send: ['bm25', 'rrf'], label: 'ranks' },
+              { send: ['dense', 'rrf'], label: 'ranks' },
+              { say: 2 },
+              { send: ['rrf', 'out'], label: 'fused', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The formula',
+            lines: [
+              'score(d) = Σ over lists of 1 / (k + rank), with ranks starting at 1 and **k = 60**.',
+              'A document missing from a list gets 0 from that list.',
+              'Rank 1 gets 1/61 ≈ 0.0164 and rank 10 gets 1/70 ≈ 0.0143: agreement across lists wins.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'rrf', text: 'k = 60', ms: 1200 },
+              { say: 1 },
+              { badge: 'dense', text: 'D2: absent → 0', ms: 1300 },
+              { say: 2 },
+              { send: ['bm25', 'rrf'], label: '1/61' },
+              { send: ['dense', 'rrf'], label: '1/62' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: D1 or D3?',
+            lines: ['D1: BM25 #1, dense #2.  D3: BM25 #3, dense #1.  k = 60.'],
+            task: {
+              type: 'choose',
+              question: 'Which scores higher under RRF?',
+              options: [
+                { text: 'D1: 1/61 + 1/62 = 0.03252' },
+                { text: 'D3, because it is dense #1', why: 'D3 scores 1/63 + 1/61 = 0.03227; D1 is near the top of both lists and edges ahead.' },
+                { text: 'A tie', why: 'Close, but 1/62 (D1\'s second rank) beats 1/63 (D3\'s second rank).' },
+              ],
+              answer: 0,
+            },
+            solved: 'D1 wins because it is near the top of both lists, even though D3 was dense #1.',
+            then: [{ send: ['bm25', 'rrf'], label: 'D1 #1' }, { send: ['dense', 'rrf'], label: 'D1 #2' }, { badge: 'rrf', text: 'D1 0.03252', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the fused order',
+            lines: ['D2 is BM25 #2 only (1/62); D4 is dense #3 only (1/63).'],
+            task: {
+              type: 'order',
+              question: 'Put the fused list in order, best first.',
+              items: ['D1 (0.03252)', 'D3 (0.03227)', 'D2 (0.01613)', 'D4 (0.01587)'],
+              hint: 'Documents both retrievers liked add two terms; documents in one list get only one.',
+            },
+            solved: 'Fused order: D1, D3, D2, D4. D2 drops below D3, which both retrievers liked.',
+            then: [{ send: ['rrf', 'out'], label: 'D1 D3 D2 D4', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why it is the default',
+            lines: [
+              'No normalisation needed: BM25 0–30 and cosine 0–1 never meet.',
+              'Robust to outlier scores, trivial to implement, supports weights.',
+              'The default for hybrid search without labelled data; follow it with a reranker.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'bm25', text: '0–30' },
+              { badge: 'dense', text: '0–1' },
+              { send: ['bm25', 'rrf'], label: 'rank only' },
+              { say: 1 },
+              { lit: 'rrf' },
+              { say: 2 },
+              { send: ['rrf', 'out'], label: 'fused', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `When you have several ranked lists (BM25, dense, multi-query variants), you need one final list. **RRF** ignores raw scores and rewards documents that rank highly in *any* list, like a sports league that awards points by finishing position rather than by lap time.
 
 **Formula** (Cormack et al. 2009):
@@ -637,6 +1139,96 @@ console.log(fuse(lists, 1));
     // ---------------------------------------------------------------- 5
     {
       heading: 'Retrieval Score Fusion — normalise, then combine',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'error E1043', x: 110, y: 150 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25', sub: 'scores 3.0–12.4', x: 340, y: 70 },
+          { id: 'dense', kind: 'retriever', label: 'Dense', sub: 'cosine 0.61–0.82', x: 340, y: 230 },
+          { id: 'norm', kind: 'metric', label: 'Normalise', sub: 'min-max → 0..1', x: 570, y: 150 },
+          { id: 'fuse', kind: 'metric', label: 'Combine', sub: 'α·dense+(1−α)·bm25', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Two teachers, two scales',
+            lines: [
+              'Score fusion keeps the **magnitudes** that RRF throws away.',
+              'Like exam marks from two teachers on different scales: rescale first, then average.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'bm25'], label: 'query' },
+              { send: ['user', 'dense'], label: 'query' },
+              { say: 1 },
+              { send: ['bm25', 'norm'], label: '12.4, 8.1, 3.0' },
+              { send: ['dense', 'norm'], label: '0.61, 0.82, 0.79' },
+              { send: ['norm', 'fuse'], label: '0..1', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: just add them?',
+            lines: ['Raw sums: A = 12.4 + 0.61 = 13.01, far ahead of B and C.'],
+            task: {
+              type: 'choose',
+              question: 'If you add raw scores, why does A win?',
+              options: [
+                { text: 'BM25 has a bigger scale, so it drowns out the cosine' },
+                { text: 'A is clearly the most relevant', why: 'A has the lowest cosine; it wins only because BM25 numbers are bigger.' },
+                { text: 'Cosine scores are always noisier', why: 'Noise is not the issue; the two scores are on different scales.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Raw scores on different scales cannot be added: normalise each list first.',
+            then: [{ send: ['bm25', 'norm'], label: 'rescale' }, { send: ['dense', 'norm'], label: 'rescale' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Normalise, then combine',
+            lines: [
+              '**Min-max**: (s − min) / (max − min) → 0..1; simple, sensitive to outliers.',
+              '**Z-score**: (s − μ) / σ; more robust to scale, can be negative.',
+              'Then fused = α · dense′ + (1 − α) · sparse′. With α = 0.5: B 0.771, A 0.500, C 0.429.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['bm25', 'norm'], label: '1.000, 0.543, 0.000' },
+              { say: 1 },
+              { lit: 'norm' },
+              { say: 2 },
+              { send: ['norm', 'fuse'], label: 'α = 0.5' },
+              { badge: 'fuse', text: 'B, A, C', tone: 'ok', ms: 1300 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: tune α',
+            lines: ['α = 1 is pure vector; α = 0 is pure keyword.'],
+            task: {
+              type: 'choose',
+              question: 'For an error-code query like "E1043", which way should α move?',
+              options: [
+                { text: 'Lower α, to favour keywords' },
+                { text: 'Higher α, to favour vectors', why: 'Higher α suits conversational queries; part numbers and error codes prefer keywords.' },
+                { text: 'Always keep α = 0.5', why: 'Sweep α from 0.0 to 1.0 on labelled queries and pick the one that maximises NDCG@10.' },
+              ],
+              answer: 0,
+            },
+            solved: 'With α = 0.3, A = 0.700 edges ahead of B = 0.680: keywords matter for error codes.',
+            then: [{ send: ['norm', 'fuse'], label: 'α = 0.3' }, { badge: 'fuse', text: 'A, B, C', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Score fusion or RRF?',
+            lines: [
+              'Use score fusion when you have evaluation data to tune α and magnitudes carry signal.',
+              'A clear 0.92 dense match should beat a lukewarm one.',
+              'Otherwise, start with RRF.',
+            ],
+            script: [{ say: 0 }, { lit: 'fuse' }, { say: 1 }, { badge: 'dense', text: '0.92 counts', tone: 'ok', ms: 1300 }, { say: 2 }],
+          },
+        ],
+      },
       body: `Score fusion keeps the **magnitudes** that RRF throws away. Think of combining exam marks from two teachers who grade on different scales: you must put them on the same scale before averaging.
 
 **Step 1 — normalise each list:**
@@ -801,6 +1393,110 @@ export async function tuneAlpha(
     // ---------------------------------------------------------------- 6
     {
       heading: 'Top-K Retrieval — choosing how many chunks reach the LLM',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'golden question', x: 110, y: 70 },
+          { id: 'retriever', kind: 'retriever', label: 'Retrieval K', sub: '50–150 per retriever', x: 340, y: 70 },
+          { id: 'reranker', kind: 'reranker', label: 'Rerank K', sub: '50–100 in', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Context K', sub: '5–20 chunks', x: 800, y: 70 },
+          { id: 'golden', kind: 'metric', label: 'Golden set', sub: '400 questions', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Packing for a trip',
+            lines: [
+              'Too small a K and you miss the answer.',
+              'Too large and you pay for, and distract, the LLM with noise.',
+              'Bring enough to cover likely needs, not your whole wardrobe.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['reranker', 'llm'], label: 'K = 3', tone: 'miss' },
+              { say: 1 },
+              { send: ['reranker', 'llm'], label: 'K = 40', tone: 'miss', count: 3 },
+              { say: 2 },
+              { send: ['reranker', 'llm'], label: 'K ≈ 10', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Really three Ks',
+            lines: [
+              '**Retrieval K** (50–150 per retriever): optimise recall@K.',
+              '**Rerank K** (50–100 into the reranker): latency vs recall.',
+              '**Context K** (5–20 to the LLM): answer accuracy and cost.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'retriever'], label: 'query' },
+              { lit: 'retriever' },
+              { say: 1 },
+              { send: ['retriever', 'reranker'], label: '50–100' },
+              { say: 2 },
+              { send: ['reranker', 'llm'], label: '5–20', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: find the knee',
+            lines: [
+              'Context K → answer accuracy: 3 → 68%, 5 → 77%, 10 → 81%, 20 → 80%, 40 → 74%.',
+              'Input tokens double each time: 10 → 4.0K, 20 → 8.0K, 40 → 16K.',
+            ],
+            task: {
+              type: 'choose',
+              question: 'Which context K would you pick?',
+              options: [
+                { text: 'K ≈ 10' },
+                { text: 'K = 3', why: 'Recall@3 is only 71%: the answer is often not in the window.' },
+                { text: 'K = 40', why: 'Accuracy falls to 74% as distractors pile up, at 16K tokens.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Accuracy rises, peaks, then falls: choose the knee (K ≈ 10 here).',
+            then: [{ send: ['golden', 'llm'], label: 'K ≈ 10', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Dynamic K',
+            lines: [
+              'Keep chunks whose reranker score ≥ a threshold, bounded by a min K and a max K.',
+              'Cap by token budget too, not just count.',
+              'Score ≥ 0.35, min 3, max 12: 6.4 chunks on average, 81% accuracy, 35% fewer tokens than K = 10.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'reranker', text: 'score ≥ 0.35', ms: 1300 },
+              { send: ['reranker', 'llm'], label: '3–12 chunks' },
+              { say: 1 },
+              { badge: 'llm', text: '2.6K tokens', ms: 1200 },
+              { say: 2 },
+              { badge: 'golden', text: '81%', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to re-tune',
+            lines: ['Plot recall@K and answer accuracy against K on a golden set and choose the knee.'],
+            task: {
+              type: 'choose',
+              question: 'You switch to a new embedding model. What about K?',
+              options: [
+                { text: 'Re-tune it: re-plot recall@K and accuracy against K on the golden set' },
+                {
+                  text: 'Keep the old K; it does not depend on the model',
+                  why: 'K needs re-tuning whenever chunk size, embedding model, reranker or LLM changes.',
+                },
+                { text: 'Double K to be safe', why: 'More chunks add cost and distractors; accuracy can fall past the knee.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Re-tune K whenever chunk size, embedding model, reranker or LLM changes.',
+            then: [{ send: ['golden', 'retriever'], label: 'sweep K', curve: true }, { lit: 'golden' }],
+          },
+        ],
+      },
       body: `K is the size of your shortlist at each stage. Too small and you miss the answer; too large and you pay for and distract the LLM with noise. It is like packing for a trip: bring enough to cover likely needs, not your whole wardrobe.
 
 **There are really three Ks:**

@@ -36,6 +36,118 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Audio Processing — resample, VAD, chunk, diarise',
+      steps: {
+        actors: [
+          { id: 'raw', kind: 'data', label: 'Recording', sub: 'any format', x: 110, y: 70 },
+          { id: 'ffmpeg', kind: 'tool', label: 'ffmpeg', sub: 'mono · 16 kHz PCM', x: 340, y: 70 },
+          { id: 'vad', kind: 'guard', label: 'VAD', sub: 'Silero / WebRTC', x: 570, y: 70 },
+          { id: 'chunk', kind: 'chunker', label: 'Chunker', sub: '≤30 s, at silences', x: 800, y: 70 },
+          { id: 'diar', kind: 'embedder', label: 'Diarisation', sub: 'speaker embeddings', x: 340, y: 230 },
+          { id: 'stt', kind: 'llm', label: 'Speech-to-text', sub: 'word timestamps', x: 800, y: 230 },
+          { id: 'out', kind: 'document', label: 'Transcript', sub: 'who said what', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'From messy river to neat buckets',
+            lines: [
+              'Decode and normalise with ffmpeg: mono, **16 kHz**, 16-bit PCM.',
+              '**VAD** labels 30 ms frames as speech or not; silence and music are dropped.',
+              'Keep ~200 ms padding so words are not clipped.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['raw', 'ffmpeg'], label: 'decode' },
+              { badge: 'ffmpeg', text: 'mono 16 kHz', tone: 'ok' },
+              { say: 1 },
+              { send: ['ffmpeg', 'vad'], label: 'frames' },
+              { badge: 'vad', text: 'silence dropped', tone: 'miss' },
+              { say: 2 },
+              { badge: 'vad', text: '+200 ms pad' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where to cut',
+            lines: ['Chunks must fit the model window (Whisper: 30 s) or the upload limit.'],
+            task: {
+              type: 'choose',
+              question: 'Where do you split the audio into chunks?',
+              options: [
+                { text: 'Only at silences, with ~0.5–1 s overlap for long monologues' },
+                { text: 'Exactly every 30 s', why: 'A fixed cut can slice through a word; split only at silences.' },
+                { text: 'Nowhere: send the whole hour', why: 'Chunks must fit the model window or upload limit.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Merge VAD segments into chunks under the window, split only at silences.',
+            then: [{ send: ['vad', 'chunk'], label: 'speech' }, { send: ['chunk', 'stt'], label: 'chunks', tone: 'ok', count: 3 }],
+          },
+          {
+            kind: 'watch',
+            title: 'Who said what',
+            lines: [
+              'A speaker-embedding model clusters segments into Speaker A / B / C.',
+              'Align the speakers with ASR word timestamps to get "who said what".',
+              'Separate channels beat clever diarisation whenever you control recording.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ffmpeg', 'diar'], label: 'full audio' },
+              { badge: 'diar', text: 'A · B' },
+              { say: 1 },
+              { send: ['stt', 'out'], label: 'words' },
+              { send: ['diar', 'out'], label: 'speakers' },
+              { lit: 'out' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline',
+            lines: ['Normalise before anything else.'],
+            task: {
+              type: 'order',
+              question: 'Put the audio pipeline in order.',
+              items: [
+                'Decode and normalise (mono 16 kHz)',
+                'VAD: drop non-speech',
+                'Chunk at silences',
+                'Transcribe the chunks',
+                'Align diarised speakers to words',
+              ],
+              hint: 'Speech detection needs clean audio, chunks need speech segments, and speaker labels attach to words last.',
+            },
+            solved: 'Normalise → VAD → chunk → transcribe → align speakers by timestamp.',
+            then: [
+              { send: ['raw', 'ffmpeg'] },
+              { send: ['ffmpeg', 'vad'] },
+              { send: ['vad', 'chunk'] },
+              { send: ['chunk', 'stt'] },
+              { send: ['stt', 'out'], label: 'words', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A 60-minute sales call',
+            lines: [
+              '635 MB stereo WAV → ~115 MB as mono 16 kHz PCM.',
+              'VAD finds 41 minutes of speech: **32% less** audio to transcribe.',
+              'Diarisation finds 2 speakers: 58% of words from the rep, 42% from the customer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['raw', 'ffmpeg'], label: '635 MB' },
+              { badge: 'ffmpeg', text: '~115 MB' },
+              { say: 1 },
+              { send: ['ffmpeg', 'vad'] },
+              { badge: 'vad', text: '41 min speech', tone: 'ok' },
+              { say: 2 },
+              { send: ['diar', 'out'], label: 'talk ratio' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** raw audio is a messy river; models want neat, labelled buckets. Audio processing is the plumbing that converts any recording into clean, speech-only segments with speaker labels.
 
 **The standard pipeline.**
@@ -186,6 +298,109 @@ console.log(mergeSegments([{ start: 0, end: 70 }], 30, 1).length); // 3 pieces o
     },
     {
       heading: 'Speech-to-Text — Whisper-class APIs and WER',
+      steps: {
+        actors: [
+          { id: 'audio', kind: 'data', label: 'Audio', sub: '30-s window', x: 110, y: 70 },
+          { id: 'mel', kind: 'tool', label: 'Log-Mel', sub: 'spectrogram', x: 340, y: 70 },
+          { id: 'enc', kind: 'embedder', label: 'Encoder', sub: 'transformer', x: 570, y: 70 },
+          { id: 'dec', kind: 'llm', label: 'Decoder', sub: 'emits text tokens', x: 800, y: 70 },
+          { id: 'ref', kind: 'document', label: 'Reference', sub: 'human transcript', x: 340, y: 230 },
+          { id: 'wer', kind: 'metric', label: 'WER', sub: '(S + D + I) / N', x: 570, y: 230 },
+          { id: 'prompt', kind: 'user', label: 'Prompt', sub: 'domain terms', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'How Whisper works',
+            lines: [
+              'Audio becomes a 30-second log-Mel spectrogram.',
+              'A transformer **encoder** reads it; a **decoder** emits text tokens.',
+              'Special tokens set the language, task (transcribe/translate) and timestamps.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['audio', 'mel'] },
+              { say: 1 },
+              { send: ['mel', 'enc'] },
+              { send: ['enc', 'dec'] },
+              { say: 2 },
+              { badge: 'dec', text: 'lang · task · time' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Cheap accuracy levers',
+            lines: [
+              'Pass a **prompt** with domain terms ("Kubernetes, kubectl, Istio").',
+              'Set the language and clean the audio (VAD, denoise).',
+              'Post-process numbers and casing.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'prompt' },
+              { send: ['prompt', 'dec'], label: 'vocabulary', tone: 'ok' },
+              { say: 1 },
+              { badge: 'audio', text: 'cleaned', tone: 'ok' },
+              { say: 2 },
+              { badge: 'dec', text: 'numbers fixed' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: compute the WER',
+            lines: [
+              'Ref: "please transfer **five** hundred dollars to **my** savings account" (9 words).',
+              'Hyp: "please transfer **nine** hundred dollars to savings account **now**".',
+            ],
+            task: {
+              type: 'choose',
+              question: 'What is the word error rate?',
+              options: [
+                { text: '33.3%: 1 substitution + 1 deletion + 1 insertion, over 9' },
+                { text: '11.1%: only "nine" is wrong', why: 'Count all three edits: five→nine (S), missing "my" (D), extra "now" (I).' },
+                { text: '22.2%: insertions do not count', why: 'WER = (S + D + I) / N; insertions count too.' },
+              ],
+              answer: 0,
+            },
+            solved: 'WER = (1 + 1 + 1) / 9 = 33.3%.',
+            then: [{ send: ['dec', 'wer'], label: 'hypothesis' }, { send: ['ref', 'wer'], label: 'reference' }, { badge: 'wer', text: '33.3%' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Normalise before scoring',
+            lines: [
+              'Lowercase, strip punctuation, treat "5" and "five" alike.',
+              'Otherwise you score formatting, not recognition.',
+              'Track WER per segment type: accent, channel, noise.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ref', 'wer'], label: 'normalised' },
+              { send: ['dec', 'wer'], label: 'normalised' },
+              { say: 1 },
+              { badge: 'wer', text: 'recognition only', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what to gate on',
+            lines: ['In that example the one substitution changed the **amount**.'],
+            task: {
+              type: 'choose',
+              question: 'For a banking voicebot, what should gate a release?',
+              options: [
+                { text: 'Entity error rate on names, amounts and product codes' },
+                { text: 'Overall WER alone', why: '33% WER understates the harm: entity error on amounts here is 100%.' },
+                { text: 'Transcription speed', why: 'Speed says nothing about getting the words that matter right.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Gate releases on entity accuracy, not just WER.',
+            then: [{ badge: 'wer', text: 'amounts: 100% wrong', tone: 'err' }],
+          },
+        ],
+      },
       body: `**Intuition:** STT is translation from sound to words. Modern models (Whisper, gpt-4o-transcribe, Deepgram, AssemblyAI, Google Chirp) are encoder–decoder transformers trained on hundreds of thousands of hours, so they handle accents and noise far better than older pipelines — but they can still "hallucinate" fluent text.
 
 **How Whisper works.** Audio → 30-second log-Mel spectrogram (80 or 128 bins) → transformer encoder → decoder that emits text tokens, with special tokens for language, task (transcribe/translate) and timestamps.
@@ -340,6 +555,113 @@ console.log(wer('please transfer five hundred dollars to my savings account',
     },
     {
       heading: 'Text-to-Speech — streaming voices and the voice-agent latency budget',
+      steps: {
+        actors: [
+          { id: 'caller', kind: 'user', label: 'Caller', sub: 'expects ~1 s', x: 110, y: 70 },
+          { id: 'eot', kind: 'tool', label: 'End-of-turn', sub: 'VAD ~200–300 ms', x: 340, y: 70 },
+          { id: 'stt', kind: 'tool', label: 'Streaming STT', sub: '~100–200 ms', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'TTFT ~300–500 ms', x: 800, y: 70 },
+          { id: 'tts', kind: 'tool', label: 'TTS', sub: 'TTFB ~100–200 ms', x: 800, y: 230 },
+          { id: 'net', kind: 'server', label: 'Network', sub: '~50–100 ms', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'About a second',
+            lines: [
+              'In conversation, people expect a reply within about a second.',
+              'Longer pauses feel broken.',
+              'So **time-to-first-audio** matters more than voice quality.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'caller' },
+              { badge: 'caller', text: '≲ 1 s' },
+              { say: 1 },
+              { badge: 'caller', text: 'silence…', tone: 'err' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The cascade budget',
+            lines: [
+              'End-of-turn detection: VAD silence ~200–300 ms.',
+              'Final streaming STT transcript: ~100–200 ms.',
+              'LLM time-to-first-token: ~300–500 ms.',
+              'TTS first byte ~100–200 ms, then network ~50–100 ms.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['caller', 'eot'], label: 'speech' },
+              { say: 1 },
+              { send: ['eot', 'stt'] },
+              { say: 2 },
+              { send: ['stt', 'llm'], label: 'text' },
+              { say: 3 },
+              { send: ['llm', 'tts'], label: 'sentence 1' },
+              { send: ['tts', 'net'], label: 'audio' },
+              { send: ['net', 'caller'], label: 'audio', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the biggest win',
+            lines: ['A support phone agent went from 4.8 s naive to 1.03 s optimised.'],
+            task: {
+              type: 'choose',
+              question: 'Which change helped most?',
+              options: [
+                { text: 'Streaming LLM output into TTS sentence by sentence' },
+                { text: 'A faster network', why: 'Network only went from 100 to 80 ms.' },
+                { text: 'A more natural voice', why: 'Quality matters, but time-to-first-audio matters more.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Speech starts while the model is still generating sentence two.',
+            then: [
+              { send: ['llm', 'tts'], label: 'sentence 1', tone: 'ok' },
+              { send: ['tts', 'net'], label: 'audio' },
+              { send: ['llm', 'tts'], label: 'sentence 2' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cascade or speech-to-speech?',
+            lines: ['Cascade: STT → LLM → TTS. Speech-to-speech: one realtime model.'],
+            task: {
+              type: 'choose',
+              question: 'You must inspect the text and apply text guardrails. Which architecture?',
+              options: [
+                { text: 'The cascade' },
+                { text: 'Speech-to-speech', why: 'Lowest latency and keeps tone, but less control and harder to audit and test.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Cascade: swappable and inspectable. Speech-to-speech: lowest latency, less control.',
+          },
+          {
+            kind: 'watch',
+            title: 'Must-haves',
+            lines: [
+              'Streaming at every hop.',
+              '**Barge-in**: stop TTS when the user speaks.',
+              'Filler for slow tools ("Let me check that…"), and read numbers out as words.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['stt', 'llm'] },
+              { send: ['llm', 'tts'] },
+              { say: 1 },
+              { send: ['caller', 'eot'], label: 'speaks' },
+              { down: 'tts' },
+              { say: 2 },
+              { down: 'tts', on: false },
+              { badge: 'tts', text: 'let me check…' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** humans expect a reply within about a second in conversation; longer pauses feel broken. TTS quality matters, but **time-to-first-audio** matters more.
 
 **Modern TTS.** Neural TTS models (OpenAI gpt-4o-mini-tts, ElevenLabs, Azure Neural, Cartesia, open models like Kokoro/XTTS) map text to audio tokens or spectrograms and decode them with a neural vocoder. Many accept **style instructions** ("calm, empathetic") and stream audio in chunks (PCM/Opus) as they synthesise.
@@ -491,6 +813,108 @@ console.log(latencyReport({ turn: 300, stt: 150, llm: 900, tts: 150, network: 80
     },
     {
       heading: 'Video Understanding — frame sampling, transcripts and timestamps',
+      steps: {
+        actors: [
+          { id: 'video', kind: 'data', label: 'Video', sub: 'frames + audio', x: 110, y: 70 },
+          { id: 'frames', kind: 'tool', label: 'Frame sampler', sub: 'fps or scene change', x: 340, y: 70 },
+          { id: 'vlm', kind: 'llm', label: 'VLM', sub: 'timestamped answer', x: 800, y: 70 },
+          { id: 'asr', kind: 'tool', label: 'Transcript', sub: 'audio → text', x: 110, y: 230 },
+          { id: 'index', kind: 'vector-db', label: 'Index', sub: 'captions + chunks', x: 570, y: 230 },
+          { id: 'q', kind: 'user', label: 'Question', sub: 'per query', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A flip-book plus a soundtrack',
+            lines: [
+              'Models do not watch continuously: they look at **sampled frames**.',
+              'They also read or listen to the audio.',
+              'Then they reason across both.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['video', 'frames'] },
+              { send: ['frames', 'vlm'], label: 'frames' },
+              { say: 1 },
+              { send: ['video', 'asr'] },
+              { send: ['asr', 'vlm'], label: 'transcript', tone: 'req', curve: true },
+              { say: 2 },
+              { lit: 'vlm' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: choose the frame rate',
+            lines: ['A 45-minute webinar of slides at 1 fps is 2,700 frames, ~697k tokens.'],
+            task: {
+              type: 'choose',
+              question: 'How should you sample a lecture or screen recording?',
+              options: [
+                { text: 'Scene change only: slides change rarely' },
+                { text: '2–5 fps', why: 'High fps is for fast action like sports or manufacturing QA, on short clips.' },
+                { text: '1 frame per second, all of it', why: 'That is ~697k tokens per question; scene change kept 84 keyframes.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pick fps by content: scene change for slides, 0.2–0.5 fps for meetings, 2–5 fps for fast action.',
+            then: [{ send: ['video', 'frames'] }, { badge: 'frames', text: '84 keyframes', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Timestamps and transcript',
+            lines: [
+              'Label each frame with its timestamp ("[02:15]").',
+              'Include the transcript: in talking-head videos most information is in the audio.',
+              'Ask for answers with timestamps.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['frames', 'vlm'], label: '[02:15] frame' },
+              { say: 1 },
+              { send: ['asr', 'vlm'], label: 'transcript', tone: 'req', curve: true },
+              { say: 2 },
+              { badge: 'vlm', text: '31:42–34:10', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Index, then ask',
+            lines: [
+              'For long libraries, caption each scene once and embed captions plus transcript chunks.',
+              'Per question, retrieve the relevant moments.',
+              'Send only those frames: cost per question dropped ~300×.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['frames', 'index'], label: 'captions' },
+              { send: ['asr', 'index'], label: 'chunks' },
+              { say: 1 },
+              { send: ['q', 'index'], label: 'question' },
+              { say: 2 },
+              { send: ['index', 'vlm'], label: 'top 5 moments', tone: 'ok' },
+              { badge: 'vlm', text: '~300× cheaper', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: index then ask',
+            lines: ['Never stuff hours of footage into one prompt.'],
+            task: {
+              type: 'order',
+              question: 'Order the index-then-ask flow.',
+              items: [
+                'Caption scenes and embed them with transcript chunks',
+                'Retrieve the top moments for the question',
+                'Send those frames + transcript to the model',
+                'Answer with timestamps',
+              ],
+              hint: 'Indexing happens once; each question then retrieves and sends only what it needs.',
+            },
+            solved: 'Index once, retrieve moments per question, answer with timestamped evidence.',
+            then: [{ send: ['q', 'index'] }, { send: ['index', 'vlm'], label: 'moments' }, { badge: 'vlm', text: 'timestamps', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** a video is a flip-book plus a soundtrack. Models do not "watch" continuously; they look at **sampled frames** and read (or listen to) the audio, then reason across them.
 
 **Approaches.**
@@ -616,6 +1040,109 @@ console.log(frameBudget(60, 1, 258, 100_000));  // 1`,
     },
     {
       heading: 'Voice agent frameworks — Pipecat and LiveKit Agents',
+      steps: {
+        actors: [
+          { id: 'tin', kind: 'server', label: 'Transport in', sub: 'WebRTC · WS · phone', x: 110, y: 70 },
+          { id: 'stt', kind: 'tool', label: 'VAD + STT', sub: 'processors', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'tokens as frames', x: 570, y: 70 },
+          { id: 'tts', kind: 'tool', label: 'TTS', sub: 'audio frames', x: 800, y: 70 },
+          { id: 'room', kind: 'server', label: 'LiveKit room', sub: 'WebRTC server', x: 110, y: 230 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'joins as participant', x: 340, y: 230 },
+          { id: 'tout', kind: 'server', label: 'Transport out', sub: 'to the caller', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Why a framework',
+            lines: [
+              'A real voice agent streams audio both ways over an unreliable network.',
+              'It cancels work the moment the caller speaks.',
+              'And it swaps vendors without a rewrite. Pipecat and LiveKit Agents handle that plumbing.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['tin', 'stt'], label: 'audio' },
+              { send: ['tts', 'tout'], label: 'audio' },
+              { say: 1 },
+              { badge: 'tts', text: 'cancel', tone: 'err' },
+              { say: 2 },
+              { badge: 'llm', text: 'swap vendor' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Pipecat: frames through processors',
+            lines: [
+              'Everything is a **frame**: audio, transcripts, LLM tokens, TTS audio, control signals.',
+              'Frames flow **downstream** through a pipeline of processors.',
+              'Each handles the frames it understands and passes the rest on, so you can insert your own.',
+            ],
+            script: [
+              { say: 0 },
+              { say: 1 },
+              { send: ['tin', 'stt'], label: 'audio' },
+              { send: ['stt', 'llm'], label: 'transcript' },
+              { send: ['llm', 'tts'], label: 'tokens' },
+              { send: ['tts', 'tout'], label: 'audio', tone: 'ok' },
+              { say: 2 },
+              { badge: 'llm', text: '+ your processor' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the caller interrupts',
+            lines: ['The user starts speaking while the bot is talking.'],
+            task: {
+              type: 'choose',
+              question: 'What does Pipecat do?',
+              options: [
+                { text: 'An interruption frame tells every processor to drop queued LLM tokens and TTS audio' },
+                { text: 'Finish the current reply, then listen', why: 'The bot should go quiet quickly: queued frames are dropped.' },
+                { text: 'Nothing until the next turn', why: 'Interruptions are handled at once, by a frame that flushes queued work.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Interruptions flush queued frames, so the bot goes quiet quickly.',
+            then: [{ send: ['tin', 'stt'], label: 'user speaks', tone: 'req' }, { badge: 'tts', text: 'flushed', tone: 'err' }, { down: 'tts' }],
+          },
+          {
+            kind: 'watch',
+            title: 'LiveKit Agents: join the room',
+            lines: [
+              'Your agent **joins a room as a participant**, like another caller.',
+              'An AgentSession wires VAD, STT, LLM and TTS plugins, or a realtime model.',
+              'A turn-detection model uses the words being said, not only silence.',
+              'Workers are dispatched to rooms; SIP connects phone numbers.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'room'], label: 'joins', tone: 'ok' },
+              { say: 1 },
+              { lit: 'agent' },
+              { say: 2 },
+              { badge: 'agent', text: 'finished?' },
+              { say: 3 },
+              { send: ['room', 'agent'], label: 'dispatch' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: choose a framework',
+            lines: ['Both are vendor-neutral on models.'],
+            task: {
+              type: 'choose',
+              question: 'You want WebRTC infrastructure, rooms, scaling and telephony from one vendor. Lean towards…',
+              options: [
+                { text: 'LiveKit Agents' },
+                { text: 'Pipecat', why: 'Pipecat fits full control of the chain, unusual transports and custom processors.' },
+                { text: 'A managed platform', why: 'That fits teams with no voice team who accept less control.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Models are swappable either way; the transport is the bigger long-term commitment.',
+          },
+        ],
+      },
       body: `**Intuition:** the text-to-speech section showed the cascade (VAD → STT → LLM → TTS) and its latency budget. Building it for real means streaming audio both ways over an unreliable network, cancelling work the moment the caller speaks, and swapping vendors without rewriting everything. Two open-source frameworks handle that plumbing.
 
 **Pipecat** (Python, started by Daily). Everything is a **frame** — audio chunks, transcripts, LLM tokens, TTS audio, control signals — flowing through a **pipeline of processors**:
@@ -774,6 +1301,219 @@ console.log(p.push({ type: 'interrupt' }));   // 1 frame dropped`,
     },
     {
       heading: 'Turn-taking and interruptions — endpointing, backchannels and what the caller actually heard',
+      short: {
+        id: 'voice-agent-what-was-heard',
+        title: 'What the caller actually heard',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'The agent is cut off mid-sentence',
+            head: 'What did the caller *actually hear*?',
+            claims: [
+              {
+                text: '"Your refund of $40"',
+                ok: true,
+                note: 'played',
+              },
+              {
+                text: '"was approved and will arrive in 5 days"',
+                ok: false,
+                note: 'never played',
+              },
+            ],
+            sub: 'History must keep only the **played** words.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'While the agent speaks',
+            head: 'Not every sound is a *barge-in*',
+            items: [
+              {
+                label: '≥ 400 ms of speech or ≥ 2 words',
+                keep: true,
+              },
+              {
+                label: '"mm-hm"',
+              },
+              {
+                label: '"yeah"',
+              },
+              {
+                label: 'A cough',
+              },
+              {
+                label: 'The agent\'s own voice through a speakerphone',
+              },
+            ],
+            keepLabel: 'INTERRUPT',
+            sub: 'Plus **echo cancellation**, so the agent does not interrupt itself.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Endpointing',
+            head: 'Has the user *finished*?',
+            steps: [
+              '300 ms of silence',
+              'Semantic detector: does it look complete?',
+              'Just asked for a policy number? Wait 1.2 s',
+              'End the turn',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Insurance claims line · 400 recorded calls',
+            head: 'Callers cut off *mid-sentence*',
+            rungs: [
+              {
+                label: 'Before tuning',
+                amount: 14,
+              },
+              {
+                label: 'After tuning',
+                amount: 4,
+              },
+            ],
+            unit: '% of calls',
+            sub: 'False interruptions from "uh-huh": **11% → 2%**. Interruption latency stayed ~250 ms.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'While the agent is speaking, the caller says "mm-hm". What should it do?',
+            answer: 1,
+            options: [
+              {
+                text: 'Stop speaking immediately and wait',
+                why: 'Short acknowledgements signal listening, not a wish to take the turn.',
+              },
+              {
+                text: 'Treat it as a backchannel and keep speaking',
+                why: 'A minimum speech duration or word count avoids stopping for it, while longer speech still triggers barge-in.',
+              },
+              {
+                text: 'Restart the whole reply from the beginning',
+                why: 'The caller was listening; nothing needs repeating.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'History holds only *what was played*.',
+          sub: 'Combine silence with a **semantic** end-of-turn signal; tune on real calls.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Caller', sub: 'speaks, pauses', x: 110, y: 70 },
+          { id: 'vad', kind: 'tool', label: 'VAD', sub: 'silence timer', x: 340, y: 70 },
+          { id: 'sem', kind: 'judge', label: 'Turn detector', sub: 'looks complete?', x: 570, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Agent', sub: 'LLM + TTS', x: 800, y: 70 },
+          { id: 'echo', kind: 'guard', label: 'Echo cancel', sub: 'ignores own voice', x: 340, y: 230 },
+          { id: 'hist', kind: 'data', label: 'History', sub: 'words played only', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Has the user finished?',
+            lines: [
+              'Silence-based endpointing: VAD says "no speech" for N ms.',
+              'Short N (~300 ms) feels snappy but cuts off people who pause to think.',
+              'Long N (~800 ms+) feels sluggish.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'vad'], label: 'speech' },
+              { badge: 'vad', text: 'silence N ms' },
+              { say: 1 },
+              { send: ['vad', 'agent'], label: 'reply!', tone: 'err', curve: true },
+              { badge: 'user', text: 'cut off', tone: 'err' },
+              { say: 2 },
+              { badge: 'agent', text: 'sluggish', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: finished or pausing?',
+            lines: ['Transcript so far: "I\'d like to book for"', '300 ms of silence just passed.'],
+            task: {
+              type: 'choose',
+              question: 'What should the agent do?',
+              options: [
+                { text: 'Wait longer: the semantic detector says it looks unfinished' },
+                {
+                  text: 'Reply now: 300 ms of silence ended the turn',
+                  why: 'Silence alone cuts people off; combine it with a "looks complete" signal.',
+                },
+                { text: 'Say "are you still there?"', why: 'That rule is for long silences: prompt once, then end politely.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Short silence + "looks complete" ends the turn; "looks incomplete" waits longer.',
+            then: [
+              { send: ['vad', 'sem'], label: 'silence' },
+              { badge: 'sem', text: 'unfinished', tone: 'miss' },
+              { send: ['user', 'vad'], label: 'more speech' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Barge-in or backchannel?',
+            lines: [
+              'Keep VAD and STT running while the agent speaks.',
+              '"mm-hm", a cough or the agent\'s own echo is not an interruption.',
+              'Require a minimum speech duration (e.g. 300–500 ms) or a couple of words, plus echo cancellation.',
+              'On a real interruption: stop audio, cancel the LLM stream and queued TTS, listen.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'vad' },
+              { say: 1 },
+              { send: ['user', 'vad'], label: 'mm-hm', tone: 'miss' },
+              { send: ['agent', 'echo'], label: 'echo', tone: 'miss' },
+              { say: 2 },
+              { badge: 'vad', text: '≥ 400 ms?' },
+              { say: 3 },
+              { send: ['user', 'vad'], label: 'real speech', tone: 'req' },
+              { down: 'agent' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what was heard',
+            lines: ['Planned: "Your refund of $40 was approved and will arrive in 5 days".', 'The caller cut in after: "Your refund of $40".'],
+            task: {
+              type: 'choose',
+              question: 'What goes into the conversation history?',
+              options: [
+                { text: 'Only "Your refund of $40": the part actually played' },
+                { text: 'The full generated reply', why: 'Then the model later believes it told the user about the 5 days.' },
+                { text: 'Nothing from that turn', why: 'The caller did hear the first part; keep what was played.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Cut the text at the interruption point using TTS word timestamps or bytes played.',
+            then: [{ send: ['agent', 'hist'], label: 'played words', tone: 'ok' }, { badge: 'hist', text: 'refund of $40' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure it',
+            lines: [
+              '**Interruption latency**: user starts speaking → agent silent; aim for a few hundred ms.',
+              '**False-interruption rate** and **cut-off rate**.',
+              'Tune thresholds on recordings from your real callers.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'vad'], label: 'speaks' },
+              { down: 'agent' },
+              { say: 1 },
+              { badge: 'sem', text: 'cut-off rate' },
+              { say: 2 },
+              { down: 'agent', on: false },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** good human conversation has three skills: knowing when the other person has *finished* (not just paused), not stopping every time they say "mm-hm", and remembering that if you were cut off, they did not hear the rest of your sentence. Voice agents need all three in code.
 
 **1. Endpointing — has the user finished?**

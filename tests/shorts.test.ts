@@ -2,7 +2,7 @@
 // Short-of-the-day pick and the daily unlock — against the shipped Shorts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { barFill, beatMs, checkShort, PLAYER_START, playerStep, shortOfTheDay, shortsFrom, studyDays, unlockedShorts, unlockedToday, type PlayerAction, type PlayerState } from '../src/lib/shorts.ts';
+import { barFill, beatMs, checkShort, PLAYER_START, playerStep, shortOfTheDay, shortsFrom, type PlayerAction, type PlayerState } from '../src/lib/shorts.ts';
 import type { Short, ShortBeat } from '../src/types.ts';
 import { TOPICS } from './helpers.ts';
 
@@ -14,7 +14,7 @@ const run = (actions: PlayerAction[], s: PlayerState = PLAYER_START) => actions.
 const until = (i: number) => run(Array.from({ length: i }, () => ({ type: 'next' }) as const));
 
 test('the catalog: 15 Shorts (12 + 3 tier-3 concepts), in course order, all valid', () => {
-  assert.equal(ALL.length, 15);
+  assert.equal(ALL.length, 68);
   const seen = new Set<string>();
   for (const e of ALL) assert.deepEqual(checkShort(e.short, e.topic.id, seen), [], e.short.id);
   const pos = (id: string) => TOPICS.findIndex((t) => t.id === id);
@@ -153,26 +153,4 @@ test('Short of the day: skips watched Shorts, and one watched today stays up', (
   assert.equal(kept.watched, true);
   const everything = Object.fromEntries(ALL.map((e) => [e.short.id, watchedAt('2026-10-01T10:00:00')]));
   assert.equal(shortOfTheDay(ALL, everything, today)!.entry.short.id, first, 'all watched: the date pick, ticked');
-});
-
-test('daily unlock: one Short per study day, plus the Short of the day and anything watched', () => {
-  const today = '2026-11-08';
-  const sotd = shortOfTheDay(ALL, undefined, today)!.entry.short.id;
-  assert.deepEqual([...unlockedShorts(ALL, {}, today)], [sotd], 'no study yet: only the Short of the day');
-  const three = { activityDays: ['2026-11-01', '2026-11-03', '2026-11-03', '2026-11-05'] };
-  assert.equal(studyDays(three), 3, 'days are counted once');
-  const open = unlockedShorts(ALL, three, today);
-  for (const e of ALL.slice(0, 3)) assert.ok(open.has(e.short.id), `${e.short.id} unlocked by a study day`);
-  assert.ok(open.has(sotd));
-  assert.ok(!open.has(ALL[3].short.id) || ALL[3].short.id === sotd, 'the 4th needs a 4th study day');
-  const late = ALL[11].short.id;
-  assert.ok(unlockedShorts(ALL, { ...three, shorts: { [late]: watchedAt('2026-10-01T10:00:00') } }, today).has(late), 'watched stays open');
-  const all = { activityDays: Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`) };
-  assert.equal(unlockedShorts(ALL, all, today).size, ALL.length, 'enough study days open everything');
-});
-
-test('daily unlock: studying today marks the newest one as new', () => {
-  const today = '2026-11-08';
-  assert.equal(unlockedToday(ALL, { activityDays: ['2026-11-07'] }, today), undefined);
-  assert.equal(unlockedToday(ALL, { activityDays: ['2026-11-07', today] }, today), ALL[1]);
 });

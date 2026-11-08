@@ -32,6 +32,159 @@ const topic: Topic = {
     // ------------------------------------------------------------------ 1
     {
       heading: 'Structured Outputs (JSON / JSON Schema) — from "please reply in JSON" to guaranteed schemas',
+      steps: {
+        actors: [
+          { id: 'email', kind: 'document', label: 'Input email', sub: 'Priya, 40 seats', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'one token at a time', x: 340, y: 70 },
+          { id: 'json', kind: 'data', label: 'JSON output', sub: 'matches the schema', x: 570, y: 70 },
+          { id: 'zod', kind: 'judge', label: 'Zod check', sub: 'business rules', x: 800, y: 70 },
+          { id: 'mask', kind: 'guard', label: 'Grammar mask', sub: 'compiled from schema', x: 340, y: 230 },
+          { id: 'app', kind: 'server', label: 'Your code', sub: 'DB · UI · next step', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three levels of strictness',
+            lines: [
+              '**Prompt only** ("reply with JSON like…"): no guarantee. 2–4% of 1,000 emails failed `JSON.parse`.',
+              '**JSON mode**: parses as JSON, but any shape (`demoRequested` instead of `demo_requested`).',
+              '**Structured Outputs**: output matches your JSON Schema: 0 parse failures, 0 unknown keys.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['email', 'llm'], label: 'email' },
+              { send: ['llm', 'json'], label: '```json …', tone: 'err' },
+              { say: 1 },
+              { send: ['llm', 'json'], label: 'demoRequested', tone: 'miss' },
+              { say: 2 },
+              { send: ['mask', 'llm'], label: 'schema' },
+              { send: ['llm', 'json'], label: 'demo_requested', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'How the guarantee works',
+            lines: [
+              'The provider compiles your schema into a grammar.',
+              'At every decoding step it masks out tokens that would break it (constrained decoding).',
+              'So the model **cannot** emit an unknown key. The first request with a new schema is slower while the grammar compiles.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'mask' },
+              { badge: 'mask', text: 'compiling…', ms: 1000 },
+              { say: 1 },
+              { send: ['mask', 'llm'], label: 'allowed tokens', count: 3 },
+              { say: 2 },
+              { send: ['llm', 'json'], label: 'valid JSON', tone: 'ok' },
+              { badge: 'mask', text: 'cached', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: an optional field in strict mode',
+            lines: ['Strict mode: `additionalProperties: false`, and every property in `required`.'],
+            task: {
+              type: 'choose',
+              question: '`seats` may be missing from the email. How do you express that in a strict schema?',
+              options: [
+                { text: 'Keep it in required, typed as integer | null' },
+                { text: 'Leave it out of required', why: 'Strict mode needs every property in required; "optional" is a union with null.' },
+                { text: 'Add minimum: 1 to the schema', why: 'Some keywords are unsupported (Anthropic rejects minimum): business rules go in Zod.' },
+              ],
+              answer: 0,
+            },
+            solved: 'In strict mode an optional field is a union with null, and every property stays in required.',
+            then: [{ send: ['mask', 'llm'], label: 'seats: int | null' }, { send: ['llm', 'json'], label: '"seats": 40', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: seats came back as 0',
+            lines: ['Three emails mentioned no seats, and the model wrote `0`.'],
+            task: {
+              type: 'pick',
+              question: 'Which part catches seats = 0?',
+              answer: 'zod',
+              hints: {
+                mask: 'The schema only enforces shape: 0 is a valid integer.',
+                json: 'The JSON parses fine; the value breaks a business rule.',
+              },
+            },
+            solved: 'The rule "seats > 0 or null" lives in Zod after parsing; those 3 emails were sent for retry.',
+            then: [{ send: ['json', 'zod'], label: 'seats: 0' }, { badge: 'zod', text: 'retry', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Still check two things',
+            lines: [
+              'A safety **refusal** (OpenAI `refusal` part; Anthropic `stop_reason: "refusal"`).',
+              '**Truncation** at `max_tokens`.',
+              'Both can produce output that does not match the schema: check them before the data flows on.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'llm', text: 'refusal?', tone: 'req', ms: 1000 },
+              { say: 1 },
+              { badge: 'json', text: 'cut off?', tone: 'req', ms: 1000 },
+              { say: 2 },
+              { send: ['json', 'zod'], label: 'checked' },
+              { send: ['zod', 'app'], label: 'typed object', tone: 'ok' },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'please-reply-in-json',
+        title: '"Please reply in JSON" is a hope',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'Prompt-only JSON · 1,000 emails',
+            head: '"Please reply in JSON" is *a hope*',
+            claims: [
+              { text: 'Every reply parses with JSON.parse', ok: false, note: 'about 2–4% failed: markdown fences, trailing commentary' },
+              { text: 'Every reply uses the key "demo_requested"', ok: false, note: 'some said "demoRequested"' },
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'Three levels of strictness',
+            head: 'Only one *guarantees your schema*',
+            items: [{ label: 'Prompt only: no guarantee' }, { label: 'JSON mode: valid JSON, any shape' }, { label: 'Structured Outputs: matches your schema', keep: true }],
+            keepLabel: 'STRICT',
+          },
+          {
+            type: 'flow',
+            kicker: 'Constrained decoding',
+            head: 'The model *cannot* write outside the boxes',
+            steps: ['Send your JSON Schema', 'Provider compiles it into a grammar', 'Each step masks tokens that would break it', 'Output matches the schema'],
+            sub: 'The first request with a new schema is **slower** while the grammar compiles; then it is cached.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Structured Outputs run · same emails',
+            value: 3,
+            unit: 'schema-valid replies Zod still caught',
+            stats: [{ value: 0, label: 'parse failures' }, { value: 0, label: 'unknown keys' }],
+            sub: 'seats came back **0** ("no seats mentioned"). The rule "seats > 0 or null" lives in Zod, so they went for retry.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'You switch to strict Structured Outputs. Which failure can STILL happen?',
+            answer: 0,
+            options: [
+              { text: 'A valid field holds the wrong value, like the sender\'s email', why: 'Constrained decoding guarantees shape, not truth: validate semantics and evaluate.' },
+              { text: 'A key that is not in the schema', why: 'Strict mode masks any token that would add an unknown key.' },
+              { text: 'JSON.parse fails on a markdown fence', why: 'Output is valid JSON from the first token; fences are exactly what it prevents.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Schemas guarantee *shape*, not truth.',
+          sub: 'Check **refusal and truncation** before parsing, and keep business rules in Zod.',
+        },
+      },
       body: `**Intuition:** asking a model for JSON in plain English is like asking a new colleague to "fill in the form" without handing them the form. Structured Outputs hands them the form *and* stops them writing outside the boxes.
 
 There are three levels of strictness:
@@ -219,6 +372,107 @@ console.log(JSON.stringify(toStrictSchema({ title: 'string', price: 'number', no
     // ------------------------------------------------------------------ 2
     {
       heading: 'Function Calling — letting the model ask your code to do something',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'where is A-1042?', x: 110, y: 70 },
+          { id: 'app', kind: 'server', label: 'Your code', sub: 'validates, then runs', x: 340, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'no hands', x: 570, y: 70 },
+          { id: 'defs', kind: 'document', label: 'Function defs', sub: 'name, desc, schema', x: 800, y: 70 },
+          { id: 'fn', kind: 'tool', label: 'get_order', sub: 'live order data', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A receptionist with no hands',
+            lines: [
+              'The model cannot look up an order, but it can fill in a request slip.',
+              '"Call `get_order` with `{ order_id: \'A-1042\' }`."',
+              'You do the work and hand back the answer.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'app'], label: 'question' },
+              { send: ['app', 'llm'], label: 'chat + functions' },
+              { say: 1 },
+              { send: ['llm', 'app'], label: 'tool_calls', tone: 'req' },
+              { say: 2 },
+              { send: ['app', 'fn'], label: 'getOrder()' },
+              { send: ['fn', 'app'], label: 'shipped', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one round trip',
+            lines: ['Function calling is two model calls with your code in between.'],
+            task: {
+              type: 'order',
+              question: 'Put one function-calling round trip in order.',
+              items: ['Send the chat plus function definitions', 'Model returns a tool call', 'Your code validates the arguments and runs it', 'Append the call and the tool result', 'Call the model again for the final answer'],
+              hint: 'The model can only propose a call after it has seen the definitions; it answers only after it sees the result.',
+            },
+            solved: 'Definitions → tool call → you run it → append call + result → the model writes the answer.',
+            then: [
+              { send: ['app', 'llm'], label: 'defs' },
+              { send: ['llm', 'app'], label: 'tool call', tone: 'req' },
+              { send: ['app', 'fn'], label: 'run' },
+              { send: ['app', 'llm'], label: 'result', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The real exchange',
+            lines: [
+              'The model returns `finish_reason: "tool_calls"`, arguments as a **JSON string**: about 20 output tokens, ~350 ms.',
+              'You append the assistant message **and** `{ role: "tool", tool_call_id }` with the result.',
+              'Forget the assistant message and the API rejects the request: the tool message has no matching call.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'app'], label: '{"order_id":"A-1042"}', tone: 'req' },
+              { say: 1 },
+              { send: ['app', 'fn'], label: 'run' },
+              { send: ['fn', 'app'], label: 'DHL, 17 Oct', tone: 'ok' },
+              { send: ['app', 'llm'], label: 'call + result' },
+              { say: 2 },
+              { send: ['llm', 'user'], label: 'shipped with DHL', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the security boundary',
+            lines: ['Treat every tool call as if it came from an untrusted user (it effectively did).'],
+            task: {
+              type: 'pick',
+              question: 'Which part decides whether a call may actually run?',
+              answer: 'app',
+              hints: {
+                llm: 'The model never executes anything: it only proposes calls.',
+                fn: 'The function just does the work; the checks happen before it is called.',
+                defs: 'Definitions describe what exists; they do not validate arguments or permissions.',
+              },
+            },
+            solved: 'Your code decides which functions exist, validates every argument and checks permissions.',
+            then: [{ send: ['llm', 'app'], label: 'proposed call', tone: 'req' }, { badge: 'app', text: 'validated', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Descriptions are prompts',
+            lines: [
+              '"get order" tells the model little.',
+              '"Look up an order by its ID (format A-1234). Use when the user asks about delivery or refunds." tells it when.',
+              'Good names and descriptions are the biggest lever on picking the right function.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'defs', text: '"get order"', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['defs', 'llm'], label: 'clear description', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'app'], label: 'right function', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** the model is a smart receptionist with no hands. It can't look up the weather or refund an order, but it can fill in a request slip ("call \`get_order\` with \`{ id: 'A-1042' }\`") and pass it to you. You do the work and hand back the answer.
 
 **Mechanics (one round trip):**
@@ -408,6 +662,113 @@ export async function toToolMessages(calls: ToolCall[], handlers: Record<string,
     // ------------------------------------------------------------------ 3
     {
       heading: 'Tool Calling — the loop, tool_choice, parallel calls and errors',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'Paris or Tokyo?', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'asks for tools', x: 340, y: 70 },
+          { id: 'loop', kind: 'server', label: 'Agent loop', sub: 'cap: 8 iterations', x: 570, y: 70 },
+          { id: 'conv', kind: 'tool', label: 'convert_temp', sub: 'delta 7 °C', x: 800, y: 70 },
+          { id: 'paris', kind: 'tool', label: 'get_weather', sub: 'Paris · 300 ms', x: 570, y: 230 },
+          { id: 'tokyo', kind: 'tool', label: 'get_weather', sub: 'Tokyo · 450 ms', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A conversation of request slips',
+            lines: [
+              'Call the model; if it requested tools, run them and append the results.',
+              'Call again, and repeat.',
+              'Stop when it returns plain text (`end_turn`) or you hit a **max-iterations** cap.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'llm'], label: 'question' },
+              { send: ['llm', 'loop'], label: 'tool_use', tone: 'req' },
+              { send: ['loop', 'paris'], label: 'run' },
+              { send: ['paris', 'loop'], label: '14 °C', tone: 'ok' },
+              { say: 1 },
+              { send: ['loop', 'llm'], label: 'tool_result', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'user'], label: 'end_turn', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Parallel calls',
+            lines: [
+              'Turn 1: two `tool_use` blocks in one response: weather in Paris **and** Tokyo.',
+              'Run them concurrently: 300 ms and 450 ms in parallel = **450 ms** (sequential: 750 ms).',
+              'Return every result in **one** user message of `tool_result` blocks.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'loop'], label: '2 × tool_use', tone: 'req' },
+              { say: 1 },
+              { send: ['loop', 'paris'], label: 'Paris' },
+              { send: ['loop', 'tokyo'], label: 'Tokyo' },
+              { send: ['paris', 'loop'], label: '14 °C', tone: 'ok' },
+              { send: ['tokyo', 'loop'], label: '21 °C', tone: 'ok' },
+              { badge: 'loop', text: '450 ms', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { send: ['loop', 'llm'], label: '2 tool_results' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: tool_choice',
+            lines: ['`tool_choice` decides whether, and which, tool the model must call.'],
+            task: {
+              type: 'choose',
+              question: 'On Anthropic, you must force the model to call get_weather specifically. Which setting?',
+              options: [
+                { text: '{ type: "tool", name: "get_weather" }' },
+                { text: '{ type: "any" }', why: '"any" forces some tool, not a specific one.' },
+                { text: '{ type: "auto" }', why: '"auto" lets the model decide, including not calling a tool.' },
+              ],
+              answer: 0,
+            },
+            solved: 'auto = model decides, any = must call some tool, tool = force one, none = no tools.',
+            then: [{ send: ['llm', 'loop'], label: 'get_weather', tone: 'req' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a tool fails',
+            lines: ['get_weather for Tokyo times out.'],
+            task: {
+              type: 'choose',
+              question: 'What does the loop send back to the model?',
+              options: [
+                { text: 'A tool_result with is_error: true' },
+                { text: 'Nothing: keep retrying until it works', why: 'Time out slow tools and cap iterations so a confused model cannot loop forever.' },
+                { text: 'Fail the whole request', why: 'Return failures as results so the model can react to them.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Errors go back as results (is_error: true); slow tools time out; iterations are capped.',
+            then: [{ send: ['tokyo', 'loop'], label: 'timeout', tone: 'err' }, { send: ['loop', 'llm'], label: 'is_error: true', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Run to the end',
+            lines: [
+              'Turn 2: the model calls `convert_temp({delta_c: 7})` → 12.6 °F.',
+              'Turn 3: "Tokyo is 7 °C (12.6 °F) warmer than Paris", with `end_turn`.',
+              '3 model calls and 3 tool executions, well under a cap of 8 iterations.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'loop'], label: 'convert_temp', tone: 'req' },
+              { send: ['loop', 'conv'], label: 'run' },
+              { send: ['conv', 'loop'], label: '12.6 °F', tone: 'ok' },
+              { send: ['loop', 'llm'], label: 'tool_result' },
+              { say: 1 },
+              { send: ['llm', 'user'], label: 'Tokyo is warmer', tone: 'ok' },
+              { say: 2 },
+              { badge: 'loop', text: '3 of 8', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** function calling is one request slip; tool calling is a *conversation of slips*. The model may need three lookups, in parallel or in sequence, before it can answer. Your code runs a loop until the model stops asking.
 
 **The agent loop:** call model → if it requested tools, run them and append results → call again → stop when it returns plain text (OpenAI \`finish_reason: "stop"\`, Anthropic \`stop_reason: "end_turn"\`) or you hit a **max-iterations** cap.

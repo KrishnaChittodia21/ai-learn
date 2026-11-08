@@ -128,6 +128,106 @@ export function findLeakage(outcome: string): string[] {
         explanation: 'Only option 2 names a user, a situation and an observable change, plus a constraint. The others name artifacts or infrastructure, which are candidate solutions to test against the outcome.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 47; Nuseibeh and Easterbrook 2000',
+      steps: {
+        actors: [
+          { id: 'vp', kind: 'user', label: 'VP of Support', sub: '"a GPT bot"', x: 110, y: 150 },
+          { id: 'frame', kind: 'document', label: 'One-page frame', sub: 'six parts', x: 340, y: 150 },
+          { id: 'email', kind: 'tool', label: 'Delay email', sub: 'no LLM', x: 570, y: 70 },
+          { id: 'status', kind: 'tool', label: 'Status block', sub: 'order page, no LLM', x: 800, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Scoped agent', sub: 'judgement cases', x: 570, y: 230 },
+          { id: 'tickets', kind: 'metric', label: 'Tickets', sub: 'where is my order?', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Output vs outcome',
+            lines: [
+              '"Build an AI support agent" names an artifact: an **output**.',
+              'An **outcome** names a user, a situation and an observable change.',
+              'Here: customers learn the true status and next step without waiting 6 hours.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['vp', 'frame'], label: 'a GPT bot' },
+              { badge: 'frame', text: 'an output', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { lit: 'frame' },
+              { say: 2 },
+              { badge: 'frame', text: 'the outcome', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the six parts',
+            lines: ['The frame fits on one page and is agreed with the outcome owner.'],
+            task: {
+              type: 'order',
+              question: 'Put the six parts of the frame in order.',
+              items: ['User', 'Situation', 'Current workflow', 'Desired outcome', 'Constraints', 'Non-goals'],
+              hint: 'Start with who has the problem and when; end with what is fixed and what is out.',
+            },
+            solved: 'User → situation → current workflow → desired outcome → constraints → non-goals.',
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: spot the leak',
+            lines: ['A product form, an infrastructure choice or a model name in the outcome line is **solution leakage**.'],
+            task: {
+              type: 'choose',
+              question: 'Which desired-outcome line has a solution leaking into it?',
+              options: [
+                { text: 'Use a vector database to answer order questions' },
+                {
+                  text: 'Customers learn the true status and next step without waiting 6 hours',
+                  why: 'User, situation and change, with no product form: a clean outcome.',
+                },
+                {
+                  text: 'Customers with a delivery problem get a correct resolution within five minutes',
+                  why: 'This names an observable change, not a solution.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Move product forms, infrastructure and model names to a candidate list until evidence earns them.',
+          },
+          {
+            kind: 'watch',
+            title: 'Keep the candidates open',
+            lines: [
+              '41% of tickets are "where is my order?".',
+              'Two of three candidates need **no LLM**: a delay email and a status block.',
+              'The email ships in a week and that ticket category drops 30%.',
+              'The agent is scoped to cases that need judgement.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'tickets', text: '41%', ms: 1000 },
+              { say: 1 },
+              { send: ['frame', 'email'] },
+              { send: ['frame', 'status'], curve: true },
+              { say: 2 },
+              { send: ['email', 'tickets'], label: '−30%', tone: 'ok', curve: true },
+              { say: 3 },
+              { send: ['frame', 'agent'], label: 'lost parcels' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: constraints count',
+            lines: ['Constraint: no refunds over $50 without human approval.'],
+            task: {
+              type: 'choose',
+              question: 'A bot halves handling time by issuing refunds over $50 on its own. Was the outcome met?',
+              options: [
+                { text: 'No: breaking a constraint means the outcome was not met' },
+                { text: 'Yes: handling time halved', why: 'Constraints are part of the goal.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Constraints are part of the goal: breaking one means the outcome was not met.',
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 2
     {
@@ -215,6 +315,102 @@ export function evidenceReport(steps: Step[]): { directRatio: number; toVerify: 
         explanation: 'A person describing their process is reported evidence. It may be right, but it is not proof of current behaviour until a log, ticket or observation confirms it.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 48; Nuseibeh and Easterbrook 2000',
+      steps: {
+        actors: [
+          { id: 'cust', kind: 'user', label: 'Customer', sub: 'opens a ticket', x: 110, y: 70 },
+          { id: 't1', kind: 'user', label: 'Tier-1 agent', sub: 'answers tickets', x: 340, y: 70 },
+          { id: 'oms', kind: 'data', label: 'OMS', sub: 'order lookup', x: 570, y: 70 },
+          { id: 'carrier', kind: 'tool', label: 'Carrier site', sub: 'tracking status', x: 800, y: 70 },
+          { id: 'lead', kind: 'user', label: 'Team lead', sub: 'approves reships', x: 340, y: 230 },
+          { id: 'slack', kind: 'data', label: 'Slack thread', sub: 'not linked to ticket', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Reconstruct what happens now',
+            lines: [
+              'The customer opens a ticket and waits ~6 h.',
+              'A tier-1 agent looks up the order in the OMS, then the carrier site.',
+              'For each step record actor, action, friction, authority and evidence.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['cust', 't1'], label: 'where is my order?' },
+              { badge: 'cust', text: 'waits ~6 h', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { send: ['t1', 'oms'], label: 'look up' },
+              { send: ['t1', 'carrier'], label: 'copy-paste', curve: true },
+              { say: 2 },
+              { send: ['t1', 'cust'], label: 'macro reply' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'What the logs showed',
+            lines: [
+              'Interviews said: "Takes two minutes." Logs and recordings: median **9 minutes**.',
+              "18% of tickets needed a team lead's approval in Slack, not linked to the ticket.",
+              '7% involved an address change the OMS did not record.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 't1', text: '9 min median', tone: 'miss', ms: 1200 },
+              { say: 1 },
+              { send: ['t1', 'slack'], label: 'reship?' },
+              { send: ['slack', 'lead'], curve: true },
+              { send: ['lead', 'slack'], label: 'approved', tone: 'ok', curve: true },
+              { say: 2 },
+              { badge: 'oms', text: 'no address change', tone: 'miss', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: hidden state',
+            lines: ['An AI system cannot use what it cannot see.'],
+            task: {
+              type: 'pick',
+              question: 'Where does the hidden state behind the reship approvals live?',
+              answer: 'slack',
+              hints: {
+                oms: 'The order system is a system of record tools can read; the approvals are not in it.',
+                carrier: 'The carrier site holds tracking status, not approvals.',
+                lead: 'The lead holds the authority; the record of the decision lives somewhere else.',
+              },
+            },
+            solved: 'Facts that live in a Slack thread, a head or a spreadsheet are hidden state.',
+            then: [{ badge: 'slack', text: 'hidden state', tone: 'err' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the evidence ladder',
+            lines: ['Label every step so confidence does not quietly inflate.'],
+            task: {
+              type: 'order',
+              question: 'Order the evidence from strongest to weakest.',
+              items: ['Observed (recording, trace, event)', 'Artifact (ticket, log, macro)', 'Reported (someone told you)', 'Inferred (the team thinks so)'],
+              hint: 'Only the first two prove current behaviour.',
+            },
+            solved: 'Observed → artifact → reported → inferred; only the first two prove what happens now.',
+          },
+          {
+            kind: 'watch',
+            title: 'The revised plan',
+            lines: [
+              'Summarising OMS + carrier data alone would be confidently wrong for that 25%.',
+              'Add an **approval-request step** for reships: authority stays with the lead.',
+              'Route address-change cases straight to a human.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'oms', text: '25% blind spot', tone: 'err', ms: 1200 },
+              { say: 1 },
+              { send: ['t1', 'lead'], label: 'approval request', tone: 'ok' },
+              { say: 2 },
+              { lit: 't1' },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 3
     {
@@ -322,6 +518,99 @@ export function nextRisk(register: Assumption[]): string | null {
         explanation: 'It names a sample, a method and a threshold, so a result can contradict it. The others have no observable failure condition.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 49; Boehm 1988 (spiral model)',
+      steps: {
+        actors: [
+          { id: 'a1', kind: 'metric', label: 'A1 feasibility', sub: 'status data is right', x: 110, y: 70 },
+          { id: 'a2', kind: 'metric', label: 'A2 safety', sub: 'no refund promises', x: 340, y: 70 },
+          { id: 'a3', kind: 'metric', label: 'A3 usability', sub: 'CSAT parity', x: 570, y: 70 },
+          { id: 'a4', kind: 'metric', label: 'A4 viability', sub: 'cost < $1', x: 800, y: 70 },
+          { id: 'replay', kind: 'judge', label: 'Offline replay', sub: '300 past tickets', x: 110, y: 230 },
+          { id: 'ui', kind: 'server', label: 'Chat UI', sub: 'roadmap wanted it', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A plan hides bets',
+            lines: [
+              'Five classes: value, usability, feasibility, viability, safety.',
+              'Write each assumption as a **falsifiable** claim with a sample and a threshold.',
+            ],
+            script: [{ say: 0 }, { lit: 'a1' }, { lit: 'a2' }, { lit: 'a3' }, { lit: 'a4' }, { say: 1 }, { badge: 'a1', text: 'can fail', ms: 1200 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: falsifiable?',
+            lines: ['A real test has a claim that could turn out false.'],
+            task: {
+              type: 'choose',
+              question: 'Which is a falsifiable claim?',
+              options: [
+                { text: 'In a replay of 300 past tickets, the draft is judged correct for at least 80%' },
+                { text: 'Customers will like it', why: 'This cannot fail: no sample, no threshold.' },
+                { text: 'We showed it to the VP and she liked it', why: 'That proves only that the team can build a demo.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Falsifiable: a realistic sample, an observable result and a threshold set before the result.',
+          },
+          {
+            kind: 'watch',
+            title: 'Score each bet',
+            lines: [
+              'Score = impact × uncertainty + irreversibility.',
+              'A1: 5 × 4 + 2 = **22**. A2: 5 × 3 + 4 = **19**.',
+              'A3: 4 × 4 + 1 = **17**. A4: 3 × 2 + 1 = **7**.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'a1' },
+              { say: 1 },
+              { badge: 'a1', text: '22', tone: 'err', ms: 1000 },
+              { badge: 'a2', text: '19', tone: 'miss', ms: 1000 },
+              { say: 2 },
+              { badge: 'a3', text: '17', tone: 'miss', ms: 1000 },
+              { badge: 'a4', text: '7', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: test what first?',
+            lines: ['The roadmap ranks by excitement; the register ranks by risk.'],
+            task: {
+              type: 'pick',
+              question: 'Which assumption should the next slice test first?',
+              answer: 'a1',
+              hints: {
+                a3: 'The roadmap wanted the chat UI, which tests A3 (score 17), not the top risk.',
+                ui: 'The chat UI tests A3, not the top open risk.',
+                a2: 'A2 scores 19, second to A1.',
+                a4: 'A4 scores 7, the lowest.',
+              },
+            },
+            solved: 'Test the top open risk first: A1, score 22.',
+            then: [{ send: ['a1', 'replay'], label: 'test A1', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Learn cheaply first',
+            lines: [
+              'A two-day offline check of 300 past tickets against OMS and carrier data.',
+              'It found the carrier API missing scan events for one regional courier: 12% of orders.',
+              'The team added a fallback rule **before** writing any UI.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['a1', 'replay'], label: 'test A1' },
+              { lit: 'replay' },
+              { say: 1 },
+              { badge: 'replay', text: '12% missing', tone: 'err', ms: 1400 },
+              { say: 2 },
+              { down: 'ui' },
+              { badge: 'a1', text: 'fallback rule', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 4
     {
@@ -413,10 +702,206 @@ export function pickSlice(required: string[], candidates: Candidate[]): string |
         explanation: 'Narrowing by region or by authority is fine. Removing every exception removes the cases where most failures and harm come from, so the slice cannot answer the real question.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 50; Boehm 1988',
+      steps: {
+        actors: [
+          { id: 'data', kind: 'data', label: 'Real tickets', sub: 'where is my order?', x: 110, y: 70 },
+          { id: 'agent', kind: 'agent', label: 'Draft agent', sub: 'reads OMS + carrier', x: 340, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human agent', sub: 'send · edit · discard', x: 570, y: 70 },
+          { id: 'cust', kind: 'user', label: 'Customer', sub: 'English, one region', x: 800, y: 70 },
+          { id: 'thr', kind: 'judge', label: 'Thresholds', sub: 'set in advance', x: 340, y: 230 },
+          { id: 'stop', kind: 'guard', label: 'Stop rule', sub: 'written before build', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Vertical, not horizontal',
+            lines: [
+              'A good slice crosses the real workflow: real data in, a draft out, a human judging it.',
+              'It stays narrow in users, ticket types and authority.',
+              'No refunds, no cancellations: the human sends, edits or discards.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'agent'], label: 'real data' },
+              { send: ['agent', 'human'], label: 'draft' },
+              { say: 1 },
+              { badge: 'cust', text: 'one region', ms: 1000 },
+              { say: 2 },
+              { lit: 'human' },
+              { send: ['human', 'cust'], label: 'sent', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick the slice',
+            lines: ['An eligible slice produces evidence on every top open assumption.'],
+            task: {
+              type: 'choose',
+              question: 'Which candidate is the right first slice?',
+              options: [
+                { text: 'Read-only drafts for "where is my order?", replayed on 300 real tickets, then shown to 5 agents' },
+                {
+                  text: 'A polished chat UI on 20 hand-written FAQs',
+                  why: 'UI-only on fake data: it tests usability and skips data and operations risk.',
+                },
+                { text: 'Ingest all 40k help articles into a vector DB', why: 'Infra-only: it proves technology, not value.' },
+                { text: 'An agent that auto-refunds in production', why: 'It tests everything at once, with real money: too much consequence.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Pick the slice that proves feasibility, safety, quality and trust with little consequence.',
+            then: [{ send: ['data', 'agent'], label: '300 tickets' }, { send: ['agent', 'human'], label: 'suggestion', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Thresholds and a stop rule, first',
+            lines: [
+              'Replay correctness ≥ 85% on 300 tickets, and 0 policy violations.',
+              'In a 2-week shadow with 5 agents, ≥ 50% of drafts sent with no or light edits.',
+              'Stop rule: correctness < 70% or any refund promise → fix data access first.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'thr' },
+              { badge: 'thr', text: '≥ 85% · 0 viol.', ms: 1200 },
+              { say: 1 },
+              { send: ['human', 'thr'], label: 'sent rate', curve: true },
+              { say: 2 },
+              { lit: 'stop' },
+              { badge: 'stop', text: '< 70% → stop', tone: 'err', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The result',
+            lines: ['**88%** correct, 0 violations.', '61% of drafts sent with light edits.'],
+            script: [
+              { say: 0 },
+              { send: ['agent', 'thr'], label: 'replay', curve: true },
+              { badge: 'thr', text: '88% · 0 viol.', tone: 'ok', ms: 1200 },
+              { say: 1 },
+              { badge: 'human', text: '61% sent', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what next?',
+            lines: ['Every threshold passed and the stop rule did not trigger.'],
+            task: {
+              type: 'choose',
+              question: 'What is the next step?',
+              options: [
+                { text: 'Next slice: add the "lost parcel" type with a reship-approval request' },
+                { text: 'Stop and fix data access', why: 'The stop rule triggers only below 70% or on a refund promise.' },
+                { text: 'Let the agent issue refunds automatically', why: 'Autonomy comes later, per action type, when the evidence supports it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Grow one narrow slice at a time; authority widens only with evidence.',
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 5
     {
       heading: 'Success metrics: offline and online',
+      short: {
+        id: 'pilot-pass-rules-decided-first',
+        title: 'Decide pass or fail before you measure',
+        beats: [
+          {
+            type: 'claims',
+            kicker: 'Order-status tickets · rules written in advance',
+            head: 'Did the pilot *pass*?',
+            claims: [
+              {
+                text: 'Correctness ≥ 0.85',
+                ok: true,
+                note: '0.88 on a 300-ticket replay',
+              },
+              {
+                text: '0 guardrail breaches',
+                ok: true,
+                note: '0 refund promises',
+              },
+              {
+                text: 'Cost per resolution ≤ $0.80',
+                ok: true,
+                note: '≈ $0.80',
+              },
+            ],
+            sub: 'Pass on every pre-set rule: **expand to 20 agents**.',
+          },
+          {
+            type: 'flow',
+            kicker: 'Goal → Question → Metric',
+            head: 'Start from the *decision*',
+            steps: [
+              'Goal: resolve order-status tickets faster',
+              'Questions that tell you it is met',
+              'The fewest metrics that answer them',
+              'Each with direction, threshold, window and source',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'Online pilot · 2 weeks · 5 agents',
+            value: 61,
+            suffix: '%',
+            unit: 'of 1,140 eligible tickets: draft sent',
+            stats: [
+              {
+                value: '9 → 4',
+                label: 'median handling, minutes',
+              },
+              {
+                value: '6.1%',
+                label: 'reopen rate vs 5.8% (noise)',
+              },
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Cost per resolved ticket',
+            head: 'Count the *human review* too',
+            rungs: [
+              {
+                label: 'Fully manual reply',
+                amount: 4.5,
+              },
+              {
+                label: 'AI draft + 1.5 min review at $0.50/min',
+                amount: 0.8,
+              },
+            ],
+            unit: '$ per ticket',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Handling time fell 50% in the pilot, but tier-2 escalations doubled. What caught it?',
+            answer: 1,
+            options: [
+              {
+                text: 'An outcome metric',
+                why: 'The outcome metric, handling time, looked great; it hid the problem.',
+              },
+              {
+                text: 'A counter-metric',
+                why: 'It watches for cost pushed elsewhere: the work moved from tier 1 to tier 2.',
+              },
+              {
+                text: 'An offline eval',
+                why: 'Escalations are a real workflow effect only online signals show.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Decide *before* you measure.',
+          sub: 'Write pass, fail and ambiguous rules first, or the threshold drifts to **protect the build**.',
+        },
+      },
       body: `Metrics should answer a decision, not fill a dashboard. Use **Goal → Question → Metric** (GQM, from Basili and colleagues): start from the goal, ask the questions that would tell you it is met, then pick the fewest metrics that answer them.
 
 **Goal:** resolve order-status tickets faster without unsafe actions or unhappy customers.
@@ -517,6 +1002,107 @@ export function decide(metrics: Metric[], values: Record<string, number | undefi
         explanation: 'A counter-metric watches for cost or harm pushed onto another part of the system. Here the work moved from tier 1 to tier 2 instead of disappearing.',
       },
       source: 'Basili, Caldiera and Rombach 1994 (GQM); ai-engineering-from-scratch Phase 14 · 52',
+      steps: {
+        actors: [
+          { id: 'goal', kind: 'document', label: 'Goal', sub: 'faster, safe, happy', x: 110, y: 70 },
+          { id: 'q', kind: 'document', label: 'Questions', sub: 'is the goal met?', x: 340, y: 70 },
+          { id: 'm', kind: 'metric', label: 'Metrics', sub: 'fewest that answer', x: 570, y: 70 },
+          { id: 'off', kind: 'judge', label: 'Offline replay', sub: '300 past tickets', x: 340, y: 230 },
+          { id: 'on', kind: 'user', label: 'Online pilot', sub: '5 agents, 2 weeks', x: 570, y: 230 },
+          { id: 'dec', kind: 'guard', label: 'Decision', sub: 'pass/fail/ambiguous', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Goal → Question → Metric',
+            lines: [
+              'Start from the goal: resolve order-status tickets faster, safely, with happy customers.',
+              'Ask the questions that would tell you it is met.',
+              'Pick the fewest metrics that answer them, each with a threshold, window and source.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'goal' },
+              { say: 1 },
+              { send: ['goal', 'q'] },
+              { say: 2 },
+              { send: ['q', 'm'] },
+              { badge: 'm', text: 'threshold set', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where did the work go?',
+            lines: ['Handling time fell, but escalations to tier 2 doubled.'],
+            task: {
+              type: 'choose',
+              question: 'What does this tell you?',
+              options: [
+                { text: 'The work just moved; a counter-metric caught it' },
+                {
+                  text: 'The feature is a success: handling time fell',
+                  why: 'Cost shifted elsewhere is not a win; that is what a counter-metric is for.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Pair every speed or cost metric with a counter-metric for work shifted elsewhere.',
+          },
+          {
+            kind: 'watch',
+            title: 'Offline first, then online',
+            lines: [
+              'Offline replay: correctness 0.88, 0 refund promises, $0.03 per draft.',
+              'The LLM judge agreed with human labels on 92% of a 100-ticket calibration set.',
+              'Online pilot: drafts sent on 61%; median handling 9 → 4 minutes.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['m', 'off'], curve: true },
+              { badge: 'off', text: '0.88', tone: 'ok', ms: 1000 },
+              { say: 1 },
+              { badge: 'off', text: 'judge 92% agree', ms: 1200 },
+              { say: 2 },
+              { send: ['off', 'on'] },
+              { badge: 'on', text: '9 → 4 min', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: within noise',
+            lines: ['Pass, fail and ambiguous rules were written before measuring.'],
+            task: {
+              type: 'choose',
+              question: 'The improvement is within noise. What do the pre-set rules say?',
+              options: [
+                { text: 'Ambiguous: enlarge the sample, do not ship' },
+                { text: 'Ship it: nothing got worse', why: 'Ambiguous is not pass.' },
+                { text: 'Lower the threshold so it passes', why: 'That is the threshold drifting to protect the build.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Decide pass, fail and ambiguous in advance, or the threshold drifts to protect the build.',
+          },
+          {
+            kind: 'watch',
+            title: 'The decision',
+            lines: [
+              'Pass rules: correctness ≥ 0.85, 0 guardrail breaches, cost per resolution ≤ $0.80.',
+              'Cost per resolved ticket ≈ $0.80, against about $4.50 for a manual reply.',
+              'Pass on every pre-set rule → expand the pilot to 20 agents.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['off', 'dec'], curve: true },
+              { send: ['on', 'dec'] },
+              { say: 1 },
+              { badge: 'on', text: '≈ $0.80', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { badge: 'dec', text: 'pass', tone: 'ok', ms: 1400 },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 6
     {
@@ -627,6 +1213,105 @@ export function chooseStage(q: Q, have: string[]) {
         explanation: 'It has acquired production-level consequence without production-level ownership and controls. Either cut it back to a bounded pilot with an owner, limits and a kill switch, or do the production work.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 53; Fagerholm et al. 2014',
+      steps: {
+        actors: [
+          { id: 'proto', kind: 'server', label: 'Prototype', sub: 'offline, no users', x: 110, y: 70 },
+          { id: 'pilot', kind: 'user', label: 'Pilot', sub: 'named cohort', x: 455, y: 70 },
+          { id: 'prod', kind: 'server', label: 'Production', sub: 'all eligible users', x: 800, y: 70 },
+          { id: 'gate', kind: 'judge', label: 'Gate review', sub: 'expand·revise·stop', x: 280, y: 230 },
+          { id: 'flag', kind: 'guard', label: 'Stage flag', sub: 'config + access', x: 630, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Three learning environments',
+            lines: [
+              '**Prototype**: can this mechanism produce the evidence at all?',
+              '**Pilot**: does it work safely for a bounded, real audience?',
+              '**Production**: can we own it continuously?',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'proto' },
+              { say: 1 },
+              { send: ['proto', 'gate'] },
+              { send: ['gate', 'pilot'], tone: 'ok' },
+              { say: 2 },
+              { send: ['pilot', 'prod'], tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the support-agent timeline',
+            lines: ['Each stage adds consequence only after the last gate passed.'],
+            task: {
+              type: 'order',
+              question: 'Put the stages of the support agent in order.',
+              items: [
+                'Replay 300 tickets offline',
+                'Suggest-only pilot with 5, then 20 agents',
+                'All EU tier-1 agents',
+                'Auto-replies for status-only tickets',
+              ],
+              hint: 'No real users first; customers see auto-replies last.',
+            },
+            solved: 'Offline replay → suggest-only pilot → all EU tier-1 agents → status-only auto-replies.',
+          },
+          {
+            kind: 'watch',
+            title: 'A pilot incident',
+            lines: [
+              'Week 4: a draft quoted a delivery date from a stale carrier event.',
+              'Fix: a freshness check on carrier data plus an eval case.',
+              'The gate passed only after the fix held for 2 weeks.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'pilot', text: 'stale date', tone: 'err', ms: 1200 },
+              { say: 1 },
+              { badge: 'pilot', text: 'freshness check', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { send: ['pilot', 'gate'], label: 'results' },
+              { badge: 'gate', text: 'pass', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: stage drift',
+            lines: ['A prototype quietly got real users, real data and real authority, but no owner.'],
+            task: {
+              type: 'choose',
+              question: 'What makes the stage a real control?',
+              options: [
+                { text: 'A stage flag in config, separate credentials, cohort-only access, stage-tagged telemetry' },
+                { text: 'A "beta" banner in the UI', why: 'A banner is not a control.' },
+                { text: 'More polish before launch', why: 'Stages are learning environments, not levels of polish.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Make the stage visible in the system: config, credentials, access and telemetry.',
+            then: [{ lit: 'flag' }, { send: ['flag', 'pilot'], label: 'cohort only', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Production means owning it',
+            lines: [
+              'Accepting ongoing responsibility is the gate, not shipping the code.',
+              'Added before the switch: p95 latency SLO 8 s, a $1,500/month budget alert.',
+              'A weekly sampled eval of 100 live tickets and an on-call rota; refunds stay human-approved.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['pilot', 'gate'], curve: true },
+              { send: ['gate', 'prod'], label: 'expand', tone: 'ok', curve: true },
+              { say: 1 },
+              { badge: 'prod', text: 'SLO p95 8 s', ms: 1200 },
+              { say: 2 },
+              { badge: 'prod', text: 'on-call', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
     },
     // ---------------------------------------------------------------- 7
     {
@@ -732,6 +1417,113 @@ export function toAction(signal: { kind: string }) {
         explanation: 'An authority problem belongs in the policy layer: the system should be unable to issue or promise the refund without the check. The eval case keeps it from regressing. A prompt line helps but cannot guarantee it.',
       },
       source: 'ai-engineering-from-scratch Phase 14 · 54; Fagerholm et al. 2014',
+      steps: {
+        actors: [
+          { id: 'sig', kind: 'metric', label: 'Signal', sub: 'failure in production', x: 110, y: 150 },
+          { id: 'eval', kind: 'judge', label: 'Eval set', sub: 'regression cases', x: 340, y: 70 },
+          { id: 'ctx', kind: 'retriever', label: 'Context / data', sub: 'freshness checks', x: 570, y: 70 },
+          { id: 'policy', kind: 'guard', label: 'Policy', sub: 'permission · approval', x: 800, y: 70 },
+          { id: 'runtime', kind: 'server', label: 'Runtime', sub: 'timeouts · fallbacks', x: 570, y: 230 },
+          { id: 'backlog', kind: 'document', label: 'Backlog', sub: 'shaped item + owner', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Failures become changes',
+            lines: [
+              'Capture a concrete signal and link it to an outcome, constraint or assumption.',
+              'Find the **earliest layer** that owns the cause and make a bounded change there.',
+              'Verify the failure is gone and nothing else broke.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'sig' },
+              { badge: 'sig', text: 'bad answer', tone: 'err', ms: 1000 },
+              { say: 1 },
+              { send: ['sig', 'eval'] },
+              { send: ['sig', 'ctx'], curve: true },
+              { send: ['sig', 'policy'], curve: true },
+              { send: ['sig', 'runtime'], curve: true },
+              { send: ['sig', 'backlog'], curve: true },
+              { say: 2 },
+              { badge: 'eval', text: 'verified', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: "delivered"?',
+            lines: ['A customer was told a parcel was "delivered"; the carrier had marked it "delivery attempted".'],
+            task: {
+              type: 'pick',
+              question: 'A wrong answer: where does it go first?',
+              answer: 'eval',
+              hints: {
+                ctx: 'A wrong or regressed answer goes to the eval set first.',
+                policy: 'No unsafe action or authority gap here.',
+                runtime: 'Nothing timed out.',
+                backlog: 'This is a wrong answer, not a new need.',
+              },
+            },
+            solved: 'A wrong answer becomes an eval case that fails before the fix and passes after.',
+            then: [{ send: ['sig', 'eval'], label: 'new case', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: drafts that hang',
+            lines: ['Carrier API timeouts made 2% of drafts hang for 30 s.'],
+            task: {
+              type: 'pick',
+              question: 'Which layer owns this fix?',
+              answer: 'runtime',
+              hints: {
+                eval: 'The answers were not wrong; the call hung.',
+                ctx: 'The data was not stale or missing; the call hung.',
+                policy: 'No unsafe action or authority gap here.',
+                backlog: 'This is an operational failure with a clear owning layer, not a new need.',
+              },
+            },
+            solved: 'Runtime: a 4 s timeout and a "status unavailable, a human will follow up" fallback.',
+            then: [{ send: ['sig', 'runtime'], label: '4 s timeout', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Every failure becomes an eval case',
+            lines: [
+              'Another paragraph in the prompt is the **weakest** fix.',
+              'A test, a data check or a permission can make the failure impossible.',
+              'The golden set grew from 300 to 340 cases in a month, almost all from real failures.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'sig', text: 'prompt patch', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { lit: 'eval' },
+              { lit: 'ctx' },
+              { lit: 'policy' },
+              { say: 2 },
+              { send: ['sig', 'eval'], label: 'case', count: 3 },
+              { badge: 'eval', text: '300 → 340', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Retire controls with evidence',
+            lines: [
+              'Each ratchet action has one owner, a priority, a check and a review date.',
+              'Review a control when a lower-level fix replaces it or it blocks more work than it prevents harm.',
+              'Do not delete it just because it feels old.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'backlog', text: 'owner + date', ms: 1200 },
+              { say: 1 },
+              { badge: 'policy', text: 'review', ms: 1200 },
+              { say: 2 },
+              { lit: 'policy' },
+            ],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

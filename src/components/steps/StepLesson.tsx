@@ -15,7 +15,7 @@ function inline(s: string): ReactNode {
 
 interface Props {
   lesson: Lesson;
-  /** shown in the eyebrow, e.g. "RAG §1" */
+  /** shown in the eyebrow, e.g. "RAG section 1" */
   name: string;
   /** every Your turn solved and Finish pressed; `missed` = Your turns not solved on the first try */
   onFinish: (missed: number) => void;

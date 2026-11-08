@@ -10,6 +10,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(root, 'src/content/topics');
 const out = join(root, 'src/content/topicIndex.gen.ts');
 const imp = (p) => import(pathToFileURL(join(root, p)).href);
+const { shortLength } = await imp('src/lib/shorts.ts');
+// Shorts in the index carry only what lists and thumbnails need; the player loads the full Short with its topic
+const shortMeta = (sh) => ({ id: sh.id, title: sh.title, takeaway: sh.takeaway, length: shortLength(sh), beats: [sh.beats.find((b) => b.type !== 'quiz') ?? sh.beats[0]] });
 
 const { PHASES } = await imp('src/content/phases.ts');
 const { sectionForQuestion } = await imp('src/lib/weak.ts');
@@ -30,7 +33,7 @@ const meta = topics.map((t) => ({
   tags: t.tags,
   sections: t.sections.map((s) => ({
     heading: s.heading,
-    ...(s.short && { short: s.short }),
+    ...(s.short && { short: shortMeta(s.short) }),
     ...(s.exercise && { exercise: true }),
     ...(s.steps && { steps: true }),
     ...(s.quickCheck && { quickCheck: { correct: s.quickCheck.correct } }),

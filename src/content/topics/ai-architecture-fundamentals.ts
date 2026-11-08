@@ -56,7 +56,7 @@ Use this anatomy as a checklist whenever you design or review an AI feature: if 
 2. Orchestration: loads prompt "support-answer@v14" from config.
 3. Context: hybrid search returns 5 chunks (2,100 tokens) from "returns-policy-2026.pdf"; order history tool returns purchase date (52 days ago).
 4. Model access: 2,600 input + 180 output tokens, TTFT 420 ms, total 2.1 s.
-5. Guardrails: output schema check passes; citation [returns-policy §3] present.
+5. Guardrails: output schema check passes; citation [returns-policy section 3] present.
 6. Ops: trace shows retrieval 140 ms, model 2.1 s, cost $0.004 (illustrative price). Answer: "No — laptops have a 30-day window; you are at 52 days. You can request a warranty repair instead."`,
       diagram: `   User
     |  HTTPS / SSE
@@ -177,6 +177,119 @@ export function buildRequestPlan(f: Feature): Concern[] {
         explanation: 'The model behaved correctly given its input; the defect is stale or unfiltered context. A bigger model would quote the same wrong policy, and UI disclaimers or blanket blocks hide the bug rather than fix it.',
       },
       source: 'AWS Well-Architected Generative AI Lens; Anthropic — Building effective agents (2024)',
+      steps: {
+        actors: [
+          { id: 'ux', kind: 'user', label: 'Experience', sub: 'UI · auth · stream', x: 110, y: 70 },
+          { id: 'orch', kind: 'agent', label: 'Orchestration', sub: 'prompt, tools, state', x: 340, y: 70 },
+          { id: 'ctx', kind: 'retriever', label: 'Context', sub: 'RAG · memory · tools', x: 570, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Model access', sub: 'retries · fallback', x: 800, y: 70 },
+          { id: 'ops', kind: 'metric', label: 'Ops', sub: 'traces · cost · evals', x: 340, y: 230 },
+          { id: 'guard', kind: 'guard', label: 'Guardrails', sub: 'input / output checks', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'One request, six concerns',
+            lines: [
+              '**Experience** opens the stream and knows who the user is.',
+              '**Orchestration** assembles the prompt and runs the tool loop.',
+              '**Context** brings retrieval, memory and tool results.',
+              '**Model access** makes the provider call, with retries and fallback.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'ux' },
+              { send: ['ux', 'orch'], label: 'question' },
+              { say: 1 },
+              { lit: 'orch' },
+              { send: ['orch', 'ctx'], label: 'retrieve' },
+              { say: 2 },
+              { send: ['ctx', 'orch'], label: '5 chunks', tone: 'ok', curve: true },
+              { say: 3 },
+              { send: ['orch', 'model'], label: 'prompt', curve: true },
+              { lit: 'model' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The model is a stateless function',
+            lines: [
+              'Text in, text out: the model owns **language**.',
+              'Your code owns state, permissions, data freshness and correctness checks.',
+              '**Guardrails** check the output; **Ops** records every step.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'model' },
+              { badge: 'model', text: 'text in, text out', ms: 1200 },
+              { say: 1 },
+              { lit: 'orch' },
+              { say: 2 },
+              { send: ['model', 'guard'], label: 'answer' },
+              { badge: 'guard', text: 'schema passes', tone: 'ok' },
+              { send: ['guard', 'ops'], label: 'span' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline order',
+            lines: ['Use the six concerns as a checklist: a concern with no owner fails in production first.'],
+            task: {
+              type: 'order',
+              question: 'Put the six concerns in the order a request flows through them.',
+              items: ['Experience', 'Orchestration', 'Context', 'Model access', 'Guardrails', 'Ops'],
+              hint: 'The user meets the UI first; the answer is checked after the model call; ops watches it all.',
+            },
+            solved: 'Experience → orchestration → context → model access → guardrails → ops.',
+            then: [
+              { send: ['ux', 'orch'] },
+              { send: ['orch', 'ctx'] },
+              { send: ['orch', 'model'], curve: true },
+              { send: ['model', 'guard'] },
+              { send: ['guard', 'ops'] },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Two rules keep it evolvable',
+            lines: [
+              '**Externalise what changes**: prompt templates, model ids, temperature and retrieval k live in versioned config.',
+              'Roll forward and back without a deploy.',
+              '**Make every step observable**: one trace id from the browser to the provider call.',
+              'Each span records its token counts and latency.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'orch', text: 'prompt @v14', ms: 1200 },
+              { say: 1 },
+              { badge: 'model', text: 'model id: config', ms: 1200 },
+              { say: 2 },
+              { send: ['ux', 'ops'], label: 'trace t-91f', curve: true },
+              { say: 3 },
+              { send: ['ctx', 'ops'], label: '140 ms' },
+              { send: ['model', 'ops'], label: '2.1 s', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who owns the fix?',
+            lines: ['The trace shows retrieval returned the **2023 policy** and the model quoted it faithfully.'],
+            task: {
+              type: 'pick',
+              question: 'The support bot gave a wrong answer from a stale policy. Which concern owns the fix?',
+              answer: 'ctx',
+              hints: {
+                model: 'The model behaved correctly given its input; a bigger model would quote the same wrong policy.',
+                ux: 'A disclaimer in the UI hides the bug rather than fixing it.',
+                guard: 'Blocking all answers about returns hides the bug rather than fixing it.',
+                orch: 'The prompt was fine; the context it was given was stale.',
+              },
+            },
+            solved: 'Stale or unfiltered context is a context/retrieval defect: fix freshness or filtering there.',
+            then: [{ send: ['ctx', 'orch'], label: 'current policy', tone: 'ok', curve: true }, { badge: 'ctx', text: 'fixed here', tone: 'ok' }],
+          },
+        ],
+      },
     },
     {
       heading: 'Layered AI Architecture — experience, orchestration, knowledge, model, platform',
@@ -327,6 +440,113 @@ export function makeRetriever(docs: Doc[]) {
         explanation: 'Orchestration calls a logical alias through an OpenAI-compatible contract, so only layer-4 routing changes (plus re-running evals). Chat models do not affect the embedding index, and prompt tweaks live in versioned config rather than layer code.',
       },
       source: 'AWS Well-Architected Generative AI Lens; Microsoft Azure — Baseline OpenAI end-to-end chat reference architecture',
+      steps: {
+        actors: [
+          { id: 'exp', kind: 'server', label: 'Experience', sub: 'chat UI · copilots', x: 110, y: 70 },
+          { id: 'orch', kind: 'agent', label: 'Orchestration', sub: 'workflows · agents', x: 340, y: 70 },
+          { id: 'know', kind: 'retriever', label: 'Knowledge', sub: 'indexes · ACL filters', x: 570, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Model', sub: 'gateway · routing', x: 800, y: 70 },
+          { id: 'user', kind: 'user', label: 'End user', sub: 'intent + identity', x: 110, y: 230 },
+          { id: 'plat', kind: 'guard', label: 'Platform / gov', sub: 'trace · PII · budgets', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Five layers, calls go down',
+            lines: [
+              'Each layer uses the one below through a **contract**.',
+              'Experience calls `run(task, ctx)`; orchestration calls `search(q, user, filters)`.',
+              'The model layer exposes an OpenAI-compatible `/chat/completions`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'exp'], label: 'intent' },
+              { say: 1 },
+              { send: ['exp', 'orch'], label: 'run(task, ctx)' },
+              { send: ['orch', 'know'], label: 'search(q, user)' },
+              { say: 2 },
+              { send: ['orch', 'model'], label: '/chat/completions', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Why layers: independent change',
+            lines: ['Swap Pinecone for pgvector in the knowledge layer.', 'Swap GPT for Claude in the model layer.', 'The UI does not change.'],
+            script: [
+              { say: 0 },
+              { badge: 'know', text: 'now pgvector', tone: 'ok', ms: 1200 },
+              { say: 1 },
+              { badge: 'model', text: 'now Claude', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { badge: 'exp', text: 'unchanged', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: whose ACLs?',
+            lines: ['Identity flows through every layer, all the way down to retrieval.'],
+            task: {
+              type: 'choose',
+              question: 'Retrieval filters documents by access rights. Whose rights?',
+              options: [
+                { text: "The end user's ACLs" },
+                {
+                  text: "The service account's ACLs",
+                  why: "The service account can read far more than this user; retrieval must filter by the end user's ACLs.",
+                },
+              ],
+              answer: 0,
+            },
+            solved: "End-user identity must reach the retrieval layer, which filters by that user's ACLs.",
+            then: [
+              { send: ['user', 'exp'], label: 'identity' },
+              { send: ['exp', 'orch'], label: 'identity' },
+              { send: ['orch', 'know'], label: 'user ACLs', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Governance is cross-cutting',
+            lines: [
+              'Tracing, PII policy and budgets are enforced in the gateway and retrieval APIs.',
+              'It is not a layer you call optionally, so no team can skip it.',
+              'An audit becomes a single query over gateway logs.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'plat' },
+              { send: ['plat', 'model'], label: 'PII · budgets' },
+              { send: ['plat', 'know'], label: 'policy' },
+              { say: 1 },
+              { badge: 'plat', text: 'always on', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { send: ['model', 'plat'], label: 'logs' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to layer',
+            lines: ['Layers cost seams; seams pay off when things change independently.'],
+            task: {
+              type: 'choose',
+              question: 'When should you split an AI system into these layers?',
+              options: [
+                { text: 'Once you have more than one AI feature or team' },
+                {
+                  text: 'From the first prototype, as separate services',
+                  why: 'A single prototype can collapse layers 2–4 into one file; just keep the seams so you can split later.',
+                },
+                {
+                  text: 'Never: one self-contained stack per feature',
+                  why: 'Each team then embeds its own copy of the docs, uses its own key and logs nothing centrally.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'Layer once there is more than one AI feature or team; before that, keep the seams.',
+          },
+        ],
+      },
     },
     {
       heading: 'Compound AI Systems — many components beat one bigger model',
@@ -462,9 +682,191 @@ export async function generateAndVerify(prompt: string, verify: Verifier, n = 3)
         explanation: 'The failure mode is rule-checkable, so a deterministic verifier plus repair directly targets it. A bigger context window or web retrieval does not address date logic, and higher temperature adds noise.',
       },
       source: 'Zaharia, Khattab et al. — The Shift from Models to Compound AI Systems (BAIR, Feb 2024)',
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: 'Contract', sub: '500 labelled', x: 110, y: 70 },
+          { id: 'ret', kind: 'retriever', label: 'Retriever', sub: '3 relevant sections', x: 340, y: 70 },
+          { id: 'ext', kind: 'llm', label: 'Extractor', sub: 'mid-size model', x: 570, y: 70 },
+          { id: 'val', kind: 'judge', label: 'Validator', sub: 'schema + rule check', x: 800, y: 70 },
+          { id: 'big', kind: 'llm', label: 'Frontier model', sub: 'one big call', x: 340, y: 230 },
+          { id: 'vote', kind: 'judge', label: 'Vote', sub: '3 samples, majority', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The soloist',
+            lines: ['Goal: **95%** field accuracy on 500 labelled contracts.', 'One frontier call reaches **86%** at $0.06 per contract (illustrative).'],
+            script: [
+              { say: 0 },
+              { lit: 'doc' },
+              { say: 1 },
+              { send: ['doc', 'big'], label: '30K tokens' },
+              { badge: 'big', text: '86%', tone: 'miss', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A team instead',
+            lines: [
+              'v1: retrieve 3 relevant sections (30K → 4K tokens) and extract with a mid-size model: **89%**.',
+              'v2: a schema validator and a rule check, with one repair retry: **93%**.',
+              'v3: sample 3 extractions on low-confidence fields and majority-vote: **95.4%** at $0.017.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'ret'] },
+              { send: ['ret', 'ext'], label: '4K tokens' },
+              { badge: 'ext', text: '89%', ms: 1000 },
+              { say: 1 },
+              { send: ['ext', 'val'], label: 'fields' },
+              { send: ['val', 'ext'], label: 'repair', tone: 'miss', curve: true },
+              { badge: 'val', text: '93%', ms: 1000 },
+              { say: 2 },
+              { send: ['val', 'vote'], label: 'low-confidence' },
+              { badge: 'vote', text: '95.4%', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: build the pipeline',
+            lines: ['Each version added one component and measured the gain.'],
+            task: {
+              type: 'order',
+              question: 'Put the compound pipeline in the order a contract flows through it.',
+              items: [
+                'Retrieve the 3 relevant sections',
+                'Mid-size model extracts the fields',
+                'Schema and rule check, one repair retry',
+                'Sample 3 and majority-vote low-confidence fields',
+              ],
+              hint: 'Narrow the input first; checks and voting work on what was extracted.',
+            },
+            solved: 'Retrieve → extract → validate → vote: more accurate and about 3.5× cheaper than the single big call.',
+            then: [{ send: ['doc', 'ret'] }, { send: ['ret', 'ext'] }, { send: ['ext', 'val'] }, { send: ['val', 'vote'], tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why the team wins',
+            lines: [
+              'Sampling plus a verifier is often cheaper than a bigger model.',
+              'A verifier or rule check is easier to audit than model weights.',
+              'Each failure can be attributed to a component.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'vote', text: '$0.017', tone: 'ok', ms: 1000 },
+              { badge: 'big', text: '$0.06', tone: 'miss', ms: 1000 },
+              { say: 1 },
+              { lit: 'val' },
+              { say: 2 },
+              { badge: 'ret', text: 'traceable', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the next move',
+            lines: ['The design space explodes: which retriever, how many samples, which model per step.'],
+            task: {
+              type: 'choose',
+              question: 'A single call misses your quality bar. What do you do?',
+              options: [
+                { text: 'Add one component at a time, justified by evals, and measure' },
+                {
+                  text: 'Add a retriever, a verifier and voting all at once',
+                  why: 'Then you cannot tell which component closed the gap; add one at a time and measure.',
+                },
+                { text: 'Always pay for a 3× bigger model', why: 'Sampling and verification is often cheaper than a bigger model.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Go compound when evals show which extra component fixes the gap, one component at a time.',
+          },
+        ],
+      },
     },
     {
       heading: 'LLM Gateway — one governed front door to every model',
+      short: {
+        id: 'llm-gateway-one-request',
+        title: 'One request through the LLM gateway',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'Team search-ux · model: default-chat',
+            head: 'One governed *front door*',
+            steps: [
+              'Auth: virtual key → team, budget $4,000',
+              'Quota: 2,150 tokens, within 200K TPM',
+              'Safety: PII sanitizer redacts the email',
+              'Routing: alias → primary provider',
+              'Stream back; log tokens, cost, latency',
+            ],
+          },
+          {
+            type: 'counter',
+            kicker: 'search-ux this month',
+            prefix: '$',
+            value: 3910,
+            unit: 'spent of a $4,000 budget',
+            sub: 'Past $4,000 the key reroutes to a **cheaper model** instead of returning 429.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'When a dependency is down',
+            head: 'Safety fails *closed*',
+            items: [
+              {
+                label: 'PII redaction',
+                keep: true,
+              },
+              {
+                label: 'Content filters',
+                keep: true,
+              },
+              {
+                label: 'Cache',
+              },
+              {
+                label: 'Logging',
+              },
+            ],
+            keepLabel: 'FAIL CLOSED',
+            sub: 'Cache and logging can **fail open**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Design rules',
+            prefix: '< ',
+            value: 20,
+            unit: 'ms p99 overhead',
+            sub: 'Stateless, horizontally scaled, **streaming** pass-through.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'The PII-redaction service times out on a request from an HR app. What should the gateway do?',
+            answer: 1,
+            options: [
+              {
+                text: 'Forward it unredacted to stay available',
+                why: 'Sending raw PII to an external provider is a compliance breach.',
+              },
+              {
+                text: 'Fail closed: reject or queue the request',
+                why: 'Redaction is a safety control, and safety controls fail closed.',
+              },
+              {
+                text: 'Serve a semantic-cache hit from another tenant',
+                why: 'Cross-tenant cache serving would be a separate leak.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'One *governed* front door.',
+          sub: 'Auth, quotas, routing, reliability, caching, safety and logging in **one place**.',
+        },
+      },
       body: `An LLM gateway is the **airport security + air-traffic control** for model calls: every request passes one checkpoint that verifies who you are, how much you may spend, where the request should fly, and records the trip.
 
 It is a reverse proxy exposing one (usually OpenAI-compatible) API in front of many providers — OpenAI, Anthropic, Bedrock, Vertex, self-hosted vLLM. Products in this space include **LiteLLM Proxy** (open source: virtual keys, per-team budgets, fallbacks, spend tracking), **Portkey** (routing configs, fallbacks, caching, guardrails) and **Kong AI Gateway** (Kong plugins such as AI Proxy, rate limiting and an AI PII Sanitizer).
@@ -619,6 +1021,108 @@ export async function gatewayChat(virtualKey: string, body: { model: string; mes
         explanation: 'Safety controls fail closed — sending raw PII to an external provider is a compliance breach. Availability features like caching and logging can fail open, but cross-tenant cache serving would be a separate leak, and provider retries do not address the redaction outage.',
       },
       source: 'LiteLLM Proxy docs; Kong AI Gateway / AI PII Sanitizer docs; Portkey AI Gateway docs',
+      steps: {
+        actors: [
+          { id: 'team', kind: 'user', label: 'Team search-ux', sub: 'virtual key', x: 110, y: 150 },
+          { id: 'gw', kind: 'guard', label: 'LLM gateway', sub: 'auth · quota · PII', x: 340, y: 150 },
+          { id: 'prim', kind: 'llm', label: 'Primary model', sub: 'alias default-chat', x: 570, y: 70 },
+          { id: 'cheap', kind: 'llm', label: 'Cheaper model', sub: 'budget fallback', x: 570, y: 230 },
+          { id: 'log', kind: 'metric', label: 'Spend log', sub: 'tokens · cost · trace', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'One governed front door',
+            lines: [
+              'The team calls a logical alias, `default-chat`, with a virtual key.',
+              'The gateway checks who you are, how much you may spend and where to route.',
+              'The response streams back and the trip is logged.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['team', 'gw'], label: 'default-chat' },
+              { say: 1 },
+              { lit: 'gw' },
+              { badge: 'gw', text: 'key → search-ux', ms: 1000 },
+              { send: ['gw', 'prim'], label: 'route' },
+              { say: 2 },
+              { send: ['prim', 'gw'], label: 'stream', tone: 'ok' },
+              { send: ['gw', 'team'], label: 'stream', tone: 'ok' },
+              { send: ['gw', 'log'], label: 'log row', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The example request',
+            lines: [
+              'Auth: monthly budget $4,000, spent $3,910.',
+              'Safety: the PII sanitizer replaces an email address with a placeholder.',
+              'Log: 2,150 tokens, 1.3 s, trace t-77a.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'gw', text: '$3,910 / $4,000', ms: 1200 },
+              { say: 1 },
+              { badge: 'gw', text: 'PII redacted', tone: 'ok', ms: 1200 },
+              { send: ['gw', 'prim'], label: 'clean prompt' },
+              { say: 2 },
+              { send: ['gw', 'log'], label: '2,150 tokens', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: over budget',
+            lines: ['Spend crosses **$4,000** for this key.'],
+            task: {
+              type: 'pick',
+              question: "Where does the budget-fallback rule send this key's next request?",
+              answer: 'cheap',
+              hints: {
+                prim: 'Over budget, the rule reroutes away from the primary model.',
+                team: 'It does not just return 429 to the team; it reroutes, and the team gets an alert.',
+                log: 'The log records calls; it does not serve them.',
+              },
+            },
+            solved: 'Over budget, the gateway reroutes to a cheaper model instead of returning 429, and alerts the team.',
+            then: [{ send: ['team', 'gw'] }, { send: ['gw', 'cheap'], label: 'fallback', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Design rules',
+            lines: [
+              '**Stateless**, horizontally scaled; state lives in Redis/Postgres.',
+              'Overhead under ~10–20 ms p99; **stream** without buffering.',
+              'Gateway config is code, with review and rollback.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'gw' },
+              { say: 1 },
+              { send: ['prim', 'gw'], label: 'tokens', count: 3 },
+              { send: ['gw', 'team'], label: 'tokens', count: 3 },
+              { say: 2 },
+              { badge: 'gw', text: 'config as code', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: fail open or closed?',
+            lines: ['Decide per check what happens when it breaks.'],
+            setup: [{ down: 'gw' }],
+            task: {
+              type: 'choose',
+              question: 'The PII safety check itself is unavailable. What should the gateway do?',
+              options: [
+                { text: 'Fail closed: block the request' },
+                { text: 'Fail open: send the request unchecked', why: 'Safety checks fail closed; only caching and logging fail open.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Safety checks fail closed; cache and logging fail open.',
+            then: [{ down: 'gw', on: false }, { badge: 'gw', text: 'blocked', tone: 'err' }],
+          },
+        ],
+      },
     },
   ],
   codeChallenges: [

@@ -42,6 +42,107 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Data Privacy — residency, retention, training and minimisation',
+      steps: {
+        actors: [
+          { id: 'crm', kind: 'data', label: 'CRM record', sub: 'every field', x: 110, y: 70 },
+          { id: 'app', kind: 'server', label: 'Your app', sub: 'builds the prompt', x: 340, y: 70 },
+          { id: 'vendor', kind: 'llm', label: 'Model provider', sub: 'EU zone · ZDR', x: 800, y: 70 },
+          { id: 'logs', kind: 'data', label: 'Logs & traces', sub: 'owner · retention', x: 110, y: 230 },
+          { id: 'vec', kind: 'vector-db', label: 'Vector store', sub: 'embeddings', x: 340, y: 230 },
+          { id: 'cache', kind: 'cache', label: 'Caches', sub: 'prompt cache', x: 570, y: 230 },
+          { id: 'evals', kind: 'data', label: 'Eval sets', sub: 'samples', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Every prompt is a data transfer',
+            lines: [
+              'Every prompt is a data transfer to a processor.',
+              'Know where it goes, how long it lives there, and who can use it.',
+              'Then send as little as possible.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'vendor'], label: 'prompt' },
+              { say: 1 },
+              { badge: 'vendor', text: 'where? how long?' },
+              { say: 2 },
+              { send: ['crm', 'app'], label: 'only what\'s needed', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: minimise',
+            lines: ['A support reply needs the customer\'s first name, plan and last 3 orders.'],
+            task: {
+              type: 'choose',
+              question: 'What else from the CRM goes into the prompt?',
+              options: [
+                { text: 'Nothing else: minimise fields per purpose' },
+                { text: 'DOB and address, just in case', why: 'Data minimisation: send only what the purpose needs.' },
+                { text: 'The full payment history', why: 'Not needed for the task, so it stays out.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Minimising cut the prompt from ~2,400 to ~900 tokens, with no special-category data.',
+            then: [{ send: ['crm', 'app'], label: '3 fields', tone: 'ok' }, { send: ['app', 'vendor'], label: '~900 tokens', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Ask the vendor',
+            lines: [
+              '**Residency**: processing in your required region.',
+              '**Retention**: Zero Data Retention by agreement for eligible endpoints.',
+              '**Training use**: not by default, with a documented opt-out.',
+              '**Sub-processors** published, and a DPA in the contract.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'vendor', text: 'EU data zone', tone: 'ok' },
+              { say: 1 },
+              { badge: 'vendor', text: 'ZDR', tone: 'ok' },
+              { say: 2 },
+              { badge: 'vendor', text: 'no training', tone: 'ok' },
+              { say: 3 },
+              { badge: 'vendor', text: 'DPA signed', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Your own system leaks more',
+            lines: [
+              'Prompts end up in logs, traces, caches, vector stores, eval sets and analytics.',
+              'Each needs an owner, a retention period and access controls.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['app', 'logs'] },
+              { send: ['app', 'vec'] },
+              { send: ['app', 'cache'] },
+              { send: ['app', 'evals'] },
+              { say: 1 },
+              { badge: 'logs', text: 'owner + TTL', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a deletion request',
+            lines: ['A customer asks to be deleted.'],
+            task: {
+              type: 'choose',
+              question: 'What must the deletion job reach?',
+              options: [
+                { text: 'Chat rows, vector chunks, cache keys and eval samples' },
+                { text: 'Just the source chat row', why: 'Deletion must also reach embeddings, caches and eval sets.' },
+                { text: 'Only the model provider', why: 'Your own stores hold copies too.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Deletion must reach embeddings, caches and eval sets, with an audit record.',
+            then: [{ down: 'logs' }, { down: 'vec' }, { down: 'cache' }, { down: 'evals' }],
+          },
+        ],
+      },
       short: {
         id: 'samsung-code-in-chatgpt',
         title: 'Samsung’s code in ChatGPT',
@@ -262,6 +363,113 @@ console.log(deletionPlan('u42', [
     },
     {
       heading: 'PII Redaction — regex + NER, and reversible tokenisation',
+      steps: {
+        actors: [
+          { id: 'input', kind: 'user', label: 'User message', sub: 'raw PII', x: 110, y: 150 },
+          { id: 'regex', kind: 'tool', label: 'Regex + checksum', sub: 'cards · emails', x: 340, y: 70 },
+          { id: 'ner', kind: 'embedder', label: 'NER', sub: 'names · places', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'sees placeholders', x: 570, y: 150 },
+          { id: 'reply', kind: 'document', label: 'Reply', sub: 'values re-inserted', x: 800, y: 70 },
+          { id: 'vault', kind: 'cache', label: 'Vault', sub: 'token ↔ value, TTL', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Black out, keep the key',
+            lines: [
+              'Before a letter goes to an outside translator, you black out names and account numbers.',
+              'You keep a key, so you can fill them back in later.',
+              'That is reversible tokenisation.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['input', 'regex'] },
+              { send: ['input', 'ner'] },
+              { say: 1 },
+              { lit: 'vault' },
+              { say: 2 },
+              { send: ['regex', 'llm'], label: 'placeholders', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Detect with two techniques',
+            lines: [
+              '**Regex + checksums** for structured IDs: cards (Luhn), IBAN, emails, phones.',
+              '**NER** for contextual PII: people, places, organisations.',
+              'Card → `<CARD_1>`, email → `<EMAIL_1>`, "Lena Kraus" → `<PERSON_1>`.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['input', 'regex'], label: 'card · email' },
+              { badge: 'regex', text: 'Luhn ✓', tone: 'ok' },
+              { say: 1 },
+              { send: ['input', 'ner'], label: 'Lena Kraus' },
+              { say: 2 },
+              { send: ['regex', 'llm'], label: '<CARD_1>' },
+              { send: ['ner', 'llm'], label: '<PERSON_1>' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which detector?',
+            lines: ['"Hi, I\'m Lena Kraus, card 4111…, email lena.k@example.de"'],
+            task: {
+              type: 'pick',
+              question: 'Which detector catches the name "Lena Kraus"?',
+              answer: 'ner',
+              hints: { regex: 'Regex + checksums suit structured IDs; names need context.' },
+            },
+            solved: 'Regex + checksums for structured IDs, NER for contextual PII.',
+            then: [{ send: ['input', 'ner'], label: 'Lena Kraus' }, { badge: 'ner', text: '<PERSON_1>', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The round trip',
+            lines: [
+              'The mapping sits in a vault, per conversation, with a short TTL.',
+              'The LLM reasons over placeholders only.',
+              'Real values are re-inserted into the reply.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['regex', 'vault'], label: 'mapping' },
+              { say: 1 },
+              { lit: 'llm' },
+              { badge: 'llm', text: 'Thanks <PERSON_1>' },
+              { say: 2 },
+              { send: ['llm', 'reply'] },
+              { send: ['vault', 'reply'], label: 'Lena Kraus', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: re-insert the card?',
+            lines: ['The reply mentions `<CARD_1>`.'],
+            task: {
+              type: 'choose',
+              question: 'What do you put back in the reply?',
+              options: [
+                { text: 'Nothing: payment data stays masked even in replies' },
+                { text: 'The full card number', why: 'Cards and IBANs should never be re-inserted into replies.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Some types, like cards and IBANs, are never re-inserted.',
+            then: [{ badge: 'reply', text: 'card stays masked', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Measure recall',
+            lines: [
+              'Over-redaction destroys utility; under-redaction leaks.',
+              'Measure recall per entity type on a labelled sample of your own data.',
+              'Aim for ≥ 95% on high-risk types like card numbers.',
+            ],
+            script: [{ say: 0 }, { say: 1 }, { badge: 'regex', text: 'recall per type' }, { say: 2 }, { badge: 'regex', text: '≥ 95% cards', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** before a letter goes to an outside translator, you black out names and account numbers — but you keep a key so you can fill them back in when the translation returns. That is reversible tokenisation.
 
 **Detection — combine two techniques.**
@@ -427,6 +635,101 @@ console.log(redactStructured('Card 4111 1111 1111 1111, order 1234567890123, mai
     },
     {
       heading: 'Guardrails — input rails, output rails, NeMo Guardrails and Llama Guard',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'User', sub: 'message', x: 110, y: 70 },
+          { id: 'inp', kind: 'guard', label: 'Input rail', sub: 'scope · attacks · PII', x: 340, y: 70 },
+          { id: 'retr', kind: 'guard', label: 'Retrieval rail', sub: 'chunk trust', x: 570, y: 70 },
+          { id: 'dialog', kind: 'guard', label: 'Dialog rail', sub: 'conversation flow', x: 800, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'throws the ball', x: 340, y: 230 },
+          { id: 'exec', kind: 'guard', label: 'Execution rail', sub: 'tool arguments', x: 570, y: 230 },
+          { id: 'out', kind: 'guard', label: 'Output rail', sub: 'safety · grounding', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Bumpers on a bowling lane',
+            lines: ['The model still throws the ball.', 'Rails catch inputs that should never reach it…', '…and outputs that should never reach the user.'],
+            script: [
+              { say: 0 },
+              { lit: 'llm' },
+              { say: 1 },
+              { send: ['user', 'inp'], label: 'message' },
+              { badge: 'inp', text: 'off-topic', tone: 'miss' },
+              { say: 2 },
+              { send: ['llm', 'out'], label: 'response' },
+              { badge: 'out', text: 'unsafe', tone: 'err' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which rail?',
+            lines: ['Rails sit at input, retrieval, dialog, execution and output.'],
+            task: {
+              type: 'pick',
+              question: 'A retrieved chunk carries injected instructions from the wrong tenant. Which rail drops it?',
+              answer: 'retr',
+              hints: {
+                inp: 'Input rails check what the user sent.',
+                out: 'Output rails check the response, after the model has read the chunk.',
+                exec: 'Execution rails validate tool calls.',
+                dialog: 'Dialog rails control the conversation flow.',
+              },
+            },
+            solved: 'Rails exist at input, retrieval, dialog, execution and output.',
+            then: [{ badge: 'retr', text: 'chunk dropped', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The tools',
+            lines: [
+              '**Llama Guard** labels a prompt or response safe/unsafe and names the violated categories.',
+              'It works on input and output by changing the role in its template.',
+              '**NeMo Guardrails** lists rails in config.yml; **Colang** flows define dialog rails.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'inp', text: 'safe / unsafe' },
+              { say: 1 },
+              { badge: 'out', text: 'safe / unsafe' },
+              { say: 2 },
+              { lit: 'dialog' },
+              { badge: 'dialog', text: 'Colang flow' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: cheap first',
+            lines: ['Some checks take 2 ms; LLM-based ones can take hundreds.'],
+            task: {
+              type: 'order',
+              question: 'Order the checks in a rail stack.',
+              items: ['Fast deterministic checks (regex, allowlists)', 'Small classifiers', 'LLM-based checks, only where needed'],
+              hint: 'Spend the slow, expensive checks only on what the cheap ones let through.',
+            },
+            solved: 'Deterministic first, then small classifiers, then LLM checks where needed.',
+          },
+          {
+            kind: 'watch',
+            title: 'Parallel and measured',
+            lines: [
+              'Run input rails **in parallel** with the main call; cancel on a flag.',
+              'Perceived overhead in the example: ≈ 70–90 ms on most turns.',
+              'Every rail needs measured false positives and negatives, and a friendly fallback.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'inp'] },
+              { send: ['user', 'llm'], tone: 'req', curve: true },
+              { badge: 'inp', text: 'in parallel' },
+              { say: 1 },
+              { badge: 'llm', text: '≈ 70–90 ms' },
+              { say: 2 },
+              { badge: 'out', text: 'FP · FN rates' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** guardrails are the bumpers on a bowling lane. The model still throws the ball, but rails around it catch inputs that should never reach it and outputs that should never reach the user.
 
 **Where rails sit.**
@@ -595,6 +898,106 @@ runRails('My account email is a@b.io, why was my card declined?', rails).then(co
     },
     {
       heading: 'Output Validation — schemas, business rules and repair loops',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'structured output', x: 110, y: 70 },
+          { id: 'parse', kind: 'tool', label: 'Parse', sub: 'valid JSON?', x: 340, y: 70 },
+          { id: 'schema', kind: 'guard', label: 'Schema', sub: 'zod / JSON Schema', x: 570, y: 70 },
+          { id: 'rules', kind: 'judge', label: 'Business rules', sub: 'amount ≤ total', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human queue', sub: 'fallback', x: 340, y: 230 },
+          { id: 'sink', kind: 'data', label: 'Sink', sub: 'DB · UI · SQL', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'An unreliable API partner',
+            lines: [
+              'Treat LLM output like data from an unreliable partner.',
+              'Parse it, validate it against a contract, then repair it or fail loudly.',
+              'Never pipe it straight into a database, a UI or another system.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'parse'], label: 'output' },
+              { say: 1 },
+              { send: ['parse', 'schema'] },
+              { send: ['schema', 'rules'] },
+              { say: 2 },
+              { send: ['rules', 'sink'], label: 'checked', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the layers',
+            lines: ['Each layer catches a different kind of mistake.'],
+            task: {
+              type: 'order',
+              question: 'Put the checks in order.',
+              items: ['Parse (is it JSON?)', 'Schema (types, enums, required fields)', 'Business rules (totals, ids, dates)', 'Encode for the sink'],
+              hint: 'You cannot check types before it parses, or business rules before the fields exist.',
+            },
+            solved: 'Parse → schema → business rules → encode for the sink.',
+            then: [
+              { send: ['llm', 'parse'] },
+              { send: ['parse', 'schema'] },
+              { send: ['schema', 'rules'] },
+              { send: ['rules', 'sink'], label: 'escaped', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The repair loop',
+            lines: [
+              'On failure, send the validation errors back with the invalid output.',
+              'Cap it at 1–2 retries.',
+              'Then fall back (default, human review or apology) and log the failure as an eval case.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'schema', text: 'amount: string?', tone: 'err' },
+              { send: ['schema', 'llm'], label: 'error message', tone: 'req', curve: true },
+              { send: ['llm', 'parse'], label: 'fixed' },
+              { say: 1 },
+              { badge: 'llm', text: 'max 2 retries' },
+              { say: 2 },
+              { send: ['rules', 'human'], label: 'still failing', tone: 'miss', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: still validate?',
+            lines: ['Strict native structured outputs took JSON parse failures to 0%.'],
+            task: {
+              type: 'choose',
+              question: 'Do you still validate?',
+              options: [
+                { text: 'Yes: your schema and business rules are stricter than what decoding enforces' },
+                { text: 'No: the JSON always matches the schema', why: 'Still 0.6% failed the zod schema and 0.9% a business rule.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Use native structured outputs, and still validate.',
+          },
+          {
+            kind: 'watch',
+            title: 'Business rules mattered most',
+            lines: [
+              'The model sometimes added shipping twice.',
+              'An amount ≤ order total check caught it before those refunds were paid.',
+              'Even valid output is encoded for its sink: HTML-escape, parameterised SQL.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['schema', 'rules'], label: 'refund' },
+              { badge: 'rules', text: 'amount > total', tone: 'err' },
+              { say: 1 },
+              { send: ['rules', 'human'], label: 'review', tone: 'miss', curve: true },
+              { say: 2 },
+              { send: ['rules', 'sink'], label: 'parameterised', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** treat LLM output like data from an unreliable API partner — parse it, validate it against a contract, and either repair it or fail loudly. Never pipe it straight into a database, a UI or another system.
 
 **Three layers.**
@@ -740,6 +1143,118 @@ console.log(validateCitations(
     },
     {
       heading: 'Differential Privacy — ε, δ, noise and the privacy budget',
+      steps: {
+        actors: [
+          { id: 'dWith', kind: 'data', label: 'Dataset D', sub: 'with you', x: 110, y: 70 },
+          { id: 'dWithout', kind: 'data', label: 'Dataset D′', sub: 'without you', x: 110, y: 230 },
+          { id: 'clamp', kind: 'guard', label: 'Clamp', sub: 'bounds sensitivity Δ', x: 340, y: 150 },
+          { id: 'mech', kind: 'tool', label: 'Mechanism', sub: 'Laplace / Gaussian', x: 570, y: 150 },
+          { id: 'out', kind: 'metric', label: 'Released result', sub: 'true answer + noise', x: 800, y: 70 },
+          { id: 'budget', kind: 'metric', label: 'Privacy budget', sub: 'ε spent so far', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'With you or without you',
+            lines: [
+              'Run the analysis with your record, and without it.',
+              'If the outputs are almost indistinguishable, nobody learns much about you.',
+              'Differential privacy turns that into a provable bound.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['dWith', 'clamp'] },
+              { send: ['dWithout', 'clamp'] },
+              { send: ['clamp', 'mech'] },
+              { say: 1 },
+              { send: ['mech', 'out'], label: 'noisy answer' },
+              { badge: 'out', text: '≈ same either way', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'ε and δ',
+            lines: [
+              '**ε** caps how much one person can shift the odds: e^1 ≈ 2.7, e^10 ≈ 22,000.',
+              'Smaller ε means more privacy and more noise.',
+              '**δ** is a small chance the bound fails: keep it far below 1/n.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'mech', text: 'factor e^ε' },
+              { say: 1 },
+              { badge: 'mech', text: 'ε ↓ noise ↑' },
+              { say: 2 },
+              { badge: 'out', text: 'δ ≪ 1/n' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: Laplace scale',
+            lines: ['Laplace scale b = Δ / ε. A count has Δ = 1.'],
+            task: {
+              type: 'choose',
+              question: 'A count released at ε = 0.1. What is the noise scale b?',
+              options: [{ text: 'b = 10' }, { text: 'b = 0.1', why: 'b = Δ / ε = 1 / 0.1.' }, { text: 'b = 1', why: 'That is the scale at ε = 1.' }],
+              answer: 0,
+            },
+            solved: 'b = 10 (±30 at 95%): fine for 1,203 patients, useless for a ward of 4.',
+            then: [{ send: ['mech', 'out'], label: '± 30' }, { badge: 'out', text: 'ward of 4?', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Clamp before you sum',
+            lines: [
+              'Sensitivity Δ is the most one person can change the true answer.',
+              'A count has Δ = 1.',
+              'A sum or mean needs values **clamped** to a fixed range first, or Δ is unbounded.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'clamp' },
+              { say: 1 },
+              { badge: 'clamp', text: 'count: Δ = 1' },
+              { say: 2 },
+              { send: ['dWith', 'clamp'], label: 'outlier', tone: 'err' },
+              { badge: 'clamp', text: 'clamped', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the budget',
+            lines: ['A dashboard has 20 counters, refreshed daily, at ε = 0.1 each.'],
+            task: {
+              type: 'choose',
+              question: 'Under basic composition, how much ε is spent in a year?',
+              options: [
+                { text: '730' },
+                { text: '0.1', why: 'Every release spends: ε adds up across releases.' },
+                { text: '2', why: 'That is one day (20 × 0.1); multiply by 365.' },
+              ],
+              answer: 0,
+            },
+            solved: 'ε adds up: set a total per dataset, track spend, refuse or batch when it runs out.',
+            then: [{ send: ['mech', 'budget'], label: 'ε spent', tone: 'req', count: 3 }, { badge: 'budget', text: '730 / year', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Free, and not',
+            lines: [
+              '**Post-processing is free**: rounding or charting a DP result never weakens it.',
+              'DP is not encryption or access control.',
+              'Use a vetted library (OpenDP, Google DP) rather than hand-rolled noise.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'out', text: 'rounded: still DP', tone: 'ok' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'mech', text: 'vetted library', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** run an analysis twice, once with your record and once without. If the two outputs are statistically almost indistinguishable, nobody can learn much about *you* from the result, whatever else they already know. Differential privacy (DP) turns that into a provable bound.
 
 **The guarantee.** A randomised algorithm M is **(ε, δ)-DP** if, for any two datasets D and D′ that differ in one person, and any set of outputs S: P[M(D) ∈ S] ≤ e^ε · P[M(D′) ∈ S] + δ.
@@ -858,6 +1373,106 @@ try { b.count(40, 0.1); } catch (e) { console.log((e as Error).message); } // bu
     },
     {
       heading: 'Differential Privacy for LLMs — DP-SGD, memorisation and where it helps',
+      steps: {
+        actors: [
+          { id: 'data', kind: 'data', label: 'Fine-tune data', sub: 'support tickets', x: 110, y: 70 },
+          { id: 'grad', kind: 'tool', label: 'Per-example grad', sub: 'not per batch', x: 340, y: 70 },
+          { id: 'clip', kind: 'guard', label: 'Clip to C', sub: 'L2 norm ≤ C', x: 570, y: 70 },
+          { id: 'noise', kind: 'tool', label: 'Add noise', sub: 'Gaussian σ·C', x: 800, y: 70 },
+          { id: 'canary', kind: 'judge', label: 'Canary test', sub: 'planted secrets', x: 340, y: 230 },
+          { id: 'acct', kind: 'metric', label: 'Accountant', sub: 'total (ε, δ)', x: 570, y: 230 },
+          { id: 'model', kind: 'llm', label: 'Model', sub: 'LoRA adapter', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Models memorise',
+            lines: [
+              'Models memorise training text and can be made to repeat it.',
+              'Repeated text is memorised far more often, so deduplicating cuts the risk too.',
+              'Fine-tune on support tickets and the model may echo one customer\'s ticket to another.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'model'], label: 'train', tone: 'req', curve: true },
+              { badge: 'model', text: 'verbatim recall', tone: 'err' },
+              { say: 1 },
+              { badge: 'data', text: 'deduplicate', tone: 'ok' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one DP-SGD step',
+            lines: ['DP-SGD (Abadi et al. 2016) changes how each training step updates the weights.'],
+            task: {
+              type: 'order',
+              question: 'Put a DP-SGD step in order.',
+              items: ['Compute a gradient per example', 'Clip each to L2 norm ≤ C', 'Sum, then add Gaussian noise σ·C', 'Average and take the step'],
+              hint: 'No single example may pull the weights by more than C, so clip each one before noise goes on the sum.',
+            },
+            solved: 'Per-example gradients → clip to C → add noise σ·C → average and step.',
+            then: [
+              { send: ['data', 'grad'] },
+              { send: ['grad', 'clip'] },
+              { send: ['clip', 'noise'] },
+              { send: ['noise', 'model'], label: 'step', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Accounting and utility',
+            lines: [
+              'A privacy accountant turns σ, the sampling rate and the step count into a total (ε, δ).',
+              'Report ε with δ, the unit (example or user) and the accountant.',
+              'DP works far better fine-tuning a pretrained model (often LoRA) than from scratch.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['noise', 'acct'], label: 'σ · steps' },
+              { badge: 'acct', text: '(ε, δ)' },
+              { say: 1 },
+              { badge: 'acct', text: 'user-level' },
+              { say: 2 },
+              { lit: 'model' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where DP helps',
+            lines: ['DP-SGD protects training data, not text you put in a prompt.'],
+            task: {
+              type: 'choose',
+              question: 'Which of these needs DP-SGD?',
+              options: [
+                { text: 'Fine-tuning on user tickets whose outputs reach other users' },
+                { text: 'RAG over private documents', why: 'The text is in the prompt: use access control, retrieval filters and output rails.' },
+                { text: 'PII in logs and traces', why: 'Use minimisation, redaction and retention there.' },
+              ],
+              answer: 0,
+            },
+            solved: 'DP helps for fine-tuning on user data, aggregate analytics and synthetic data, not for RAG, prompts or logs.',
+          },
+          {
+            kind: 'watch',
+            title: 'Plant canaries',
+            lines: [
+              'Plant unique fake secrets (canaries) in the fine-tuning data.',
+              'Prompt the model with each prefix and see if it completes them.',
+              'In the example: plain fine-tune, 13 of 20 came back; DP-SGD, 0 of 20.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['canary', 'data'], label: 'fake secrets', tone: 'req', curve: true },
+              { say: 1 },
+              { send: ['canary', 'model'], label: 'prefix' },
+              { say: 2 },
+              { badge: 'model', text: 'plain: 13 / 20', tone: 'err' },
+              { badge: 'model', text: 'DP-SGD: 0 / 20', tone: 'ok' },
+            ],
+          },
+        ],
+      },
       body: `**Why LLM teams care.** Models memorise training text and can be made to repeat it. Carlini et al. (2021) extracted verbatim training examples, including names, phone numbers and email addresses, from GPT-2. Nasr et al. (2023) extracted training data from production ChatGPT by prompting it to repeat a word forever until it diverged. Repeated text is memorised far more often, so **deduplicating** training data cuts the risk too (Kandpal et al. 2022). If you fine-tune on support tickets, the model may echo one customer's ticket to another.
 
 **DP-SGD (Abadi et al. 2016).** At each training step:

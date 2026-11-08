@@ -34,6 +34,159 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Fine-Tuning — when to change the weights (vs prompting and RAG)',
+      steps: {
+        actors: [
+          { id: 'task', kind: 'user', label: 'Your task', sub: 'a quality gap', x: 110, y: 70 },
+          { id: 'prompt', kind: 'document', label: 'Prompt', sub: '3–5 examples', x: 340, y: 70 },
+          { id: 'rag', kind: 'retriever', label: 'RAG', sub: 'the right binder', x: 570, y: 70 },
+          { id: 'ft', kind: 'llm', label: 'Fine-tune', sub: 'changes habits', x: 800, y: 70 },
+          { id: 'evals', kind: 'judge', label: 'Eval set', sub: '100–300 cases', x: 340, y: 230 },
+          { id: 'data', kind: 'data', label: 'Training set', sub: '≥ 500–1,000 examples', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Instructions, a binder, or a course',
+            lines: [
+              '**Prompting** is giving a skilled contractor instructions.',
+              '**RAG** is handing them the right binder.',
+              '**Fine-tuning** is a training course: it changes *habits*, not the facts they can look up.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['task', 'prompt'], label: 'instructions' },
+              { say: 1 },
+              { send: ['rag', 'prompt'], label: 'binder', curve: true },
+              { say: 2 },
+              { lit: 'ft' },
+              { badge: 'ft', text: 'tone · format', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the escalation ladder',
+            lines: ['Each rung is cheaper to iterate on than the next.'],
+            task: {
+              type: 'order',
+              question: 'Order the escalation ladder.',
+              items: ['Strong prompt with examples + an eval set', 'Add RAG if failures are "didn\'t know"', 'Fine-tune if failures are "knew but did it wrong"'],
+              hint: 'Start with what you can change in minutes; change the weights last.',
+            },
+            solved: 'Prompt + evals → RAG for missing facts → fine-tune for behaviour, with ≥ 500–1,000 good examples.',
+            then: [{ send: ['task', 'prompt'], label: '1' }, { send: ['prompt', 'rag'], label: '2' }, { send: ['rag', 'ft'], label: '3' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: match the gap',
+            lines: ['Fine-tuning is the right tool when the gap is behavioural.'],
+            task: {
+              type: 'choose',
+              question: 'The model lacks fresh, private facts. Best first tool?',
+              options: [
+                { text: 'RAG' },
+                { text: 'Fine-tune', why: 'Fine-tuning is a poor way to inject knowledge: near-miss hallucinations, and a retrain whenever facts change.' },
+                { text: 'A longer prompt', why: 'Facts that change and need citations call for RAG.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Missing facts → RAG; format drift, tone or jargon → fine-tune; one-off or fast-changing → prompt.',
+            then: [{ send: ['rag', 'prompt'], label: 'fresh facts', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'Where fine-tuning wins',
+            lines: [
+              'It continues gradient descent on your examples, so the weights shift towards your distribution.',
+              'It bakes in a format and tone, with shorter prompts.',
+              'A fine-tuned small model on a narrow task can be **10–50× cheaper** per token.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'ft'], label: 'examples' },
+              { say: 1 },
+              { badge: 'ft', text: 'shorter prompts', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { badge: 'ft', text: '10–50× cheaper', tone: 'ok', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'When to use it',
+            lines: [
+              'Stable, high-volume, narrow tasks: classification, extraction to a schema, house style.',
+              'Success can be measured automatically, and the prompt-only baseline has plateaued.',
+            ],
+            script: [{ say: 0 }, { lit: 'ft' }, { say: 1 }, { send: ['evals', 'ft'], label: 'plateaued', curve: true }],
+          },
+        ],
+      },
+      short: {
+        id: 'fine-tune-for-behaviour-not-facts',
+        title: 'Fine-tune for behaviour, not facts',
+        beats: [
+          {
+            type: 'ladder',
+            kicker: 'The 2026 refund policy bot',
+            head: 'The failures were *missing facts*',
+            rungs: [
+              { label: 'Prompt only (1,200 tokens)', amount: 71 },
+              { label: '+ RAG over the policy docs', amount: 93 },
+            ],
+            unit: '% correct on a 200-question eval',
+            sub: 'A "didn\'t know" gap: **retrieval** fixed it, no training needed.',
+          },
+          {
+            type: 'counter',
+            kicker: 'A different gap: the format',
+            value: 98,
+            suffix: '%',
+            unit: 'follow the 4-part template after SFT',
+            sub: 'Prompting alone: **82%**. SFT of an 8B model on 1,500 approved transcripts.',
+            stats: [
+              { value: '1,200 → 150', label: 'prompt tokens' },
+              { value: '~8×', label: 'cheaper per request' },
+            ],
+          },
+          {
+            type: 'flow',
+            kicker: 'The escalation ladder',
+            head: 'Prompt, then RAG, then *train*',
+            steps: [
+              'Strong prompt, 3–5 examples, eval of 100–300 cases',
+              'Add RAG if failures are "didn\'t know"',
+              'Fine-tune if "knew but did it wrong"',
+              'Only with ≥ 500–1,000 high-quality examples',
+            ],
+          },
+          {
+            type: 'toggles',
+            kicker: 'What the weights should hold',
+            head: 'Habits, not *facts*',
+            items: [
+              { label: 'The 4-part answer template', keep: true },
+              { label: 'House tone and jargon', keep: true },
+              { label: 'Refund policy text that changes quarterly' },
+            ],
+            keepLabel: 'Fine-tune',
+            sub: 'Final design: **RAG for the policy facts + LoRA for the format**.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Product specs change every two weeks and the bot gets them wrong. Best first fix?',
+            answer: 1,
+            options: [
+              { text: 'Fine-tune weekly on the latest spec sheets', why: 'Expensive, and fine-tuned models still hallucinate near-miss facts.' },
+              { text: 'Retrieve the current spec sheet at query time (RAG)', why: 'A fast-changing knowledge gap: retrieval supplies the current, citable spec without retraining.' },
+              { text: 'Raise the LoRA rank so it memorises more', why: 'No rank can know a spec that did not exist at training time.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Fine-tune for *behaviour*; RAG for knowledge.',
+          sub: 'Exhaust prompting with a real eval first; **500–1,000 good examples** beat 50,000 noisy ones.',
+        },
+      },
       body: `**Intuition:** prompting is giving a skilled contractor instructions; RAG is handing them the right binder; fine-tuning is sending them on a training course. The course changes *habits* (tone, format, reasoning style), not the facts they can look up tomorrow.
 
 **Mechanics.** Fine-tuning continues gradient descent on a pretrained model with your own examples, so the weights shift towards your distribution. It is the right tool when the gap is **behavioural**:
@@ -197,6 +350,97 @@ def split_dataset(rows, eval_frac=0.1, seed=0):
     },
     {
       heading: 'Supervised Fine-Tuning (SFT) — chat data, loss masking and training settings',
+      steps: {
+        actors: [
+          { id: 'data', kind: 'data', label: 'Chat JSONL', sub: 'one convo per line', x: 110, y: 70 },
+          { id: 'template', kind: 'document', label: 'Chat template', sub: "model's own tokens", x: 340, y: 70 },
+          { id: 'model', kind: 'llm', label: 'Model', sub: 'imitates the reply', x: 570, y: 70 },
+          { id: 'serve', kind: 'server', label: 'Serving', sub: 'same template', x: 800, y: 70 },
+          { id: 'loss', kind: 'metric', label: 'Loss', sub: 'cross-entropy', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Imitation learning',
+            lines: [
+              'Show the model "here is the conversation, here is the perfect reply" pairs.',
+              'Minimise its surprise (**cross-entropy**) on the perfect reply.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'model'], label: 'conversation', curve: true },
+              { say: 1 },
+              { send: ['model', 'loss'], label: 'predicted reply' },
+              { badge: 'loss', text: 'surprise ↓', tone: 'ok', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Same template, train and serve',
+            lines: [
+              'Each conversation is rendered with the **model\'s own chat template** (its special tokens).',
+              'So you must train and serve with the same template.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['data', 'template'], label: 'messages' },
+              { send: ['template', 'model'], label: 'special tokens' },
+              { say: 1 },
+              { send: ['template', 'serve'], label: 'same template', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: loss masking',
+            lines: ['By default, the language-modelling loss covers every token.'],
+            task: {
+              type: 'choose',
+              question: 'The loss covers the user prompt too. What goes wrong, and what is the fix?',
+              options: [
+                { text: 'The model learns to write user questions; mask the loss to assistant tokens only' },
+                { text: 'Nothing: more tokens means more signal', why: 'Training on the prompt teaches the model to write user questions.' },
+                { text: 'Training diverges; lower the learning rate', why: 'The issue is which tokens get labels, not the learning rate.' },
+              ],
+              answer: 0,
+            },
+            solved: '`assistant_only_loss=True` (or prompt–completion data) sets labels to -100 everywhere except the assistant tokens.',
+            then: [{ send: ['model', 'loss'], label: 'assistant tokens', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Typical settings (8B, 1–10k examples)',
+            lines: [
+              '**1–3 epochs**, watching eval loss.',
+              'LR 1e-5 to 2e-5 for full fine-tuning; 1e-4 to 2e-4 for LoRA.',
+              '**Packing** on for short examples (2–3× throughput); bf16 + gradient checkpointing.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'loss', text: 'watch eval loss', ms: 1000 },
+              { say: 1 },
+              { lit: 'model' },
+              { say: 2 },
+              { send: ['data', 'model'], label: 'packed', count: 3, curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the memory surprise',
+            lines: ["TRL's `SFTTrainer` was given a model name as a string, with no dtype."],
+            task: {
+              type: 'choose',
+              question: 'GPU memory is double what you expected. Why?',
+              options: [
+                { text: 'It loaded the model in float32; pass `model_init_kwargs={"dtype": torch.bfloat16}`' },
+                { text: 'Packing doubles memory', why: 'Packing raises throughput for short examples; the doubling comes from the load dtype.' },
+                { text: 'The chat template adds tokens', why: 'Template tokens are tiny; a float32 load doubles the weights\' memory.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Loaded from a string, SFTTrainer defaults to float32 unless you pass a bf16 dtype.',
+          },
+        ],
+      },
       body: `**Intuition:** SFT is imitation learning. Show the model thousands of "here is the conversation, here is the perfect reply" pairs and minimise its surprise (cross-entropy) on the perfect reply.
 
 **Data format.** The de-facto standard is chat JSONL, one conversation per line:
@@ -338,6 +582,94 @@ Acceptance: decoding the non-masked label tokens yields exactly the assistant co
     },
     {
       heading: 'LoRA — low-rank adapters, rank, alpha and target modules',
+      steps: {
+        actors: [
+          { id: 'w', kind: 'data', label: 'W (frozen)', sub: 'd_out × d_in', x: 110, y: 70 },
+          { id: 'a', kind: 'data', label: 'A', sub: 'r × d_in, random', x: 340, y: 70 },
+          { id: 'b', kind: 'data', label: 'B', sub: 'd_out × r, zero init', x: 570, y: 70 },
+          { id: 'delta', kind: 'metric', label: 'ΔW = (α/r)·B·A', sub: 'the update', x: 800, y: 70 },
+          { id: 'merged', kind: 'llm', label: 'Merged model', sub: 'W + (α/r)BA', x: 570, y: 230 },
+          { id: 'adapters', kind: 'tool', label: 'Adapter files', sub: 'hot-swap per tenant', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The change lives in a few directions',
+            lines: [
+              'A fine-tune\'s change to a big weight matrix is "simple".',
+              'LoRA learns it as **two thin matrices**, A and B.',
+              'The original matrix **W stays frozen**.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'w' },
+              { say: 1 },
+              { send: ['a', 'delta'], label: 'A', curve: true },
+              { send: ['b', 'delta'], label: 'B' },
+              { say: 2 },
+              { badge: 'w', text: 'frozen', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Start exactly at the base model',
+            lines: [
+              '**B starts at zero**, so ΔW = 0 and training starts exactly at the base model.',
+              'Trainable params per matrix: **r · (d_in + d_out)** instead of d_in · d_out.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'b', text: 'zeros', ms: 900 },
+              { badge: 'delta', text: 'ΔW = 0', ms: 1000 },
+              { say: 1 },
+              { lit: 'a' },
+              { lit: 'b' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: rank vs alpha',
+            lines: ['The update is scaled by α/r.'],
+            task: {
+              type: 'choose',
+              question: 'You raise `r` from 16 to 64 but leave `lora_alpha` unchanged. What happens to the update?',
+              options: [
+                { text: 'It shrinks, because the scale α/r gets smaller' },
+                { text: 'It grows, because there is more capacity', why: 'Capacity rises, but the scale α/r falls, so the update shrinks.' },
+                { text: 'Nothing changes', why: 'The scale is α/r, so changing r alone changes it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Raise alpha with r (alpha = r or 2r); rsLoRA uses α/√r to keep large ranks stable.',
+          },
+          {
+            kind: 'watch',
+            title: 'Where to put adapters',
+            lines: [
+              'Targeting **all linear layers** usually beats attention-only (q,v) at the same budget.',
+              'Adapters need a higher LR: 1e-4 to 2e-4.',
+            ],
+            script: [{ say: 0 }, { badge: 'delta', text: 'all-linear', tone: 'ok', ms: 1100 }, { say: 1 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: serving',
+            lines: ['At inference, merge the adapter or keep it separate.'],
+            task: {
+              type: 'pick',
+              question: 'Which option has zero inference overhead?',
+              answer: 'merged',
+              hints: {
+                adapters: 'Separate adapters let you hot-swap per tenant; merging is what removes the overhead.',
+                delta: 'ΔW is the update itself; it has to be folded into W.',
+                w: 'W alone is the base model, without your fine-tune.',
+              },
+            },
+            solved: 'Merge (W + (α/r)BA) for zero overhead; keep adapters separate to hot-swap per tenant.',
+            then: [{ send: ['delta', 'merged'], label: 'merge' }, { send: ['w', 'merged'], label: 'W', curve: true }],
+          },
+        ],
+      },
       body: `**Intuition:** the change a fine-tune makes to a big weight matrix is "simple": it lives in a few directions. LoRA learns only those few directions as two thin matrices and leaves the original matrix frozen.
 
 **Mechanics.** For a frozen weight \`W\` (d_out × d_in), LoRA adds \`ΔW = (α/r) · B · A\` with \`A\` (r × d_in, random init) and \`B\` (d_out × r, **zero init** so training starts exactly at the base model). Trainable params per matrix = **r · (d_in + d_out)** instead of d_in · d_out.
@@ -480,6 +812,103 @@ assert lora_params(llama8b, 8, ["q", "v"]) == 3_407_872`,
     },
     {
       heading: 'QLoRA — 4-bit NF4 base, double quantization and paged optimizers',
+      steps: {
+        actors: [
+          { id: 'base', kind: 'data', label: 'Base (NF4)', sub: '4-bit, frozen', x: 110, y: 70 },
+          { id: 'deq', kind: 'tool', label: 'Dequantise', sub: 'per block, on the fly', x: 340, y: 70 },
+          { id: 'lora', kind: 'llm', label: 'LoRA adapters', sub: 'bf16, trained', x: 570, y: 70 },
+          { id: 'gpu', kind: 'server', label: 'One GPU', sub: '24–80 GB', x: 800, y: 70 },
+          { id: 'scales', kind: 'metric', label: 'Block scales', sub: 'one per 64 weights', x: 110, y: 230 },
+          { id: 'optim', kind: 'cache', label: 'Optimizer state', sub: 'paged to CPU RAM', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Why store the frozen part in 16-bit?',
+            lines: [
+              'LoRA already freezes the base, so QLoRA stores it in **4-bit**.',
+              'Each block is dequantised on the fly for the matmul.',
+              '**bf16 LoRA adapters** are trained on top.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'base' },
+              { say: 1 },
+              { send: ['base', 'deq'], label: 'block' },
+              { say: 2 },
+              { send: ['deq', 'lora'], label: 'matmul' },
+              { badge: 'lora', text: 'trained', tone: 'ok', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'NF4 and double quantization',
+            lines: [
+              '**NF4** puts its 16 levels at quantiles of a normal distribution: weights are roughly normal.',
+              'Blocks of 64 weights share one absmax scale: 0.5 bit/param in FP32.',
+              '**Double quantization** stores the scales in 8-bit: ≈0.127 bit/param.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'base', text: '16 levels', ms: 1000 },
+              { say: 1 },
+              { send: ['scales', 'base'], label: 'absmax' },
+              { say: 2 },
+              { badge: 'scales', text: '≈0.127 bit', tone: 'ok', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a memory spike',
+            lines: ['Long sequences + gradient checkpointing cause a memory spike mid-training.'],
+            task: {
+              type: 'choose',
+              question: 'What does a paged optimizer do?',
+              options: [
+                { text: 'Pages optimizer state to CPU RAM instead of crashing with OOM' },
+                { text: 'Quantises the optimizer state to 4-bit', why: 'Paging moves state to CPU RAM via unified memory; it does not quantise it.' },
+                { text: 'Skips the step', why: 'Paging keeps training going by moving state out of GPU memory.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Paged optimizers use unified memory to spill optimizer state to CPU RAM during spikes.',
+            then: [{ send: ['optim', 'gpu'], label: 'page out', tone: 'ok', curve: true }],
+          },
+          {
+            kind: 'watch',
+            title: 'What it buys',
+            lines: [
+              'An 8B model: ~8–10 GB with QLoRA vs ~20 GB with LoRA vs ~130 GB full fine-tune.',
+              'Set `bnb_4bit_compute_dtype=torch.bfloat16`, or matmuls run in fp32.',
+              'It is ~20–40% slower per step than bf16 LoRA (dequantisation).',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'gpu', text: '8B: ~8–10 GB', tone: 'ok', ms: 1100 },
+              { say: 1 },
+              { send: ['deq', 'lora'], label: 'bf16 matmul' },
+              { say: 2 },
+              { badge: 'deq', text: '20–40% slower', tone: 'miss', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: QLoRA or LoRA?',
+            lines: ['QLoRA is for a model that would not otherwise fit on your GPU.'],
+            task: {
+              type: 'choose',
+              question: 'Memory is not your constraint. Which should you use?',
+              options: [
+                { text: 'Plain bf16 LoRA' },
+                { text: 'QLoRA anyway', why: 'QLoRA is ~20–40% slower per step and adds quantisation error; use it when memory is the constraint.' },
+                { text: 'Full fine-tuning', why: 'Full fine-tuning an 8B model needs ~130 GB, against ~20 GB for bf16 LoRA.' },
+              ],
+              answer: 0,
+            },
+            solved: 'QLoRA when the model would not fit (e.g. 70B on one 80 GB GPU); otherwise bf16 LoRA trains faster.',
+          },
+        ],
+      },
       body: `**Intuition:** LoRA already freezes the base model, so why store the frozen part in 16-bit? QLoRA stores it in 4-bit, dequantises each block on the fly for the matmul, and trains bf16 LoRA adapters on top.
 
 **Three tricks (Dettmers et al. 2023):**
@@ -621,6 +1050,92 @@ for m in ("full", "lora", "qlora"):
     },
     {
       heading: 'PEFT — the adapter family, multi-adapter serving and merging',
+      steps: {
+        actors: [
+          { id: 'users', kind: 'user', label: 'Requests', sub: 'many tenants', x: 110, y: 70 },
+          { id: 'router', kind: 'server', label: 'vLLM', sub: 'routes per request', x: 340, y: 70 },
+          { id: 'base', kind: 'llm', label: 'Base model', sub: 'one copy in GPU', x: 570, y: 70 },
+          { id: 'merged', kind: 'llm', label: 'Merged model', sub: 'merge_and_unload()', x: 800, y: 70 },
+          { id: 'ada', kind: 'tool', label: 'Adapter A', sub: 'tenant A, ~80 MB', x: 570, y: 230 },
+          { id: 'adb', kind: 'tool', label: 'Adapter B', sub: 'tenant B, ~80 MB', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A clip-on lens, not a new camera',
+            lines: [
+              'PEFT trains a **tiny add-on** instead of the whole model.',
+              'LoRA, DoRA, rsLoRA, IA³, prompt/prefix tuning: one family.',
+              'The `peft` library saves them all in one format: config + safetensors.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ada', 'base'], label: 'add-on' },
+              { say: 1 },
+              { badge: 'ada', text: '0.1–1% params', ms: 1100 },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which method first?',
+            lines: ['Each method trains something different, at a different size.'],
+            task: {
+              type: 'choose',
+              question: 'Which PEFT method should you try first?',
+              options: [
+                { text: 'LoRA or DoRA' },
+                { text: 'IA³', why: 'IA³ is very small but weaker on hard tasks.' },
+                { text: 'Prompt tuning', why: 'Prompt tuning is weakest on small models; keep it for very large frozen models you cannot touch.' },
+              ],
+              answer: 0,
+            },
+            solved: 'LoRA/DoRA first; prompt tuning only on very large frozen models.',
+          },
+          {
+            kind: 'watch',
+            title: 'Merge for one adapter',
+            lines: ['One adapter serves all traffic? **Merge** it into a bf16 base: zero latency overhead.'],
+            script: [{ say: 0 }, { send: ['ada', 'merged'], label: 'merge', curve: true }, { badge: 'merged', text: 'zero overhead', tone: 'ok', ms: 1100 }],
+          },
+          {
+            kind: 'watch',
+            title: 'Many adapters, one base',
+            lines: [
+              'Keep **one base** in GPU memory and load many adapters; route per request.',
+              'vLLM and S-LoRA batch different adapters in the same forward pass.',
+              '100 tenants ≈ one base model + 100 × ~80 MB.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['users', 'router'], label: 'tenant A' },
+              { send: ['router', 'base'], label: '+ adapter A' },
+              { send: ['ada', 'base'], label: 'A' },
+              { say: 1 },
+              { send: ['adb', 'base'], label: 'B', curve: true },
+              { say: 2 },
+              { badge: 'base', text: 'one copy', tone: 'ok', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what is shared?',
+            lines: ['100 tenants each need their own variant.'],
+            task: {
+              type: 'pick',
+              question: 'With multi-adapter serving, what stays as a single copy in GPU memory?',
+              answer: 'base',
+              hints: {
+                ada: 'Each tenant has its own small adapter; there are many of these.',
+                adb: 'Each tenant has its own small adapter; there are many of these.',
+                merged: 'A merged model bakes in one adapter, so it suits one adapter serving all traffic.',
+              },
+            },
+            solved: 'One shared base + many ~80 MB adapters, routed per request.',
+            then: [{ send: ['ada', 'base'], label: 'A' }, { send: ['adb', 'base'], label: 'B', curve: true }],
+          },
+        ],
+      },
       body: `**Intuition:** parameter-efficient fine-tuning (PEFT) is a toolbox of ways to change a model's behaviour by training a tiny add-on instead of the whole model, like a clip-on lens rather than a new camera.
 
 | Method | What is trained | Params (8B) | Notes |

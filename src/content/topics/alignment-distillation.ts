@@ -35,6 +35,98 @@ const topic: Topic = {
   sections: [
     {
       heading: 'RLHF — reward models, PPO and the KL leash',
+      steps: {
+        actors: [
+          { id: 'prefs', kind: 'data', label: 'Comparisons', sub: '"A is better than B"', x: 110, y: 70 },
+          { id: 'rm', kind: 'judge', label: 'Reward model', sub: 'frozen, scores', x: 340, y: 70 },
+          { id: 'policy', kind: 'llm', label: 'Policy', sub: 'generates, updated', x: 570, y: 70 },
+          { id: 'ref', kind: 'llm', label: 'Reference', sub: 'frozen π_ref', x: 800, y: 70 },
+          { id: 'sft', kind: 'llm', label: 'SFT model', sub: 'π_SFT, the start', x: 110, y: 230 },
+          { id: 'critic', kind: 'metric', label: 'Value / critic', sub: 'baseline', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Easier to judge than to write',
+            lines: [
+              'Writing the perfect answer is hard; saying which of two is better is easy.',
+              '**SFT** on demonstrations gives the starting policy (also kept frozen as the reference).',
+              'A **reward model** trained on comparisons gives one number per (prompt, response).',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'prefs' },
+              { say: 1 },
+              { send: ['sft', 'policy'], label: 'start', curve: true },
+              { send: ['sft', 'ref'], label: 'frozen copy', curve: true },
+              { say: 2 },
+              { send: ['prefs', 'rm'], label: 'A > B' },
+              { badge: 'rm', text: 'one number', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'PPO: practise against the judge',
+            lines: [
+              'Sample responses from the policy and score them with the reward model.',
+              'Update the policy to maximise `r(x, y) − β · KL(π_θ ‖ π_ref)`.',
+              'A **critic** estimates expected reward to reduce variance.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['policy', 'rm'], label: 'response' },
+              { send: ['rm', 'policy'], label: 'reward', tone: 'ok' },
+              { say: 1 },
+              { send: ['ref', 'policy'], label: 'KL leash', tone: 'miss' },
+              { say: 2 },
+              { send: ['critic', 'policy'], label: 'baseline' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the KL leash',
+            lines: ['Four models sit in memory during PPO.'],
+            task: {
+              type: 'pick',
+              question: 'Which frozen model is the KL anchor?',
+              answer: 'ref',
+              hints: {
+                rm: 'The reward model is frozen too, but it scores responses.',
+                critic: 'The critic is trained; it is the baseline for advantages.',
+                policy: 'The policy is the model being updated.',
+              },
+            },
+            solved: 'The frozen reference π_ref is the KL anchor that keeps the policy close to where it started.',
+            then: [{ send: ['ref', 'policy'], label: 'KL', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What goes wrong',
+            lines: [
+              '**Reward hacking**: the policy finds reward-model blind spots: longer answers, flattery, repeated hedges.',
+              'Plus instability and heavy compute: online generation every step, 4 models.',
+            ],
+            script: [{ say: 0 }, { send: ['policy', 'rm'], label: 'longer + flattery', tone: 'err' }, { badge: 'rm', text: 'high score?!', tone: 'err', ms: 1100 }, { say: 1 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: current practice',
+            lines: ['Your reward is verifiable: unit tests pass or fail.'],
+            task: {
+              type: 'choose',
+              question: 'Which approach fits current practice?',
+              options: [
+                { text: 'GRPO: drop the critic, use the mean reward of a group of 8–64 samples per prompt as the baseline' },
+                { text: 'Classic PPO with a trained critic', why: 'Online RL with verifiable rewards now mostly uses GRPO, which drops the critic.' },
+                { text: 'Offline DPO', why: 'Teams usually start with DPO for subjective preferences; with a verifier, online RL fits.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Verifiable rewards → GRPO (group mean as baseline); subjective preferences → start with offline DPO.',
+            then: [{ down: 'critic' }, { send: ['policy', 'rm'], label: 'group of samples', count: 3 }],
+          },
+        ],
+      },
       body: `**Intuition:** it is hard to *write* the perfect answer, but easy to say which of two answers is better. RLHF turns thousands of "A is better than B" judgments into a reward signal and lets the model practise against it.
 
 **The classic three stages (InstructGPT):**
@@ -168,6 +260,169 @@ print(adv)  # tensor([ 1., -1., -1.,  1.,  0.,  0.,  0.,  0.])`,
     },
     {
       heading: 'DPO — preference optimisation without a reward model',
+      short: {
+        id: 'dpo-loss-starts-at-ln2',
+        title: 'DPO: chosen up, rejected down',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'DPO at initialisation · policy = reference',
+            value: 0.693,
+            decimals: 3,
+            unit: 'loss = ln 2',
+            sub: 'No reward model, no sampling: **two models**, and it trains like SFT.',
+          },
+          {
+            type: 'flow',
+            kicker: 'One preference pair · β = 0.1',
+            head: 'From log-probs to a *margin*',
+            steps: [
+              'Chosen log-ratio: −12.0 − (−12.5) = +0.5',
+              'Rejected log-ratio: −15.0 − (−14.0) = −1.0',
+              'Margin 1.5 × β = 0.15',
+              'Loss = −log σ(0.15) = 0.621',
+            ],
+          },
+          {
+            type: 'spike',
+            kicker: '10k helpfulness pairs · LoRA · β = 0.1',
+            head: 'Judge win rate over SFT: *50% → 63%*',
+            mark: 'rewards/accuracies 0.81',
+            sub: 'After **one epoch**.',
+          },
+          {
+            type: 'claims',
+            kicker: 'Health metrics TRL logs',
+            head: 'Is this run *healthy*?',
+            claims: [
+              {
+                text: 'rewards/accuracies rises to 0.7–0.9',
+                ok: true,
+              },
+              {
+                text: 'rewards/margins rising',
+                ok: true,
+              },
+              {
+                text: 'logps/chosen falls a lot',
+                ok: false,
+                note: 'both responses pushed down',
+              },
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'rewards/accuracies climbs to 0.9, but logps/chosen drops from −120 to −260. What is happening?',
+            answer: 1,
+            options: [
+              {
+                text: 'Overfitting: chosen responses became far more likely',
+                why: 'Chosen likelihood is falling, not rising.',
+              },
+              {
+                text: 'The margin grows by pushing both responses down: likelihood displacement',
+                why: 'DPO only constrains the difference of log-ratios, so it can widen the margin while lowering both likelihoods.',
+              },
+              {
+                text: 'β is too high, so the policy cannot move',
+                why: 'A high β would restrict movement rather than cause a collapse.',
+              },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'DPO only moves the *difference*.',
+          sub: 'Watch **logps/chosen**; add an SFT term on chosen or lower the LR.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'pair', kind: 'data', label: 'Preference pair', sub: 'x, chosen, rejected', x: 110, y: 70 },
+          { id: 'policy', kind: 'llm', label: 'Policy π_θ', sub: 'trained', x: 340, y: 70 },
+          { id: 'ref', kind: 'llm', label: 'Reference π_ref', sub: 'frozen copy', x: 570, y: 70 },
+          { id: 'rm', kind: 'judge', label: 'Reward model', sub: 'not needed', x: 800, y: 70 },
+          { id: 'loss', kind: 'metric', label: 'DPO loss', sub: 'no sampling', x: 340, y: 230 },
+          { id: 'logs', kind: 'metric', label: 'Health metrics', sub: 'logged by TRL', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Skip the judge',
+            lines: [
+              'DPO skips "train a judge, then practise against it".',
+              'It makes the chosen answer *relatively* more likely and the rejected one less,',
+              '…compared with a **frozen copy** of itself.',
+            ],
+            script: [
+              { say: 0 },
+              { down: 'rm' },
+              { say: 1 },
+              { send: ['pair', 'policy'], label: 'chosen ↑ rejected ↓' },
+              { say: 2 },
+              { send: ['ref', 'policy'], label: 'compare', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Trains like SFT',
+            lines: [
+              '`β · log(π_θ/π_ref)` acts as an **implicit reward**.',
+              'Only two models (policy + frozen reference) and **no sampling**.',
+            ],
+            script: [{ say: 0 }, { send: ['policy', 'loss'], label: 'log-probs' }, { send: ['ref', 'loss'], label: 'log-probs' }, { say: 1 }, { badge: 'loss', text: 'like SFT', tone: 'ok', ms: 1100 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the β knob',
+            lines: ['β is typically 0.1 (range 0.01–0.5).'],
+            task: {
+              type: 'choose',
+              question: 'You raise β. What happens?',
+              options: [
+                { text: 'The policy stays closer to the reference' },
+                { text: 'The policy drifts further from the reference', why: 'Higher β means staying closer to the reference.' },
+                { text: 'Training needs a reward model', why: 'DPO never needs a reward model; β only sets how close it stays to the reference.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Higher β = stay closer to the reference.',
+          },
+          {
+            kind: 'watch',
+            title: 'Health metrics',
+            lines: [
+              '`rewards/accuracies` should rise to 0.7–0.9.',
+              '`rewards/margins` should keep rising.',
+              'Watch `logps/chosen`: a big fall means the model is lowering *both* responses.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'logs', text: 'accuracy ↑', tone: 'ok', ms: 900 },
+              { say: 1 },
+              { badge: 'logs', text: 'margin ↑', tone: 'ok', ms: 900 },
+              { say: 2 },
+              { badge: 'logs', text: 'chosen ↓↓', tone: 'err', ms: 1100 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: read the logs',
+            lines: ['Accuracies look healthy, but `logps/chosen` has fallen a lot.'],
+            task: {
+              type: 'choose',
+              question: 'What is happening, and what helps?',
+              options: [
+                { text: 'The model is lowering both responses; add an SFT term or try APO/RPO-style losses' },
+                { text: 'All good: accuracies are rising', why: 'A big fall in logps/chosen is a known DPO failure even when accuracies rise.' },
+                { text: 'β is too high; set it to 0', why: 'The fix for lowering both responses is an SFT term or APO/RPO-style losses.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Falling logps/chosen = the model lowers both answers; add an SFT term or use APO/RPO-style losses.',
+          },
+        ],
+      },
       body: `**Intuition:** DPO skips the "train a judge, then practise against it" loop. It directly nudges the model to make the chosen answer *relatively* more likely and the rejected one *relatively* less likely, compared with a frozen copy of itself.
 
 **Mechanics.** For a pair (prompt x, chosen y_w, rejected y_l):
@@ -324,6 +579,102 @@ assert abs(same - math.log(2)) < 1e-6`,
     },
     {
       heading: 'Knowledge Distillation — logit-level vs sequence-level students',
+      steps: {
+        actors: [
+          { id: 'prompts', kind: 'data', label: 'Prompts', sub: 'many', x: 110, y: 70 },
+          { id: 'teacher', kind: 'llm', label: 'Teacher', sub: 'big, slow', x: 340, y: 70 },
+          { id: 'probs', kind: 'metric', label: 'Soft targets', sub: 'Paris 0.90, Lyon 0.06', x: 570, y: 70 },
+          { id: 'licence', kind: 'guard', label: 'Licence / terms', sub: "check the teacher's", x: 800, y: 70 },
+          { id: 'gens', kind: 'document', label: 'Teacher outputs', sub: 'generated text', x: 340, y: 230 },
+          { id: 'student', kind: 'llm', label: 'Student', sub: 'small, cheap', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'More than the right answer',
+            lines: [
+              '"Paris 0.90, Lyon 0.06, Marseille 0.03" shows which wrong answers are *almost* right.',
+              'A small student imitates a big teacher: most of the quality, a fraction of the cost.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['prompts', 'teacher'], label: 'prompt' },
+              { send: ['teacher', 'probs'], label: 'probabilities' },
+              { say: 1 },
+              { send: ['probs', 'student'], label: 'imitate' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Logit-level (white-box)',
+            lines: [
+              'Soften both distributions with temperature **T = 2–4** to expose "dark knowledge".',
+              'Minimise KL to the teacher, mixed with cross-entropy on the true label.',
+              'Needs teacher logits and a **shared vocabulary/tokenizer**.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'probs', text: 'softened by T', ms: 1000 },
+              { say: 1 },
+              { send: ['probs', 'student'], label: 'KL + CE' },
+              { say: 2 },
+              { badge: 'teacher', text: 'same tokenizer', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Sequence-level',
+            lines: [
+              'The teacher **generates** outputs for many prompts.',
+              'The student is SFT-trained on them: works across tokenizers and with API-only teachers.',
+            ],
+            script: [{ say: 0 }, { send: ['teacher', 'gens'], label: 'generate', count: 3 }, { say: 1 }, { send: ['gens', 'student'], label: 'SFT', tone: 'ok' }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which kind?',
+            lines: ['Your teacher is reachable only through an API, and uses a different tokenizer.'],
+            task: {
+              type: 'choose',
+              question: 'Which distillation can you use?',
+              options: [
+                { text: 'Sequence-level: train the student on teacher generations' },
+                { text: 'Logit-level', why: 'Logit-level needs teacher logits and a shared vocabulary.' },
+                { text: 'On-policy (GKD)', why: 'On-policy needs the teacher to give token-level targets online, at the highest cost.' },
+              ],
+              answer: 0,
+            },
+            solved: 'API teacher or different family → sequence-level; same family with logits → logit-level for max fidelity.',
+            then: [{ send: ['teacher', 'gens'], label: 'outputs' }, { send: ['gens', 'student'], label: 'SFT', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'On-policy: close the last gap',
+            lines: [
+              'The **student** generates; the teacher gives token-level targets on the student\'s own outputs.',
+              'That fixes the exposure-bias gap of offline distillation.',
+            ],
+            script: [{ say: 0 }, { send: ['student', 'teacher'], label: 'own output', curve: true }, { send: ['teacher', 'student'], label: 'token targets', tone: 'ok', curve: true }, { say: 1 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: before you train',
+            lines: ['You plan to train on an API provider\'s outputs.'],
+            task: {
+              type: 'pick',
+              question: 'What must you check first?',
+              answer: 'licence',
+              hints: {
+                probs: 'An API teacher may not expose probabilities; the question is whether you may use its outputs at all.',
+                gens: 'The outputs are what you would train on; first check whether that is allowed.',
+                student: 'The student comes later; check what the teacher\'s terms allow.',
+              },
+            },
+            solved: "Check the teacher's licence/terms: several API providers prohibit using outputs to train competing models.",
+            then: [{ lit: 'licence' }, { badge: 'licence', text: 'read the terms', tone: 'req' }],
+          },
+        ],
+      },
       body: `**Intuition:** a teacher model's probabilities carry more information than the right answer alone. "Paris 0.90, Lyon 0.06, Marseille 0.03" teaches the student which wrong answers are *almost* right. Distillation trains a small student to imitate a big teacher so you get most of the quality at a fraction of the cost.
 
 **Logit-level (white-box) distillation** (Hinton et al. 2015): soften both distributions with temperature T and minimise

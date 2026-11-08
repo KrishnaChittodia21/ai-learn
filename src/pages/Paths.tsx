@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Award, Check, Printer, Shuffle } from 'lucide-react';
 import { PHASES, TOPIC_BY_ID, TOPICS } from '../content';
 import { pathStatus, ROLE_BY_ID, ROLES, type Role } from '../content/roles';
+import { ROLE_SCENARIOS } from '../content/roleScenarios';
 import { CERT_NAME_MAX, getProgress, localDay, setCertName, setRolePath, setStudyPlan, useProgress } from '../lib/progress';
 import { coveredMinutes, fmtDay, newPlan } from '../lib/pace';
 import { practiceLocked, topicStatus } from '../lib/stats';
@@ -12,7 +13,7 @@ import { showToast } from '../lib/toast';
 import { useTopics } from '../lib/useTopic';
 import { RouteSkeleton } from '../components/RouteSkeleton';
 import { InterviewCard } from './Topic';
-import type { Difficulty, TopicMeta } from '../types';
+import type { Difficulty, InterviewQuestion, TopicMeta } from '../types';
 
 type View = 'list' | 'detail' | 'practice' | 'certificate';
 
@@ -51,14 +52,14 @@ function PathList() {
   const p = useProgress();
   return (
     <div className="page ph-page">
-      <header className="ph-head">
+      <header className="ph-head" data-guide="paths-intro">
         <span className="eyebrow">Learning paths</span>
         <h1>
           Pick a <span className="gtext">role</span>
         </h1>
-        <p className="lede">Each path is an ordered route through this course for one kind of AI work. Follow one and Today points you at its next topic.</p>
+        <p className="lede">Each path is an ordered route through this course for one kind of AI work. Follow one and the Dashboard points you at its next topic.</p>
       </header>
-      <ul className="ph-list">
+      <ul className="ph-list" data-guide="paths-list">
         {ROLES.map((r) => {
           const s = pathStatus(p, r);
           return (
@@ -95,7 +96,7 @@ function PathDetail({ role }: { role: Role }) {
 
   const follow = () => {
     setRolePath(following ? undefined : role.id);
-    showToast(following ? 'Stopped following this path' : `Following: ${role.title}`, following ? undefined : 'Today now points at this path’s next topic.', 3000, 'good');
+    showToast(following ? 'Stopped following this path' : `Following: ${role.title}`, following ? undefined : 'The Dashboard now points at this path’s next topic.', 3000, 'good');
   };
   const makeGoal = () => {
     const today = localDay();
@@ -112,7 +113,7 @@ function PathDetail({ role }: { role: Role }) {
         <span className="eyebrow">Learning path · {topics.length} topics</span>
         <h1>{role.title}</h1>
         <p className="lede">{role.summary}</p>
-        <div className="ph-actions">
+        <div className="ph-actions" data-guide="path-actions">
           <button type="button" className={`btn ${following ? '' : 'btn-primary'}`} aria-pressed={following} onClick={follow}>
             {following ? (
               <>
@@ -136,7 +137,7 @@ function PathDetail({ role }: { role: Role }) {
         </div>
       </header>
 
-      <div className="ph-grid">
+      <div className="ph-grid" data-guide="path-detail">
         <section aria-labelledby="ph-route-h">
           <h2 id="ph-route-h" className="ph-h2">
             The route <span className="ph-meta">{s.passed}/{s.total} exams passed</span>
@@ -208,10 +209,18 @@ function PathPractice({ role }: { role: Role }) {
   const open = useTopics(topics.filter((t) => !practiceLocked(p, t, 'interview')).map((t) => t.id));
   if (!open) return <RouteSkeleton />;
   const locked = topics.length - open.length;
-  const all = open.flatMap((t) => t.interviewQuestions.map((q) => ({ q, t })));
-  let items = all.filter((x) => diff === 'all' || x.q.difficulty === diff);
-  if (order) items = [...items].sort((a, b) => order.indexOf(a.q.id) - order.indexOf(b.q.id));
-  if (ratedSnap) items = [...items.filter((x) => !ratedSnap.has(x.q.id)), ...items.filter((x) => ratedSnap.has(x.q.id))];
+  // role scenarios are never behind the study-first lock; they come first, then the topic questions
+  const scen: { q: InterviewQuestion; t?: TopicMeta }[] = (ROLE_SCENARIOS[role.id] ?? []).map((q) => ({ q }));
+  const all = [...scen, ...open.flatMap((t) => t.interviewQuestions.map((q) => ({ q, t })))];
+  const arrange = (list: typeof all) => {
+    let items = list.filter((x) => diff === 'all' || x.q.difficulty === diff);
+    if (order) items = [...items].sort((a, b) => order.indexOf(a.q.id) - order.indexOf(b.q.id));
+    if (ratedSnap) items = [...items.filter((x) => !ratedSnap.has(x.q.id)), ...items.filter((x) => ratedSnap.has(x.q.id))];
+    return items;
+  };
+  const scenItems = arrange(scen);
+  const topicItems = arrange(all.slice(scen.length));
+  const shown = scenItems.length + topicItems.length;
   const rated = all.filter((x) => p.iq[x.q.id]).length;
 
   const shuffle = () => setOrder(shuffled(all.map((x) => x.q.id)));
@@ -226,10 +235,10 @@ function PathPractice({ role }: { role: Role }) {
         <span className="eyebrow">Interview practice · role</span>
         <h1>Practise for {role.title}</h1>
         <p className="lede">
-          Every interview question from this path’s topics. Answer out loud first, then compare and rate yourself; ratings count on the topic pages too. <span className="muted">({rated}/{all.length} rated)</span>
+          Scenario questions for this role, then every interview question from this path’s topics. Answer out loud first, then compare and rate yourself; ratings count on the topic pages too. <span className="muted">({rated}/{all.length} rated)</span>
         </p>
       </header>
-      <div className="ph-toolbar" role="group" aria-label="Filter and order">
+      <div className="ph-toolbar" role="group" aria-label="Filter and order" data-guide="path-practice">
         <div className="ph-chips" role="radiogroup" aria-label="Difficulty">
           {(['all', ...DIFFS] as const).map((d) => (
             <button key={d} type="button" role="radio" aria-checked={diff === d} className={`chip ${diff === d ? 'on' : ''}`} onClick={() => setDiff(d)}>
@@ -246,17 +255,38 @@ function PathPractice({ role }: { role: Role }) {
       </div>
       {locked > 0 && <p className="ph-note">{locked} topic{locked === 1 ? '' : 's'} left out: the study-first lock in Settings opens interview questions once a topic’s lessons are read.</p>}
       <p className="sr-only" aria-live="polite">
-        {items.length} questions shown
+        {shown} questions shown
       </p>
-      {items.length === 0 && <p className="ph-note">No questions match this filter.</p>}
-      {items.map(({ q, t }, i) => (
-        <div key={q.id} className="ph-q">
-          <Link className="ph-q-topic" to={`/topic/${t.id}?tab=interview`}>
-            {t.title}
-          </Link>
-          <InterviewCard q={q} n={i + 1} topicId={t.id} />
-        </div>
-      ))}
+      {shown === 0 && <p className="ph-note">No questions match this filter.</p>}
+      {scenItems.length > 0 && (
+        <section className="ph-scen" aria-labelledby="ph-scen-h" data-guide="path-scenarios">
+          <h2 id="ph-scen-h" className="ph-h2">
+            Role scenarios <span className="ph-meta">{scenItems.length}</span>
+          </h2>
+          {scenItems.map(({ q }, i) => (
+            <div key={q.id} className="ph-q">
+              <InterviewCard q={q} n={i + 1} topicId="" />
+            </div>
+          ))}
+        </section>
+      )}
+      {topicItems.length > 0 && (
+        <section aria-labelledby="ph-tq-h" data-guide="path-questions">
+          <h2 id="ph-tq-h" className="ph-h2">
+            Topic questions <span className="ph-meta">{topicItems.length}</span>
+          </h2>
+          {topicItems.map(({ q, t }, i) => (
+            <div key={q.id} className="ph-q">
+              {t && (
+                <Link className="ph-q-topic" to={`/topic/${t.id}?tab=interview`}>
+                  {t.title}
+                </Link>
+              )}
+              <InterviewCard q={q} n={i + 1} topicId={t?.id ?? ''} />
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
@@ -315,7 +345,7 @@ function PathCertificate({ role }: { role: Role }) {
         )}
       </div>
       {!editing && p.certName && (
-        <article className="ph-cert" aria-label="Certificate">
+        <article className="ph-cert" aria-label="Certificate" data-guide="path-cert">
           <span className="ph-cert-kicker">Learning path certificate</span>
           <p className="ph-cert-line">This records that</p>
           <h1 className="ph-cert-name">{p.certName}</h1>

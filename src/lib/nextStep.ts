@@ -151,7 +151,7 @@ function primary(p: Progress, topics: TopicMeta[], opts: NextStepOptions): NextS
   if (unread >= 0) {
     return {
       kind: 'read',
-      title: `Read §${unread + 1} ${t.sections[unread].heading}`,
+      title: `Read section ${unread + 1}: ${t.sections[unread].heading}`,
       detail: `${t.title}: ${read.size}/${t.sections.length} sections read. Tick "Read" when you finish a section.`,
       href: `${base}?tab=learn&s=${unread}`,
       topic: t,

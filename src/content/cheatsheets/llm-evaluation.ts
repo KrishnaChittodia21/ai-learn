@@ -33,7 +33,7 @@ const sheet: TopicCheatsheet = {
 | 500 | ±2.6 |
 | 1000 | ±1.9 |
 
-From \`±1.96·√(p(1−p)/n)\`. Paired comparisons on the same items need fewer cases than these unpaired bounds suggest.`,
+From \`±1.96·√(p(1−p)/n)\` with p = 0.9 (normal approximation). Paired comparisons on the same items need fewer cases than these unpaired bounds suggest.`,
     },
     {
       title: 'Troubleshooting',

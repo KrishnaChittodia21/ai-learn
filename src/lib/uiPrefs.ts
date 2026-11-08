@@ -32,8 +32,8 @@ export interface UiPrefs {
   backupNudgeDismissedAt?: string;
   /** page guides (src/lib/pageGuides.ts) offered, walked or skipped: each is offered once */
   guidesSeen?: Record<string, true>;
-  /** Read · Steps switch on sections with step lessons (M7); default Read */
-  lessonMode?: 'read' | 'steps';
+  /** sections switched to Steps, by `<topic id>:<section index>`; every other section opens on Read */
+  stepsSections?: Record<string, true>;
   /** Today's tile figures when the learner last left Today (M9): changed tiles count up from these */
   lastSeenFigures?: Record<string, number>;
   /** Prompt Lab bad outputs already typed out once (M9), by lab id */
@@ -117,6 +117,4 @@ export function stableLocation(loc: string): string {
 }
 
 /** the remembered Read · Steps choice (M7): one for every section with steps, Read by default */
-export function useLessonMode(): ['read' | 'steps', (m: 'read' | 'steps') => void] {
-  return [useUiPrefs().lessonMode ?? 'read', (m) => saveUiPrefs({ lessonMode: m })];
-}
+

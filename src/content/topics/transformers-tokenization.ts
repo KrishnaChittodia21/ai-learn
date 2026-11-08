@@ -36,6 +36,112 @@ const topic: Topic = {
   sections: [
     {
       heading: 'Transformer Architecture — the intuition: tokens in, next-token probabilities out',
+      steps: {
+        actors: [
+          { id: 'ids', kind: 'data', label: 'Token ids', sub: '"The capital of…"', x: 110, y: 70 },
+          { id: 'embed', kind: 'embedder', label: 'Embeddings', sub: 'id → learned vector', x: 340, y: 70 },
+          { id: 'blocks', kind: 'llm', label: 'N blocks', sub: 'attention + MLP', x: 570, y: 70 },
+          { id: 'head', kind: 'metric', label: 'Output head', sub: 'logits → softmax', x: 800, y: 70 },
+          { id: 'out', kind: 'document', label: 'Text so far', sub: 'append, ask again', x: 340, y: 230 },
+          { id: 'sampler', kind: 'judge', label: 'Sampler', sub: 'picks one token', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Tokens in, probabilities out',
+            lines: [
+              'Each token id looks up a learned **embedding** vector; position information is mixed in.',
+              'The vectors pass through **N identical blocks** (32 in Llama 3 8B, 12 in GPT-2 small).',
+              'The **output head** turns the last position into logits, one score per vocabulary entry; softmax makes them probabilities.',
+              'A sampler picks a token, it is appended, and the model is asked again.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ids', 'embed'], label: 'ids' },
+              { say: 1 },
+              { send: ['embed', 'blocks'], label: 'vectors' },
+              { say: 2 },
+              { send: ['blocks', 'head'], label: 'last position' },
+              { badge: 'head', text: '" Paris" 0.21', ms: 1000 },
+              { say: 3 },
+              { send: ['head', 'sampler'], label: 'probabilities' },
+              { send: ['sampler', 'out'], label: '" Paris"', tone: 'ok', curve: true },
+              { send: ['out', 'ids'], label: 'append', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Inside one block',
+            lines: [
+              '**Self-attention**: every token looks back at earlier tokens and pulls in what is relevant ("it" looks at "the cat").',
+              'A **causal mask** blocks looking at future tokens.',
+              'The **MLP** then processes what each token gathered; most of the "knowledge" lives here.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'blocks' },
+              { badge: 'blocks', text: 'it → the cat', ms: 1200 },
+              { say: 1 },
+              { badge: 'blocks', text: 'no peeking ahead', tone: 'miss', ms: 1200 },
+              { say: 2 },
+              { badge: 'blocks', text: 'MLP: knowledge', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the pipeline',
+            lines: ['Every token the model writes goes through the same path.'],
+            task: {
+              type: 'order',
+              question: 'Put the decoder-only pipeline in order.',
+              items: ['Token ids look up embeddings', 'N identical blocks (attention + MLP)', 'Output head makes logits', 'Softmax turns logits into probabilities', 'A sampler picks the next token'],
+              hint: 'Ids become vectors first; a token is only picked once there are probabilities.',
+            },
+            solved: 'Ids → embeddings → N blocks → logits → probabilities → a sampled token.',
+            then: [
+              { send: ['ids', 'embed'], label: 'ids' },
+              { send: ['embed', 'blocks'], label: 'vectors' },
+              { send: ['blocks', 'head'], label: 'logits' },
+              { send: ['head', 'sampler'], label: 'probs', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: which family?',
+            lines: ['Encoder-only, decoder-only and encoder–decoder models see text differently.'],
+            task: {
+              type: 'choose',
+              question: 'Which family do chat models and agents (GPT, Claude, Llama) use?',
+              options: [
+                { text: 'Decoder-only: sees only the past' },
+                { text: 'Encoder-only (BERT): sees the whole text both ways', why: 'Encoder-only models are used for embeddings and classification.' },
+                { text: 'Encoder–decoder (T5): input both ways, output left-to-right', why: 'Encoder–decoder models are used for translation and summarisation.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Decoder-only models see only the past and power generation, chat and agents.',
+            then: [{ badge: 'blocks', text: 'only the past', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Why output tokens cost more',
+            lines: [
+              'The 5-token prompt is read in one parallel **prefill** pass (a few ms).',
+              'A 300-token answer needs **300 sequential decode steps**: at 60 tokens/s that is ~5 s.',
+              'So you stream, cap `max_tokens`, and output tokens are priced 3–5× higher than input.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ids', 'blocks'], label: 'prefill: 5 tokens', curve: true, tone: 'ok' },
+              { say: 1 },
+              { send: ['sampler', 'out'], label: 'decode', count: 3, curve: true },
+              { send: ['out', 'ids'], label: 'one at a time', curve: true },
+              { say: 2 },
+              { badge: 'sampler', text: '~5 s', tone: 'miss', ms: 1200 },
+            ],
+          },
+        ],
+      },
       body: `**Intuition:** a transformer is a very large autocomplete. Give it the text so far and it returns a probability for every possible next token. Generate one token, append it, ask again. Everything an LLM does (chat, code, JSON, tool calls) is this loop.
 
 **The pipeline (decoder-only, as in GPT, Claude, Llama, Mistral):**
@@ -223,6 +329,167 @@ console.log(generate([1, 2], toy, { maxNewTokens: 2, eosId: 0 }).finishReason); 
     },
     {
       heading: 'Tokenization — BPE, vocabularies and why tokens are not words',
+      steps: {
+        actors: [
+          { id: 'text', kind: 'document', label: 'Your text', sub: '"strawberry"', x: 110, y: 70 },
+          { id: 'tok', kind: 'chunker', label: 'Tokenizer', sub: 'applies BPE merges', x: 340, y: 70 },
+          { id: 'ids', kind: 'data', label: 'Token ids', sub: 'st · raw · berry', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'sees ids, not letters', x: 800, y: 70 },
+          { id: 'corpus', kind: 'data', label: 'Huge corpus', sub: 'count adjacent pairs', x: 340, y: 230 },
+          { id: 'bill', kind: 'metric', label: 'Billing + limits', sub: 'counted in tokens', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Ids, not letters',
+            lines: [
+              'The model never sees letters or words, only integer ids for **sub-word pieces**.',
+              'Common chunks (" the", " Paris") get their own entry; rare words are spelled from smaller pieces.',
+              'Anything at all can fall back to raw bytes.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['text', 'tok'], label: 'strawberry' },
+              { send: ['tok', 'ids'], label: '3 ids' },
+              { send: ['ids', 'llm'], label: 'ids' },
+              { say: 1 },
+              { badge: 'ids', text: '" Paris" = 1 id', tone: 'ok', ms: 1000 },
+              { say: 2 },
+              { badge: 'tok', text: 'raw bytes', ms: 1000 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'How BPE builds the vocabulary',
+            lines: [
+              'Start from the 256 possible bytes.',
+              'Count the most frequent adjacent pair in a huge corpus and merge it into a new token.',
+              'Repeat ~100K–200K times; at runtime the tokenizer applies the same merges to your text.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'corpus' },
+              { say: 1 },
+              { send: ['corpus', 'tok'], label: 'top pair → merge', count: 3 },
+              { say: 2 },
+              { badge: 'tok', text: '~200K tokens', ms: 1000 },
+              { send: ['text', 'tok'], label: 'your text' },
+              { send: ['tok', 'ids'], label: 'same merges', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: BPE training',
+            lines: ['The vocabulary is learned by merging, over and over.'],
+            task: {
+              type: 'order',
+              question: 'Put the BPE training steps in order.',
+              items: ['Start from the 256 possible bytes', 'Count the most frequent adjacent pair', 'Merge it into a new token', 'Repeat ~100K–200K times'],
+              hint: 'You need a starting alphabet before you can count pairs of it.',
+            },
+            solved: 'Bytes first, then count the top pair, merge it, and repeat until the vocabulary is big enough.',
+            then: [{ send: ['corpus', 'tok'], label: 'merge', count: 3 }],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the strawberry quirk',
+            lines: ['Ask a model to count the r\'s in "strawberry" and it can trip up.'],
+            task: {
+              type: 'choose',
+              question: 'Why do letter counting and reversing strings trip models up?',
+              options: [
+                { text: 'The model sees "st|raw|berry", not s-t-r-a-w-b-e-r-r-y' },
+                { text: 'The tokenizer drops some letters', why: 'Nothing is dropped: the letters are grouped into pieces the model sees as ids.' },
+                { text: 'The context window is too small', why: 'One word fits easily; the issue is what the model sees, pieces instead of letters.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Models see sub-word ids, so letter-level tasks are hard; " strawberry" with a leading space is a single token.',
+            then: [{ send: ['ids', 'llm'], label: 'st · raw · berry' }, { badge: 'llm', text: 'no letters', tone: 'miss' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Count tokens with the right tokenizer',
+            lines: [
+              '**Billing and limits** are in tokens: context window, `max_tokens`, rate limits, price per 1M.',
+              'English: 1 token ≈ 4 characters ≈ 0.75 words. Code, JSON, numbers and non-Latin scripts take more.',
+              'The same sentence is 7 tokens in English and 10 in Hindi (`o200k_base`).',
+              'Each model family has its own tokenizer: never use `text.length / 4` when the budget is tight.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['ids', 'bill'], label: 'tokens' },
+              { lit: 'bill' },
+              { say: 1 },
+              { badge: 'ids', text: '≈ 4 chars each', ms: 1000 },
+              { say: 2 },
+              { badge: 'bill', text: '7 vs 10 tokens', tone: 'miss', ms: 1200 },
+              { say: 3 },
+              { badge: 'tok', text: 'right tokenizer', tone: 'ok', ms: 1200 },
+            ],
+          },
+        ],
+      },
+      short: {
+        id: 'strawberry-is-three-tokens',
+        title: 'Strawberry is three tokens',
+        beats: [
+          {
+            type: 'flow',
+            kicker: '"strawberry" · o200k_base',
+            head: 'The model never sees *letters*',
+            steps: ['strawberry: 10 characters', 'Tokenizer: applies the BPE merges', 'st · raw · berry: 3 token ids', 'Model: sees ids, not s-t-r-a-w-b-e-r-r-y'],
+            sub: 'With a leading space, " strawberry" is a **single token**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'How BPE builds the vocabulary',
+            value: 256,
+            unit: 'possible bytes to start from',
+            sub: 'Count the most frequent adjacent pair, **merge it** into a new token, repeat ~100K–200K times.',
+          },
+          {
+            type: 'ladder',
+            kicker: '"Your order will arrive by tomorrow." · o200k_base',
+            head: 'Same sentence, *different bill*',
+            rungs: [{ label: 'English', amount: 7 }, { label: 'Hindi', amount: 10 }, { label: 'Japanese', amount: 11 }],
+            unit: 'tokens',
+            sub: 'Under the older cl100k_base the Hindi was **31 tokens**: the bigger vocabulary cut its cost ~3×.',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Where tokens trip models up',
+            head: 'Letter-level work: *move it to code*',
+            items: [{ label: 'Counting letters' }, { label: 'Reversing strings' }, { label: 'Long arithmetic' }, { label: 'Do it in code, give the model the result', keep: true }],
+            keepLabel: 'CODE',
+          },
+          {
+            type: 'claims',
+            kicker: 'Fitting a tight token budget',
+            head: 'Count with the *right tokenizer*',
+            claims: [
+              { text: 'text.length / 4', ok: false, note: 'a rule of thumb, not a budget' },
+              { text: 'A chars/4 or cl100k estimate for another model', ok: false, note: 'can be 10–30% off' },
+              { text: 'The target model\'s tokenizer, plus a 10–15% margin', ok: true },
+            ],
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'A model keeps saying "strawberry" has 2 r\'s. Why?',
+            answer: 0,
+            options: [
+              { text: 'It gets a few sub-word tokens, never the letters', why: 'The model receives token ids like st|raw|berry, so letter-level facts must be inferred indirectly.' },
+              { text: 'Temperature is too high', why: 'Lower temperature makes the wrong answer more consistent, not correct.' },
+              { text: 'The context window is too small', why: 'One word fits easily; the issue is what the model sees: pieces, not letters.' },
+            ],
+          },
+        ],
+        takeaway: {
+          head: 'Models see *ids*, not letters.',
+          sub: 'Count with **the exact tokenizer** of the model you call, and leave a safety margin.',
+        },
+      },
       body: `**Intuition:** the model never sees letters or words, only integer ids for **sub-word pieces**. Think of a phrasebook: common chunks (" the", " Paris", "ization") get their own entry; rare words are spelled from smaller pieces; anything at all can fall back to raw bytes.
 
 **How BPE (byte-pair encoding) builds the vocabulary:** start from the 256 possible bytes, count the most frequent adjacent pair in a huge corpus, merge it into a new token, repeat ~100K–200K times. At runtime the tokenizer applies the same merges to your text.

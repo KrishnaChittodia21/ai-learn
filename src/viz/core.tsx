@@ -249,16 +249,13 @@ export function VizFrame({
           {pad(i + 1)}
           <span>/{pad(total)}</span>
         </span>
-        <label className="viz-speed">
-          <span>Speed</span>
-          <select value={speed} onChange={(e) => stepper.setSpeed(Number(e.target.value))}>
-            {[0.5, 1, 2, 4].map((s) => (
-              <option key={s} value={s}>
-                {s}×
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="viz-speed" role="radiogroup" aria-label="Playback speed">
+          {[0.5, 1, 2, 4].map((s) => (
+            <button key={s} type="button" role="radio" aria-checked={speed === s} className={speed === s ? 'on' : ''} onClick={() => stepper.setSpeed(s)}>
+              {s === 0.5 ? '½' : s}×
+            </button>
+          ))}
+        </div>
       </div>
     </figure>
   );

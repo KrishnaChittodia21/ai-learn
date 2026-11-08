@@ -32,6 +32,111 @@ const topic: Topic = {
   sections: [
     {
       heading: 'LLM Agents — the perceive / reason / act loop',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Customer', sub: 'order arrived broken', x: 110, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'reason: next action', x: 340, y: 70 },
+          { id: 'runtime', kind: 'agent', label: 'Runtime', sub: 'runs the loop', x: 570, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'Tools', sub: 'get_order · refund', x: 800, y: 70 },
+          { id: 'ctx', kind: 'data', label: 'Context', sub: 'goal + observations', x: 340, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A chatbot answers; an agent acts',
+            lines: [
+              '**Perceive**: the context holds the goal and every previous observation.',
+              '**Reason**: the model decides the next action, or that it is finished.',
+              '**Act**: the runtime executes the chosen tool.',
+              '**Observe**: the result is appended to the context, and the loop repeats.',
+            ],
+            script: [
+              { send: ['user', 'ctx'], label: 'goal', curve: true },
+              { say: 0 },
+              { send: ['ctx', 'llm'], label: 'context' },
+              { say: 1 },
+              { lit: 'llm' },
+              { send: ['llm', 'runtime'], label: 'get_order' },
+              { say: 2 },
+              { send: ['runtime', 'tools'], label: 'call' },
+              { say: 3 },
+              { send: ['tools', 'ctx'], label: 'observation', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: one lap',
+            lines: ['The loop repeats until the model is done or a budget runs out.'],
+            task: {
+              type: 'order',
+              question: 'Put one lap of the agent loop in order.',
+              items: ['Perceive', 'Reason', 'Act', 'Observe'],
+              hint: 'Read the context, decide, run the tool, then append what came back.',
+            },
+            solved: 'Perceive → reason → act → observe, then around again.',
+            then: [
+              { send: ['ctx', 'llm'], label: 'context' },
+              { send: ['llm', 'runtime'], label: 'action' },
+              { send: ['runtime', 'tools'], label: 'call' },
+              { send: ['tools', 'ctx'], label: 'result', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'The refund, step by step',
+            lines: [
+              'get_order: delivered, $84.50. get_refund_policy: 30-day window.',
+              '15 days ≤ 30, so eligible: issue_refund creates R-77.',
+              'No tool call → final reply. 4 model calls, 3 tool calls.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['runtime', 'tools'], label: 'get_order' },
+              { send: ['runtime', 'tools'], label: 'policy' },
+              { say: 1 },
+              { send: ['runtime', 'tools'], label: 'issue_refund', tone: 'ok' },
+              { badge: 'tools', text: 'R-77', tone: 'ok' },
+              { say: 2 },
+              { send: ['llm', 'user'], label: 'final reply', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'When the loop ends',
+            lines: [
+              'The model replies without a tool call: done.',
+              'Or the runtime hits a **stop condition**: a step, token, cost or time budget.',
+              'Stop conditions are owned by code, not the model.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'user'], label: 'no tool call', tone: 'ok' },
+              { say: 1 },
+              { send: ['runtime', 'tools'], label: 'call', count: 3 },
+              { badge: 'runtime', text: 'budget hit', tone: 'err' },
+              { say: 2 },
+              { lit: 'runtime' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: workflow or agent?',
+            lines: ['A hard-coded workflow needs 1 model call and 1.5 s instead of 4 calls and 6 s.'],
+            task: {
+              type: 'choose',
+              question: 'When is the agent worth its extra latency and cost?',
+              options: [
+                { text: 'When you cannot predict the number or order of steps' },
+                { text: 'Always: more autonomy is more capable', why: 'Agents trade latency, cost and predictability for flexibility; use the least autonomy that works.' },
+                { text: 'For a fixed path like classify → retrieve → answer', why: 'A fixed path is a workflow: your code picks the steps.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Start with a single call or a workflow; add autonomy only when evals show it pays.',
+            then: [{ badge: 'llm', text: 'picks the path' }],
+          },
+        ],
+      },
       short: {
         id: 'what-an-agent-actually-does',
         title: 'What an agent actually does',
@@ -289,6 +394,109 @@ export async function runAgent(goal: string, decide: Decide, execute: Execute, m
     },
     {
       heading: 'AI Agent Architecture — model, tools, memory, runtime and guardrails',
+      steps: {
+        actors: [
+          { id: 'llm', kind: 'llm', label: 'Model', sub: 'proposes', x: 110, y: 70 },
+          { id: 'runtime', kind: 'agent', label: 'Runtime', sub: 'disposes', x: 340, y: 70 },
+          { id: 'guard', kind: 'guard', label: 'Guardrails', sub: 'schema · policy', x: 570, y: 70 },
+          { id: 'tools', kind: 'tool', label: 'Tools', sub: '8 tools', x: 800, y: 70 },
+          { id: 'human', kind: 'user', label: 'Human approver', sub: 'approval card', x: 570, y: 230 },
+          { id: 'trace', kind: 'metric', label: 'Traces', sub: 'tokens · cost · steps', x: 110, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'The model proposes, the runtime disposes',
+            lines: [
+              'The model only emits **requests**.',
+              'Deterministic code decides whether and how they run.',
+              'Every call passes schema, permission and budget checks first.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'runtime'], label: 'get_customer' },
+              { say: 1 },
+              { lit: 'runtime' },
+              { say: 2 },
+              { send: ['runtime', 'guard'], label: 'check' },
+              { send: ['guard', 'tools'], label: 'read: auto-run', tone: 'ok' },
+              { send: ['tools', 'runtime'], label: 'observation', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A refund over the limit',
+            lines: [
+              'issue_refund(249) is destructive and over the $200 limit.',
+              'The runtime pauses and posts an approval card to a human.',
+              'The model sees "PENDING_APPROVAL" as an observation.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['llm', 'runtime'], label: 'issue_refund(249)' },
+              { send: ['runtime', 'guard'], label: 'check' },
+              { badge: 'guard', text: 'over $200', tone: 'err' },
+              { say: 1 },
+              { send: ['guard', 'human'], label: 'approval card' },
+              { say: 2 },
+              { send: ['runtime', 'llm'], label: 'PENDING_APPROVAL', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where the rule lives',
+            lines: ['"Never refund more than $200 without approval."'],
+            task: {
+              type: 'pick',
+              question: 'Where does this rule become a guarantee rather than a suggestion?',
+              answer: 'guard',
+              hints: {
+                llm: 'In the system prompt the rule is only a suggestion.',
+                tools: 'The tool just does what it is asked; the check runs before it.',
+                trace: 'Traces record what happened; they do not block anything.',
+              },
+            },
+            solved: 'Policy in code: the rule in the tool executor is a guarantee.',
+            then: [{ send: ['runtime', 'guard'], label: '249' }, { badge: 'guard', text: 'needs approval', tone: 'err' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Errors are observations too',
+            lines: [
+              'Zod rejected 2.1% of tool calls in the first week, mostly amounts like "$249".',
+              'Each rejection came back as an error observation.',
+              'The model fixed it on the next step 94% of the time.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['runtime', 'guard'], label: 'amount: "$249"' },
+              { badge: 'guard', text: 'rejected', tone: 'err' },
+              { say: 1 },
+              { send: ['runtime', 'llm'], label: 'error', tone: 'err' },
+              { say: 2 },
+              { send: ['llm', 'runtime'], label: 'amount: 249', tone: 'ok' },
+              { send: ['runtime', 'trace'], label: 'logged', curve: true },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the agent UI',
+            lines: ['Tool names, descriptions and schemas are the agent-computer interface.'],
+            task: {
+              type: 'choose',
+              question: 'Which tool design makes wrong use hard?',
+              options: [
+                { text: 'Require absolute file paths' },
+                { text: 'Accept any path and guess what was meant', why: 'Guessing makes wrong use easy; make the schema unambiguous.' },
+                { text: 'Return the full raw output every time', why: 'Results should be concise and structured.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Treat tools as UI: unambiguous names and schemas, examples, concise structured results.',
+            then: [{ send: ['llm', 'runtime'], label: '/abs/path', tone: 'ok' }],
+          },
+        ],
+      },
       body: `If the loop is the heartbeat, the architecture is the body around it. A useful mental model: **the model proposes, the runtime disposes**. The LLM only emits *requests*; deterministic code decides whether and how they run.
 
 **Core components**

@@ -36,6 +36,119 @@ const topic: Topic = {
     // ---------------------------------------------------------------- 1
     {
       heading: 'Parent Document Retrieval — search small, return big',
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: 'Document', sub: 'policy manual', x: 110, y: 70 },
+          { id: 'split', kind: 'chunker', label: 'Splitter', sub: 'parents → children', x: 340, y: 70 },
+          { id: 'children', kind: 'vector-db', label: 'Child index', sub: 'children + parent_id', x: 570, y: 70 },
+          { id: 'docstore', kind: 'data', label: 'Docstore', sub: 'parents, key–value', x: 800, y: 70 },
+          { id: 'user', kind: 'user', label: 'Query', sub: 'contractors expense?', x: 110, y: 230 },
+          { id: 'map', kind: 'retriever', label: 'Map + dedupe', sub: 'child → parent_id', x: 340, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'reads the parents', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Search small, return big',
+            lines: [
+              '**Small chunks** embed precisely but give the LLM too little context.',
+              '**Big chunks** carry context, but their embeddings blur many ideas together.',
+              'Parent retrieval: index small *children*; when one matches, return its larger *parent*.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'children' },
+              { say: 1 },
+              { lit: 'docstore' },
+              { say: 2 },
+              { send: ['user', 'children'], label: 'search', curve: true },
+              { send: ['children', 'map'], label: 'child hit', curve: true },
+              { send: ['docstore', 'llm'], label: 'parent', tone: 'ok', curve: true },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Index time',
+            lines: [
+              'Split each document into parents (e.g. 1,500–2,000 tokens, or whole sections).',
+              'Split each parent into children (100–400 tokens); embed **only the children**, with `parent_id` in metadata.',
+              'Store the parents in a docstore (Redis, Postgres, S3).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'split'], label: 'parents' },
+              { say: 1 },
+              { send: ['split', 'children'], label: 'children', count: 3 },
+              { badge: 'children', text: 'parent_id', ms: 1200 },
+              { say: 2 },
+              { send: ['split', 'docstore'], label: 'parents', curve: true },
+              { lit: 'docstore' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: where do parents live?',
+            lines: ['Only the children are embedded; the parents are fetched by id.'],
+            task: {
+              type: 'pick',
+              question: 'Which part keeps the full parent sections?',
+              answer: 'docstore',
+              hints: {
+                children: 'The vector index holds only the small child chunks, each tagged with its `parent_id`.',
+                map: 'Map + dedupe only turns child hits into parent ids; it does not store text.',
+                split: 'The splitter creates parents and children at index time; it does not keep them.',
+              },
+            },
+            solved: 'Parents sit in a key–value docstore; children in the vector index point to them by `parent_id`.',
+            then: [{ send: ['split', 'docstore'], label: 'parents', curve: true }, { lit: 'docstore' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Query time: map, dedupe, fetch',
+            lines: [
+              'Search the children (top 20–50).',
+              'Map each hit to its parent id and **dedupe**: two children from one section = one parent.',
+              'Fetch the parents and keep the top few, by best child score.',
+              'Watch the budget: five 2K-token parents is already 10K tokens.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'children'], label: 'search', curve: true },
+              { send: ['children', 'map'], label: 'children', count: 3, curve: true },
+              { say: 1 },
+              { badge: 'map', text: '3 hits → 2 parents', ms: 1400 },
+              { say: 2 },
+              { send: ['map', 'docstore'], label: 'parent ids', curve: true },
+              { send: ['docstore', 'llm'], label: 'parents', tone: 'ok', curve: true },
+              { say: 3 },
+              { badge: 'llm', text: '3.1K tokens', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why return the parent?',
+            lines: [
+              'Child hit: "Home internet: up to $50/month reimbursable for remote employees."',
+              'Its parent section goes on: "Contractors are not eligible for any reimbursement under section 4."',
+            ],
+            task: {
+              type: 'choose',
+              question: '"Can contractors expense home internet?" What does the LLM answer with the parent in context?',
+              options: [
+                { text: 'No: the $50/month allowance covers remote employees only; contractors are excluded under section 4' },
+                {
+                  text: 'Yes, up to $50/month',
+                  why: 'That is the answer from the child chunk alone; the exclusion lives in the rest of the parent section.',
+                },
+                { text: 'It cannot tell, so it refuses', why: 'The parent section states the exclusion explicitly, so the answer is in context.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The child finds the spot precisely; the parent brings the conditions and exceptions the answer needs.',
+            then: [{ send: ['docstore', 'llm'], label: 'parent', tone: 'ok', curve: true }, { badge: 'llm', text: 'No (section 4)', tone: 'ok' }],
+          },
+        ],
+      },
       body: `Chunk size has a built-in conflict: **small chunks** embed precisely (one idea per vector) but give the LLM too little context; **big chunks** carry context but their embeddings blur many ideas together. **Parent document retrieval** resolves it: index small *child* chunks, but when one matches, return its larger *parent*. It is like finding the right sentence via a book's index, then reading the whole page.
 
 **Mechanics**
@@ -51,9 +164,9 @@ LangChain ships this as \`ParentDocumentRetriever\` (child splitter, optional pa
 
 Child chunk hit (180 tokens, cosine 0.86): "Home internet: up to $50/month reimbursable for remote employees."
 
-Returned alone, the LLM answers "Yes, up to $50/month". Wrong: the parent section (1,600 tokens) continues: "...Contractors are not eligible for any reimbursement under §4; see the Contractor Agreement."
+Returned alone, the LLM answers "Yes, up to $50/month". Wrong: the parent section (1,600 tokens) continues: "...Contractors are not eligible for any reimbursement under section 4; see the Contractor Agreement."
 
-With parent retrieval, the top 3 children map to **2 unique parents** (two children came from the same section), 3.1K tokens in total, and the answer becomes "No. The $50/month allowance covers remote employees only; contractors are excluded under §4." Recall of the answer-bearing text on a 200-question policy set: 74% → **88%** (illustrative).`,
+With parent retrieval, the top 3 children map to **2 unique parents** (two children came from the same section), 3.1K tokens in total, and the answer becomes "No. The $50/month allowance covers remote employees only; contractors are excluded under section 4." Recall of the answer-bearing text on a 200-question policy set: 74% → **88%** (illustrative).`,
       diagram: `INDEX TIME                              QUERY TIME
  document                                query ─► search CHILD vectors
    ├─ parent P1 (1.6K tok) ──► docstore            │ top 20 children
@@ -192,6 +305,109 @@ export function splitParentsAndChildren(docId: string, text: string, parentToken
     // ---------------------------------------------------------------- 2
     {
       heading: 'Sentence-Window Retrieval — match a sentence, read its neighbourhood',
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: 'Annual report', sub: '40K sentences', x: 110, y: 70 },
+          { id: 'parser', kind: 'chunker', label: 'Sentence parser', sub: 'window_size = 3', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'Sentence index', sub: 'one vector each', x: 570, y: 70 },
+          { id: 'user', kind: 'user', label: 'Query', sub: 'Q3 operating margin?', x: 110, y: 230 },
+          { id: 'swap', kind: 'retriever', label: 'Window swap', sub: 'sentence → window', x: 340, y: 230 },
+          { id: 'rerank', kind: 'reranker', label: 'Reranker', sub: 'judges the window', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'reads the window', x: 800, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Embed a sentence, keep its neighbours',
+            lines: [
+              'One node per sentence; **only the sentence** is embedded.',
+              'The surrounding sentences are stored in metadata (`window`): `window_size = 3` → 3 before and 3 after.',
+              'Like a highlighter: find the key sentence, then read the lines around it.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'parser'], label: 'sentences', count: 3 },
+              { send: ['parser', 'index'], label: 'one vector each', count: 3 },
+              { say: 1 },
+              { badge: 'index', text: 'meta: window', ms: 1400 },
+              { say: 2 },
+              { lit: 'index' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Query: hit, then swap in the window',
+            lines: [
+              'The query matches one sentence: "Operating margin improved to 18.4%."',
+              'Before generation, the hit is replaced by its window from metadata.',
+              'With `window_size = 3` the LLM sees ~7 sentences of context.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'index'], label: 'search', curve: true },
+              { send: ['index', 'swap'], label: 'sentence hit', curve: true },
+              { say: 1 },
+              { lit: 'swap' },
+              { badge: 'swap', text: 's1 … s7', ms: 1200 },
+              { say: 2 },
+              { send: ['swap', 'rerank'], label: 'window' },
+              { send: ['rerank', 'llm'], label: 'window', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the order of operations',
+            lines: ['Rerank *after* the replacement, so the reranker judges the full window.'],
+            task: {
+              type: 'order',
+              question: 'Put the query path in order.',
+              items: ['Retrieve the best sentences', 'Replace each with its window', 'Rerank the windows', 'Send the windows to the LLM'],
+              hint: 'The reranker should judge what the LLM will actually read: the window, not the lone sentence.',
+            },
+            solved: 'Retrieve sentences → swap in windows → rerank windows → LLM.',
+            then: [
+              { send: ['index', 'swap'], label: 'sentence', curve: true },
+              { send: ['swap', 'rerank'], label: 'window' },
+              { send: ['rerank', 'llm'], label: 'window', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: what the window adds',
+            lines: [
+              'Hit: "Operating margin improved to 18.4%."',
+              'Next sentences: "This excludes a one-off $40M restructuring charge. Including it, margin was 16.5%."',
+            ],
+            task: {
+              type: 'choose',
+              question: 'With `window_size = 2`, what does the LLM answer for "What was the operating margin in Q3?"',
+              options: [
+                { text: '18.4% excluding a one-off $40M charge (16.5% including it)' },
+                { text: '18.4%', why: 'That is the answer from the lone sentence; the window adds the caveat right after it.' },
+                { text: '16.5%', why: 'That figure includes the one-off charge; the window gives both numbers, so the answer can state both.' },
+              ],
+              answer: 0,
+            },
+            solved: 'The sentence makes the match precise; the window gives the caveats around it.',
+            then: [{ send: ['rerank', 'llm'], label: 'window', tone: 'ok' }, { badge: 'llm', text: '18.4% (16.5%)', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The cost: many more vectors',
+            lines: [
+              'One vector per sentence: 40K sentence vectors vs 3K for 400-token chunks (~13x).',
+              'Best for dense factual prose; avoid it for tables, code and lists, where sentence splitting breaks structure.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['parser', 'index'], label: 'sentence', count: 3 },
+              { badge: 'index', text: '~13x vectors', tone: 'miss', ms: 1400 },
+              { say: 1 },
+              { badge: 'doc', text: 'prose, not tables', ms: 1400 },
+            ],
+          },
+        ],
+      },
       body: `Sentence-window retrieval is the finest-grained form of small-to-big: embed **individual sentences** for maximum precision, then, before generation, replace each hit with a **window** of surrounding sentences. Think of using a highlighter to find the key sentence and then reading the lines around it.
 
 **Mechanics (LlamaIndex)**
@@ -327,6 +543,202 @@ Example: hits \`[10, 12, 40]\`, windowSize 2, total 100 → \`[[8, 14], [38, 42]
     // ---------------------------------------------------------------- 3
     {
       heading: 'Multi-Hop Retrieval — following the chain across documents',
+      short: {
+        id: 'multi-hop-incident-to-on-call',
+        title: 'Multi-hop: incident to on-call lead',
+        beats: [
+          {
+            type: 'flow',
+            kicker: 'Who is on call for the service behind INC-4471?',
+            head: 'No single chunk holds the *answer*',
+            steps: [
+              'Hop 1: "INC-4471 root cause"',
+              'Postmortem: a bad config push to ledger-sync',
+              'Bridge entity = ledger-sync',
+              'Hop 2: "ledger-sync on-call lead"',
+              'Catalogue: on-call lead Priya N.',
+            ],
+            sub: 'Answer with **both citations**.',
+          },
+          {
+            type: 'counter',
+            kicker: 'Single-shot retrieval with the original question',
+            value: 37,
+            prefix: '#',
+            unit: 'rank of the ledger-sync catalogue entry',
+            sub: 'The question never names **ledger-sync**, so the hop-2 document barely resembles it.',
+          },
+          {
+            type: 'ladder',
+            kicker: '80 similar bridge questions · illustrative',
+            head: 'Two hops nearly *double* accuracy',
+            rungs: [
+              {
+                label: 'Single-shot',
+                amount: 41,
+              },
+              {
+                label: 'Two hops, top-2 bridges',
+                amount: 78,
+              },
+            ],
+            unit: '% correct',
+          },
+          {
+            type: 'toggles',
+            kicker: 'Practical rules',
+            head: 'Keep the chain *bounded*',
+            items: [
+              {
+                label: 'Cap hops at 2–3',
+                keep: true,
+              },
+              {
+                label: 'Beam the top-2 bridges per hop',
+                keep: true,
+              },
+              {
+                label: 'Keep a cited evidence trail per hop',
+                keep: true,
+              },
+              {
+                label: 'Take the bridge from the LLM\'s memory',
+              },
+              {
+                label: 'Guess when a hop has no supported answer',
+              },
+            ],
+            keepLabel: 'Do',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Why does single-shot dense retrieval often fail on bridge questions?',
+            options: [
+              {
+                text: 'Embeddings cannot represent named entities',
+                why: 'They can; the problem is that the question never names the bridge entity.',
+              },
+              {
+                text: 'The hop-2 document is about an entity the question never mentions',
+                why: 'Right: only after hop 1 reveals ledger-sync can you write a query that matches it.',
+              },
+              {
+                text: 'Vector databases return one document per query',
+                why: 'They return the top-k; the hop-2 document simply ranks low (#37 here).',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Follow the *bridge*, one hop at a time.',
+          sub: 'Retrieve, extract the bridge entity from evidence, retrieve again; cap hops at **2–3**.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: 'on-call for INC-4471?', x: 110, y: 150 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'one query per hop', x: 340, y: 150 },
+          { id: 'pm', kind: 'document', label: 'Postmortem', sub: 'INC-4471', x: 570, y: 70 },
+          { id: 'cat', kind: 'document', label: 'Service catalog', sub: 'ledger-sync entry', x: 570, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'bridge + answer', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'No single chunk has the answer',
+            lines: [
+              'Some facts live in **different documents linked by a bridge entity**.',
+              'Multi-hop: retrieve for hop 1, extract the bridge entity, retrieve again with it.',
+              'Like a detective following one lead to the next.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'pm' },
+              { lit: 'cat' },
+              { say: 1 },
+              { send: ['user', 'retriever'], label: 'question' },
+              { send: ['retriever', 'pm'], label: 'hop 1' },
+              { send: ['pm', 'llm'], label: 'passage' },
+              { send: ['llm', 'retriever'], label: 'bridge', curve: true },
+              { send: ['retriever', 'cat'], label: 'hop 2' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Hop 1: find the bridge',
+            lines: ['Retrieve "INC-4471 root cause" → postmortem: "a bad config push to **ledger-sync**".', 'The bridge entity is `ledger-sync`.'],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'pm'], label: 'INC-4471 root cause' },
+              { send: ['pm', 'llm'], label: 'postmortem chunk', tone: 'ok' },
+              { say: 1 },
+              { badge: 'llm', text: 'ledger-sync', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the hop-2 query',
+            lines: ['Single-shot retrieval with the original question left the catalog entry at rank 37.'],
+            task: {
+              type: 'choose',
+              question: 'What should hop 2 search for?',
+              options: [
+                { text: '"ledger-sync on-call lead"' },
+                {
+                  text: 'The original question again',
+                  why: 'That is single-shot retrieval: it returned the postmortem and generic on-call pages, not the ledger-sync entry.',
+                },
+                { text: '"INC-4471 on-call lead"', why: 'The incident is not the link to the owner; the bridge entity `ledger-sync` is.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Each hop queries with the bridge entity found in the previous hop.',
+            then: [
+              { send: ['llm', 'retriever'], label: 'ledger-sync', curve: true },
+              { send: ['retriever', 'cat'], label: 'hop 2' },
+              { send: ['cat', 'llm'], label: 'Priya N.', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Hop 2 and an evidence trail',
+            lines: [
+              'Hop 2 → catalog: "ledger-sync — on-call lead: **Priya N.**"',
+              'Answer with **both citations**, one per hop.',
+              'On 80 similar bridge questions: 41% single-shot → 78% with two hops (illustrative).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'cat'], label: 'ledger-sync on-call lead' },
+              { send: ['cat', 'llm'], label: 'catalog chunk', tone: 'ok' },
+              { say: 1 },
+              { send: ['llm', 'user'], label: 'Priya N. [1][2]', tone: 'ok', curve: true },
+              { say: 2 },
+              { badge: 'llm', text: '41% → 78%', tone: 'ok', ms: 1400 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: a hop comes back empty',
+            lines: ['Practical rules: cap hops (2–3) and keep a per-hop evidence trail.'],
+            task: {
+              type: 'choose',
+              question: 'Hop 2 finds no supported answer. What should the system do?',
+              options: [
+                { text: 'Stop and answer "unanswerable"' },
+                { text: 'Keep hopping until something matches', why: 'Cap hops at 2–3; endless hopping wastes time and drifts off topic.' },
+                { text: 'Answer from hop 1 alone', why: 'Hop 1 only found the bridge; without hop 2 the answer is unsupported.' },
+              ],
+              answer: 0,
+            },
+            solved: 'When a hop has no supported answer, stop with "unanswerable" rather than guess.',
+            then: [{ down: 'cat' }, { badge: 'llm', text: 'unanswerable', tone: 'miss' }, { down: 'cat', on: false }],
+          },
+        ],
+      },
       body: `Some questions need facts that live in **different documents linked by an intermediate entity**: "In which city was the founder of the company that acquired Figma born?" No single chunk contains the answer. **Multi-hop retrieval** follows the chain: retrieve for hop 1, extract the *bridge entity*, retrieve again with it. Like a detective following one lead to the next.
 
 **Two classic question types (HotpotQA, Yang et al. 2018)**
@@ -471,6 +883,116 @@ export function verifyBridge(entity: string, passages: Passage[]): { ok: boolean
     // ---------------------------------------------------------------- 4
     {
       heading: 'Iterative Retrieval — retrieve, reason, retrieve again',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Question', sub: '2026 pricing change?', x: 110, y: 150 },
+          { id: 'retriever', kind: 'retriever', label: 'Retriever', sub: 'query per loop', x: 340, y: 70 },
+          { id: 'corpus', kind: 'vector-db', label: 'Corpus', sub: 'pricing, contracts', x: 570, y: 70 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'sufficient? gap?', x: 340, y: 230 },
+          { id: 'budget', kind: 'metric', label: 'Budget', sub: 'max 2–4 loops', x: 570, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Retrieve, reason, retrieve again',
+            lines: [
+              'Retrieve, let the model reason over what it has, decide what is missing, retrieve again.',
+              'Stop when the evidence is enough or a budget runs out.',
+              'How a researcher works: read, notice a gap, search again.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'retriever'], label: 'question' },
+              { send: ['retriever', 'corpus'], label: 'query' },
+              { send: ['corpus', 'llm'], label: 'chunks', curve: true },
+              { send: ['llm', 'retriever'], label: 'gap query' },
+              { say: 1 },
+              { lit: 'budget' },
+              { say: 2 },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Iteration 1: find the gap',
+            lines: [
+              'Query = the question → "2026 pricing update: list prices +8% for all tiers."',
+              'Sufficiency check: *missing: legacy contract terms*.',
+              'Next query: "legacy enterprise contract price protection clause".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'corpus'], label: 'question' },
+              { send: ['corpus', 'llm'], label: '+8% all tiers', curve: true },
+              { say: 1 },
+              { badge: 'llm', text: 'missing: legacy', tone: 'miss', ms: 1400 },
+              { say: 2 },
+              { send: ['llm', 'retriever'], label: 'price protection' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the production loop',
+            lines: ['The sufficiency question is asked with structured output.'],
+            task: {
+              type: 'order',
+              question: 'Put one run of the loop in order.',
+              items: [
+                'Retrieve for the question',
+                'Ask: is the evidence sufficient? If not, what query fills the gap?',
+                'Retrieve with the gap query',
+                'Answer with all evidence, deduplicated',
+              ],
+              hint: 'The model can only name a gap after it has read the first evidence; the answer comes last, from everything gathered.',
+            },
+            solved: 'Retrieve → check sufficiency → retrieve for the gap → answer with all deduplicated evidence.',
+            then: [
+              { send: ['retriever', 'corpus'], label: 'query' },
+              { send: ['corpus', 'llm'], label: 'chunks', curve: true },
+              { send: ['llm', 'retriever'], label: 'gap query' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Iterations 2–3: enough, stop',
+            lines: [
+              'Iteration 2: "Contracts signed before 2024 include price protection until renewal."',
+              'Iteration 3: "Customers with price protection keep current rates until renewal." Sufficient.',
+              'Answer: "No, not until renewal." 3 iterations, 9 unique chunks, ~2.4 s; single-shot said "Yes, +8%".',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['retriever', 'corpus'], label: 'legacy clause' },
+              { send: ['corpus', 'llm'], label: 'price protection', curve: true },
+              { say: 1 },
+              { send: ['retriever', 'corpus'], label: 'exceptions' },
+              { send: ['corpus', 'llm'], label: 'until renewal', curve: true },
+              { badge: 'llm', text: 'sufficient', tone: 'ok', ms: 1200 },
+              { say: 2 },
+              { send: ['llm', 'user'], label: 'No, not until renewal', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when to stop',
+            lines: ['Stop on *sufficient*, on max iterations (2–4), on a token budget, or when a new query returns nothing new.'],
+            task: {
+              type: 'choose',
+              question: 'Iteration 2 returns only chunk ids you already have. What next?',
+              options: [
+                { text: 'Stop and answer with the evidence gathered' },
+                {
+                  text: 'Rephrase and loop again until something new appears',
+                  why: 'No novel chunk ids is itself a stop signal; more loops just add ~0.5–2 s each.',
+                },
+                { text: 'Throw away the evidence and start over', why: 'The accumulated evidence is what the answer is built from; keep it.' },
+              ],
+              answer: 0,
+            },
+            solved: 'No novel chunk ids means the loop has stalled: stop and answer.',
+            then: [{ lit: 'budget' }, { badge: 'budget', text: 'stop', tone: 'ok' }, { send: ['llm', 'user'], label: 'answer', tone: 'ok' }],
+          },
+        ],
+      },
       body: `Multi-hop has a known structure; many questions do not. **Iterative retrieval** loops: retrieve, let the model reason over what it has, decide what is still missing, retrieve again, until there is enough evidence or a budget runs out. It is how a researcher works: read, notice a gap, search again.
 
 **Research patterns**
@@ -622,6 +1144,106 @@ export function isNovel(
     // ---------------------------------------------------------------- 5
     {
       heading: 'Adaptive Retrieval — deciding whether and how much to retrieve',
+      steps: {
+        actors: [
+          { id: 'user', kind: 'user', label: 'Query', sub: 'mixed traffic', x: 110, y: 150 },
+          { id: 'router', kind: 'judge', label: 'Router', sub: 'classifier, ~15 ms', x: 340, y: 150 },
+          { id: 'none', kind: 'llm', label: 'LLM only', sub: 'no retrieval', x: 570, y: 70 },
+          { id: 'single', kind: 'retriever', label: 'Single-step', sub: 'hybrid + rerank', x: 570, y: 230 },
+          { id: 'multi', kind: 'agent', label: 'Multi-step', sub: 'iterative / decompose', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'Triage every query',
+            lines: [
+              'Not every question needs retrieval, or the heavy multi-step path.',
+              'A router picks per query: **no retrieval**, **single-step** or **multi-step**.',
+              'Triage: a nurse does not send every patient to surgery.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'router'], label: 'query' },
+              { say: 1 },
+              { send: ['router', 'none'], label: '"thanks!"' },
+              { send: ['router', 'single'], label: 'refund window?' },
+              { send: ['router', 'multi'], label: 'legacy plans?' },
+              { say: 2 },
+              { lit: 'router' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: route a hard question',
+            lines: ['"Which customers on legacy plans are affected by the 2026 change?"'],
+            task: {
+              type: 'pick',
+              question: 'Where should the router send this query?',
+              answer: 'multi',
+              hints: {
+                none: 'It is about your private, changing data, which always retrieves.',
+                single: 'One search will not do: it chains plans, customers and the 2026 change.',
+              },
+            },
+            solved: 'Questions that chain several facts take the iterative / decomposition path (+1–5 s).',
+            then: [{ send: ['router', 'multi'], label: 'multi-step', tone: 'ok' }, { lit: 'multi' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Signals for the decision',
+            lines: [
+              'A **query complexity classifier** labels queries A (direct), B (single-step) or C (multi-step).',
+              '**Entity popularity**: retrieval helps most for long-tail entities.',
+              '**Model confidence**: retrieve when token probabilities drop.',
+              '**Domain rules**: private or changing data always retrieves; small talk never does.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'router', text: 'A · B · C', ms: 1200 },
+              { say: 1 },
+              { send: ['router', 'single'], label: 'long-tail' },
+              { say: 2 },
+              { send: ['router', 'single'], label: 'low confidence' },
+              { say: 3 },
+              { send: ['router', 'none'], label: 'small talk' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: when the router is unsure',
+            lines: ['Bias the router towards retrieval for private-data domains.'],
+            task: {
+              type: 'choose',
+              question: 'A question about your company policy looks simple. The router is unsure. Which way should it lean?',
+              options: [
+                { text: 'Retrieve' },
+                { text: 'Skip retrieval to save latency', why: 'A missed retrieval produces a confident hallucination about your private data.' },
+              ],
+              answer: 0,
+            },
+            solved: 'For private data, a wasted retrieval is cheap; a missed one is a confident hallucination.',
+            then: [{ send: ['router', 'single'], label: 'retrieve', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'What the router bought (illustrative)',
+            lines: [
+              'Traffic mix: 31% no retrieval, 58% single-step, 11% multi-step.',
+              'Retrieval calls fell 31%; multi-step accuracy rose from 47% to 71%.',
+              'Average latency barely moved: cheap turns paid for the slow ones.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'none', text: '31%' },
+              { badge: 'single', text: '58%' },
+              { badge: 'multi', text: '11%' },
+              { say: 1 },
+              { badge: 'multi', text: '47% → 71%', tone: 'ok', ms: 1400 },
+              { say: 2 },
+            ],
+          },
+        ],
+      },
       body: `Not every question needs retrieval, and not every question needs the heavy multi-step path. **Adaptive retrieval** chooses the strategy per query: no retrieval, single-shot, or iterative/multi-hop. It is triage: a nurse does not send every patient to surgery.
 
 **Signals for the decision**
@@ -769,6 +1391,107 @@ export function labelRoutes(records: Rec[]) {
     // ---------------------------------------------------------------- 6
     {
       heading: 'Contextual Retrieval — chunks that explain themselves',
+      steps: {
+        actors: [
+          { id: 'doc', kind: 'document', label: 'Whole document', sub: 'ACME Q2-2023 10-Q', x: 110, y: 70 },
+          { id: 'chunk', kind: 'chunker', label: 'Chunk', sub: '"revenue grew 3%"', x: 110, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'Context LLM', sub: '50–100 tokens', x: 340, y: 150 },
+          { id: 'embed', kind: 'embedder', label: 'Embedder', sub: 'contextual vectors', x: 570, y: 70 },
+          { id: 'bm25', kind: 'retriever', label: 'BM25 index', sub: 'contextual BM25', x: 570, y: 230 },
+          { id: 'user', kind: 'user', label: 'Query', sub: 'ACME revenue Q2 2023', x: 800, y: 150 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A chunk without its document',
+            lines: [
+              '"The company\'s revenue grew by 3% over the previous quarter." Which company? Which quarter?',
+              'Chunking loses the context, so **both** embeddings and BM25 miss it.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'chunk' },
+              { badge: 'chunk', text: 'which company?', tone: 'miss', ms: 1400 },
+              { say: 1 },
+              { send: ['user', 'embed'], label: 'query', tone: 'miss' },
+              { send: ['user', 'bm25'], label: 'query', tone: 'miss' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Write a caption for every chunk',
+            lines: [
+              'At indexing time, an LLM reads the **whole document** and the chunk.',
+              'It writes a short context (usually 50–100 tokens) situating the chunk.',
+              'The context is **prepended** before embedding and before BM25 indexing.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['doc', 'llm'], label: 'document' },
+              { send: ['chunk', 'llm'], label: 'chunk' },
+              { say: 1 },
+              { badge: 'llm', text: 'ACME, Q2 2023', ms: 1400 },
+              { say: 2 },
+              { send: ['llm', 'embed'], label: 'context + chunk' },
+              { send: ['llm', 'bm25'], label: 'context + chunk' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: who writes the context?',
+            lines: ['Like adding a caption to every photo cut out of an album.'],
+            task: {
+              type: 'pick',
+              question: 'Which part writes the situating context for each chunk?',
+              answer: 'llm',
+              hints: {
+                embed: 'The embedder only turns context + chunk into a vector; it writes nothing.',
+                bm25: 'BM25 indexes the words it is given; the context must already be there.',
+                chunk: 'The chunk is what lost its context in the first place.',
+              },
+            },
+            solved: 'An LLM reads the whole document and writes the context that is prepended to each chunk.',
+            then: [{ send: ['doc', 'llm'], label: 'document' }, { send: ['llm', 'embed'], label: 'context + chunk', tone: 'ok' }],
+          },
+          {
+            kind: 'watch',
+            title: 'The query now matches',
+            lines: [
+              'Plain chunk: BM25 2.1, cosine 0.61 → rank **31**.',
+              'Contextual chunk: "ACME", "Q2", "2023" now match: BM25 9.4, cosine 0.79 → rank **2**.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['user', 'bm25'], label: 'query', tone: 'miss' },
+              { badge: 'bm25', text: 'rank 31', tone: 'miss', ms: 1200 },
+              { say: 1 },
+              { send: ['user', 'embed'], label: 'query', tone: 'ok' },
+              { send: ['user', 'bm25'], label: 'query', tone: 'ok' },
+              { badge: 'bm25', text: 'rank 2', tone: 'ok', ms: 1200 },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: keeping it cheap',
+            lines: ['One LLM call per chunk, each needing the whole document.'],
+            task: {
+              type: 'choose',
+              question: 'What keeps the indexing cost at about $1.02 per million document tokens?',
+              options: [
+                { text: 'Prompt caching: the document is cached once and reused for each of its chunks' },
+                { text: 'Using the largest model available', why: 'Any small, cheap model works; Anthropic used Claude 3 Haiku.' },
+                {
+                  text: 'Skipping BM25 and indexing only embeddings',
+                  why: 'Contextual BM25 is part of the win (failure rate −35% → −49%); it is not where the cost comes from.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'With prompt caching, the document is paid for once and reused for every chunk: a one-off ≈ $1.02 per million document tokens.',
+            then: [{ send: ['doc', 'llm'], label: 'cached once' }, { send: ['chunk', 'llm'], label: 'chunk', count: 3 }],
+          },
+        ],
+      },
       body: `A chunk like "The company's revenue grew by 3% over the previous quarter" is ambiguous on its own: which company, which quarter? When chunked, documents lose the context that made each passage meaningful, so both embeddings and BM25 miss it. **Contextual Retrieval** (Anthropic, 2024) fixes this at indexing time: an LLM reads the **whole document** and writes a short context (usually **50–100 tokens**) situating each chunk, which is **prepended** to the chunk before **embedding** (contextual embeddings) and before **BM25 indexing** (contextual BM25). It is like adding a caption to every photo cut out of an album.
 
 **Reported results** (top-20 retrieval failure rate = 1 − recall@20, averaged across domains):

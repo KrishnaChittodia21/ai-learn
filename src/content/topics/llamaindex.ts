@@ -31,6 +31,94 @@ const topic: Topic = {
     // ───────────────────────── 1 ─────────────────────────
     {
       heading: 'LlamaIndex Fundamentals — documents, nodes, Settings, VectorStoreIndex, query and chat engines',
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'Policy PDFs', sub: '38 PDFs', x: 110, y: 70 },
+          { id: 'nodes', kind: 'chunker', label: 'Nodes', sub: '~520 TextNodes', x: 340, y: 70 },
+          { id: 'index', kind: 'vector-db', label: 'VectorStoreIndex', sub: 'embedded nodes', x: 570, y: 70 },
+          { id: 'chat', kind: 'agent', label: 'Chat engine', sub: 'condense_plus_context', x: 110, y: 230 },
+          { id: 'qe', kind: 'retriever', label: 'Query engine', sub: 'stateless, one shot', x: 400, y: 230 },
+          { id: 'llm', kind: 'llm', label: 'LLM', sub: 'response synthesis', x: 760, y: 200 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A librarian with index cards',
+            lines: [
+              'Documents are cut into index cards (**nodes**) and filed in a catalogue (an **index**).',
+              '38 policy PDFs → 1,024-token chunks with 200 overlap → ~520 nodes.',
+              'Embedding them costs ≈ $0.01 (illustrative price).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'nodes'], label: 'split' },
+              { send: ['nodes', 'index'], label: 'embed' },
+              { say: 1 },
+              { badge: 'nodes', text: '~520 nodes' },
+              { say: 2 },
+              { badge: 'index', text: '≈ $0.01' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Query engine: retrieve and synthesise',
+            lines: [
+              'Query engine = retriever + response synthesiser. Stateless, one shot.',
+              '"How many weeks of parental leave?" → top-3 nodes (0.83, 0.79, 0.62).',
+              '`compact` mode: 1 LLM call → "16 weeks paid", with `source_nodes`.',
+            ],
+            script: [
+              { say: 0 },
+              { lit: 'qe' },
+              { say: 1 },
+              { send: ['index', 'qe'], label: 'top-3' },
+              { say: 2 },
+              { send: ['qe', 'llm'], label: '1 call' },
+              { badge: 'llm', text: '16 weeks paid', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: the follow-up',
+            lines: ['Next message: "And contractors?"'],
+            task: {
+              type: 'pick',
+              question: 'Which engine understands this follow-up in context?',
+              answer: 'chat',
+              hints: {
+                qe: 'Stateless: it retrieved generic "contractor" chunks (best 0.58) and answered off-topic.',
+                index: 'The index stores nodes; it has no memory of the conversation.',
+              },
+            },
+            solved: 'The chat engine condenses it to "How many weeks of parental leave do contractors get?" → Contractor-Handbook.pdf p.12 (0.81).',
+            then: [
+              { send: ['chat', 'qe'], label: 'standalone question' },
+              { send: ['index', 'qe'], label: '0.81', tone: 'ok' },
+              { send: ['qe', 'llm'], label: '1 call' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: response mode',
+            lines: ['`response_mode` controls how many LLM calls synthesis makes.'],
+            task: {
+              type: 'choose',
+              question: 'You need a summary of a whole document. Which mode fits?',
+              options: [
+                { text: '`tree_summarize`' },
+                { text: '`compact`', why: 'The default: it packs chunks into few calls, good for questions.' },
+                {
+                  text: '`refine`',
+                  why: 'One call per chunk, iterative; the hierarchical one built for summaries is tree_summarize.',
+                },
+                { text: '`no_text`', why: 'That only retrieves; it writes no answer.' },
+              ],
+              answer: 0,
+            },
+            solved: '`tree_summarize` is hierarchical and good for summaries.',
+          },
+        ],
+      },
       body: `**Intuition:** LlamaIndex is a librarian. You hand it documents; it cuts them into index cards (**nodes**), files them in a catalogue (an **index**), and gives you a reference desk: ask a question and it finds the right cards and writes a grounded answer, with the card numbers attached.
 
 **Core objects (Python, \`llama_index.core\`)**
@@ -190,6 +278,171 @@ def answer(index: VectorStoreIndex, question: str, year: int) -> dict:
     // ───────────────────────── 2 ─────────────────────────
     {
       heading: 'Ingestion Pipelines and Indexes — node parsers, transformations, extractors, storage and persistence',
+      short: {
+        id: 'ingestion-pipeline-only-what-changed',
+        title: 'Ingestion that only redoes changes',
+        beats: [
+          {
+            type: 'counter',
+            kicker: 'Nightly docs sync · night 2',
+            value: 720,
+            prefix: '≈ ',
+            unit: 'nodes re-processed, out of 30,000',
+            sub: '120 pages edited, 15 deleted: the docstore compares **hashes**.',
+          },
+          {
+            type: 'flow',
+            kicker: '5,000 Markdown pages',
+            head: 'A factory line with a *ledger*',
+            steps: [
+              'MarkdownNodeParser',
+              'SentenceSplitter(512, 64)',
+              'TitleExtractor + QuestionsAnsweredExtractor',
+              'OpenAIEmbedding → Qdrant',
+              'Docstore in Redis: UPSERTS_AND_DELETE',
+            ],
+          },
+          {
+            type: 'ladder',
+            kicker: 'Run time',
+            head: 'Only what changed gets *redone*',
+            rungs: [
+              {
+                label: 'First run: 30,000 nodes',
+                amount: 50,
+              },
+              {
+                label: 'Night 2: ≈ 720 nodes',
+                amount: 1.5,
+              },
+            ],
+            unit: 'min (approx.)',
+            sub: 'Deleted docs\' nodes are **removed** from Qdrant too.',
+          },
+          {
+            type: 'spike',
+            kicker: '200-question set',
+            head: '"Questions this chunk answers" *pays off*',
+            mark: 'recall@5 0.78 → 0.86',
+            sub: 'Mainly for short **API-reference** chunks.',
+          },
+          {
+            type: 'quiz',
+            kicker: 'Your turn',
+            head: 'Nightly ingestion doubles the vector count every run, though few files change. Most likely cause?',
+            options: [
+              {
+                text: 'The embedding model is non-deterministic',
+                why: 'Embedding noise does not create duplicate documents.',
+              },
+              {
+                text: 'Random doc ids each run, or a docstore that is not persisted',
+                why: 'Right: dedup matches ids and hashes in a persisted docstore; otherwise everything looks new.',
+              },
+              {
+                text: 'chunk_overlap is too large',
+                why: 'Overlap does not create duplicate documents.',
+              },
+            ],
+            answer: 1,
+          },
+        ],
+        takeaway: {
+          head: 'Stable ids + a persisted docstore = *incremental* ingestion.',
+          sub: 'With **UPSERTS_AND_DELETE**, edited docs are re-processed and deleted ones disappear.',
+        },
+      },
+      steps: {
+        actors: [
+          { id: 'docs', kind: 'document', label: 'Markdown pages', sub: '5,000 pages', x: 110, y: 70 },
+          { id: 'parse', kind: 'chunker', label: 'Node parsers', sub: 'Markdown, 512 / 64', x: 340, y: 70 },
+          { id: 'extract', kind: 'llm', label: 'Extractors', sub: 'title, 3 questions', x: 570, y: 70 },
+          { id: 'embed', kind: 'embedder', label: 'Embedding', sub: 'last transformation', x: 790, y: 70 },
+          { id: 'docstore', kind: 'cache', label: 'Docstore', sub: 'Redis: doc hashes', x: 110, y: 230 },
+          { id: 'qdrant', kind: 'vector-db', label: 'Qdrant', sub: 'vectors', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A factory line',
+            lines: [
+              '`IngestionPipeline` runs transformations in order: parsers → extractors → embedding.',
+              'First run: 5,000 pages → 30,000 nodes, all embedded.',
+              'Extractor calls ≈ 18M tokens, ≈ $2.70 (illustrative).',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'parse'], label: 'documents' },
+              { send: ['parse', 'extract'], label: 'nodes' },
+              { send: ['extract', 'embed'], label: '+ metadata' },
+              { say: 1 },
+              { send: ['embed', 'qdrant'], label: '30,000 nodes', tone: 'ok' },
+              { say: 2 },
+              { badge: 'extract', text: '≈ 18M tokens' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'A ledger of what changed',
+            lines: [
+              'A persisted **docstore** remembers each document by hash.',
+              'Night 2: 120 pages edited, 15 deleted.',
+              'Only 120 docs (≈ 720 nodes) are re-processed: ~50 min → ~1.5 min.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['docs', 'docstore'], label: 'hashes' },
+              { say: 1 },
+              { badge: 'docstore', text: '120 changed' },
+              { say: 2 },
+              { send: ['docstore', 'parse'], label: '120 docs', curve: true },
+              { send: ['parse', 'extract'] },
+              { send: ['extract', 'embed'] },
+              { badge: 'embed', text: '~1.5 min', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: deleted pages',
+            lines: ['15 pages are gone from the source.'],
+            task: {
+              type: 'choose',
+              question: 'Which `docstore_strategy` also removes their nodes from Qdrant?',
+              options: [
+                { text: '`UPSERTS_AND_DELETE`' },
+                { text: '`UPSERTS`', why: 'It re-processes changed documents but leaves deleted ones behind.' },
+                { text: '`DUPLICATES_ONLY`', why: 'It only skips duplicates.' },
+              ],
+              answer: 0,
+            },
+            solved: 'Stable doc ids + persisted docstore + the right strategy = incremental, idempotent ingestion.',
+            then: [
+              { send: ['docstore', 'qdrant'], label: 'delete 15', tone: 'err' },
+              { badge: 'qdrant', text: 'in sync', tone: 'ok' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: why extract metadata?',
+            lines: ['`QuestionsAnsweredExtractor(questions=3)` makes an LLM call per node.'],
+            task: {
+              type: 'choose',
+              question: 'What does the extracted metadata buy you?',
+              options: [
+                { text: 'It is embedded with the text, so terse chunks are retrieved better' },
+                { text: 'It makes ingestion cheaper', why: 'It adds LLM calls per node; it costs more.' },
+                {
+                  text: 'It replaces the embedding model',
+                  why: 'The embedding model is still the last transformation.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'recall@5 rose from 0.78 to 0.86, mainly for short API-reference chunks.',
+            then: [{ badge: 'qdrant', text: 'recall 0.86', tone: 'ok' }],
+          },
+        ],
+      },
       body: `**Intuition:** ingestion is a factory line. Raw documents enter, and each station (split, enrich with metadata, embed) transforms them; a ledger (the **docstore**) remembers what was already processed so tomorrow's run only handles what changed.
 
 **IngestionPipeline** runs \`transformations\` in order over documents → nodes:
@@ -357,6 +610,118 @@ if __name__ == "__main__":
     // ───────────────────────── 3 ─────────────────────────
     {
       heading: 'Workflows and Agents — event-driven Workflows, agents with tools, and choosing LlamaIndex vs LangChain/LangGraph',
+      steps: {
+        actors: [
+          { id: 'start', kind: 'data', label: 'StartEvent', sub: 'the question', x: 110, y: 70 },
+          { id: 'retrieve', kind: 'retriever', label: 'retrieve', sub: '@step', x: 340, y: 70 },
+          { id: 'answer', kind: 'llm', label: 'answer', sub: '@step', x: 570, y: 70 },
+          { id: 'check', kind: 'judge', label: 'check', sub: '@step: groundedness', x: 790, y: 70 },
+          { id: 'ui', kind: 'user', label: 'UI', sub: 'stream_events()', x: 110, y: 230 },
+          { id: 'ctx', kind: 'data', label: 'Context.store', sub: 'attempts', x: 450, y: 230 },
+          { id: 'stop', kind: 'data', label: 'StopEvent', sub: 'result', x: 790, y: 230 },
+        ],
+        steps: [
+          {
+            kind: 'watch',
+            title: 'A relay race of events',
+            lines: [
+              'Each `@step` waits for one event type and emits another.',
+              'The graph emerges from type annotations, not explicit edges.',
+              '`check` returns `StopEvent | RetryEvent`: a union makes a branch.',
+            ],
+            script: [
+              { say: 0 },
+              { send: ['start', 'retrieve'], label: 'StartEvent' },
+              { send: ['retrieve', 'answer'], label: 'RetrievedEvent' },
+              { send: ['answer', 'check'], label: 'AnswerEvent' },
+              { say: 1 },
+              { say: 2 },
+              { badge: 'check', text: 'Stop | Retry' },
+            ],
+          },
+          {
+            kind: 'watch',
+            title: 'Attempt 1 fails the check',
+            lines: [
+              '"Can I expense a home-office chair?" retrieves travel-policy.pdf (best 0.61).',
+              'The groundedness check fails and emits `RetryEvent`.',
+              '`ctx.store` records `attempts=1`; the query is rewritten.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'retrieve', text: 'best 0.61', tone: 'miss' },
+              { send: ['retrieve', 'answer'] },
+              { send: ['answer', 'check'] },
+              { say: 1 },
+              { badge: 'check', text: 'ungrounded', tone: 'err' },
+              { send: ['check', 'retrieve'], label: 'RetryEvent', tone: 'miss', curve: true },
+              { say: 2 },
+              { send: ['check', 'ctx'], label: 'attempts=1' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: bound the retries',
+            lines: ['`RetryEvent` routes back to `retrieve`, so this is a loop.'],
+            task: {
+              type: 'choose',
+              question: 'How do you stop it retrying forever?',
+              options: [
+                { text: 'Read `attempts` from `ctx.store` and stop after a limit' },
+                { text: 'Trust the LLM to give up', why: 'Bound it in code with per-run state (and a run `timeout`).' },
+                {
+                  text: 'Remove `RetryEvent` from the return type',
+                  why: 'That removes corrective retries altogether.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: '`Context.store` holds per-run state; use it to bound retries.',
+            then: [{ send: ['ctx', 'check'], label: 'attempts' }, { badge: 'ctx', text: 'attempts=1' }],
+          },
+          {
+            kind: 'watch',
+            title: 'Attempt 2 passes',
+            lines: [
+              'The rewritten query "home office equipment reimbursement policy" retrieves equipment-policy.pdf p.3 (0.86).',
+              'The check passes: 2 retrievals, 3 LLM calls, 4.1 s in total.',
+              'The UI showed "Searching… / Refining search…" from `stream_events()`.',
+            ],
+            script: [
+              { say: 0 },
+              { badge: 'retrieve', text: '0.86', tone: 'ok' },
+              { send: ['retrieve', 'answer'] },
+              { send: ['answer', 'check'] },
+              { say: 1 },
+              { send: ['check', 'stop'], label: 'StopEvent', tone: 'ok' },
+              { say: 2 },
+              { send: ['retrieve', 'ui'], label: 'Refining search…' },
+            ],
+          },
+          {
+            kind: 'turn',
+            title: 'Your turn: pick a framework',
+            lines: ['Many teams combine them: LlamaIndex for the data layer, orchestrated elsewhere.'],
+            task: {
+              type: 'choose',
+              question: 'You need checkpointed, resumable graphs with explicit edges and time travel. Lean to?',
+              options: [
+                { text: 'LangGraph' },
+                {
+                  text: 'LlamaIndex',
+                  why: 'Lean to it when the hard part is data: parsing, chunking, metadata, retrieval quality.',
+                },
+                {
+                  text: 'LangChain',
+                  why: 'Lean to it for integrations and composable chains / createAgent in TypeScript.',
+                },
+              ],
+              answer: 0,
+            },
+            solved: 'LlamaIndex for the data layer, LangGraph for checkpointed control flow, LangChain for TS integrations.',
+          },
+        ],
+      },
       body: `**Intuition:** a Workflow is a relay race where runners only start when they receive the baton (an **event**) they are waiting for. Each step declares which event type it accepts and which it can emit; the framework routes events between steps, so the "graph" emerges from type annotations instead of explicit edges.
 
 **Workflows (\`workflows\` / \`llama_index.core.workflow\`)**

@@ -2,7 +2,7 @@
 // once-per-session gating, reduced-motion preset mapping, skeleton delay).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { countPlan, deckRelease, fade, firstThisSession, pick, SKELETON_DELAY, spring, typeChunks, typeDelay } from '../src/lib/motion.ts';
+import { countPlan, fade, firstThisSession, pick, SKELETON_DELAY, spring, typeChunks, typeDelay } from '../src/lib/motion.ts';
 
 test('count-up runs only when the value changed since the last visit', () => {
   assert.deepEqual(countPlan(57, 63, false), { from: 57, delta: 6, animate: true });
@@ -24,15 +24,6 @@ test('typing reveal: at most 28 ms per chunk and 1.6 s in total', () => {
   const chunks = typeChunks(text);
   assert.equal(chunks.join(''), text, 'chunks rebuild the exact text');
   assert.ok(chunks.every((c) => /^\s+$/.test(c) || c.length <= 4));
-});
-
-test('deck release: fling past 110 px or a fast flick, tap under 6 px, otherwise snap back', () => {
-  assert.equal(deckRelease(-120, 0), 'next');
-  assert.equal(deckRelease(130, 0), 'prev');
-  assert.equal(deckRelease(-20, 0.2), 'next', 'a quick flick past 12 px flings');
-  assert.equal(deckRelease(-10, 0.5), 'settle', 'too short to fling, even when fast');
-  assert.equal(deckRelease(40, 0.05), 'settle');
-  assert.equal(deckRelease(3, 0), 'tap');
 });
 
 test('heading reveal plays once per page per session; a read-only check does not use it up', () => {

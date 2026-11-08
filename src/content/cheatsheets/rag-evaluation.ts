@@ -23,7 +23,7 @@ const sheet: TopicCheatsheet = {
 | 400 | ≈ 4 |
 | 700 | ≈ 3 |
 
-Half-width ≈ 1.96 · √(p(1 − p) / n). Compare systems on the same questions.`,
+Half-width ≈ 1.96 · √(p(1 − p) / n) with p = 0.8 (normal approximation). Compare systems on the same questions.`,
     },
     {
       title: 'Run tiers',

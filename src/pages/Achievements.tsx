@@ -84,12 +84,6 @@ export default function AchievementsPage() {
 
   const nextStored = next ? stored[next.achievement.id] : undefined;
   const nextPct = next ? Math.round(next.ev.fraction * 100) : 0;
-  const groupEarned = (gid: string) => ACHIEVEMENTS.filter((a) => a.group === gid && stored[a.id]?.tier).length;
-  const groupTotal = (gid: string) => ACHIEVEMENTS.filter((a) => a.group === gid).length;
-  const jump = (gid: string) =>
-    document
-      .getElementById(`ach-g-${gid}`)
-      ?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   const shown = ACHIEVEMENTS.filter(visible).length;
 
   return (
@@ -169,7 +163,7 @@ export default function AchievementsPage() {
       <div className="ach-top">
         {/* ---------- closest next: the aurora-border card on this screen ---------- */}
         <div className="gborder ach-next-border rise d3">
-          <section className="gborder-in ach-next" aria-labelledby="ach-next-t">
+          <section className="gborder-in ach-next" aria-labelledby="ach-next-t" data-guide="ach-next">
             {next ? (
               <>
                 <div className="ach-next-head">
@@ -253,7 +247,7 @@ export default function AchievementsPage() {
         </div>
 
         {/* ---------- recently unlocked ---------- */}
-        <section className="card ach-recent rise d4" aria-labelledby="ach-recent-t">
+        <section className="card ach-recent rise d4" aria-labelledby="ach-recent-t" data-guide="ach-recent">
           <div className="ach-sec-head">
             <h2 id="ach-recent-t" className="ach-h2">
               Recently unlocked
@@ -285,23 +279,12 @@ export default function AchievementsPage() {
       </div>
 
       {/* ---------- filters ---------- */}
-      <div className="ach-filters" role="toolbar" aria-label="Filter achievements">
+      <div className="ach-filters" role="toolbar" aria-label="Filter achievements" data-guide="ach-filters">
         <div className="ach-filter-set">
           <span className="lbl">Show</span>
           {FILTERS.map((f) => (
             <button key={f.id} type="button" className={`chip${filter === f.id ? ' on' : ''}`} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.label} <span className="ach-chip-n mono">{f.id === 'all' ? ACHIEVEMENT_TOTAL : counts[f.id]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="ach-filter-set">
-          <span className="lbl">Jump to</span>
-          {GROUPS.map((g) => (
-            <button key={g.id} type="button" className="chip ach-jump" onClick={() => jump(g.id)}>
-              {g.title}
-              <span className="ach-chip-n mono">
-                {groupEarned(g.id)}/{groupTotal(g.id)}
-              </span>
             </button>
           ))}
         </div>
@@ -332,7 +315,7 @@ export default function AchievementsPage() {
                 <AchMeter value={got} max={all.length} label={`${g.title}: ${got} of ${all.length} earned`} />
               </div>
             </header>
-            <ul className="ach-grid">
+            <ul className="ach-grid" data-guide="ach-grid">
               {list.map((a, i) => (
                 <AchievementCard key={a.id} achievement={a} stored={stored[a.id]} ev={evs[a.id]} index={i} />
               ))}
