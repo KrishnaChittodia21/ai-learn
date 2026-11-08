@@ -58,6 +58,7 @@ export function beatMs(b: ShortBeat): number {
 
 /** "1:35": the whole Short at 1×, counting the quiz as 15 s and the end card as 6 s */
 export function shortLength(s: Short): string {
+  if (s.length) return s.length;
   const ms = s.beats.reduce((a, b) => a + (b.type === 'quiz' ? 15_000 : beatMs(b)), 0) + 6000;
   const sec = Math.round(ms / 1000);
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;

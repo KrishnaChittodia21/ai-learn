@@ -174,6 +174,8 @@ export interface Short {
   beats: ShortBeat[];
   /** the end card: the one idea to keep */
   takeaway: { head: string; sub: string };
+  /** precomputed "1:26" in the startup topic index, which carries only the cover beat; the player loads the rest */
+  length?: string;
 }
 
 export interface ProsCons {

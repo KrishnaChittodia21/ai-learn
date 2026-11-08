@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { ShortPlayer } from '../components/ShortPlayer';
 import { markShortWatched, recordShortQuiz } from '../lib/progress';
 import { SHORT_BY_ID, useShorts } from '../lib/useShorts';
+import { useTopic } from '../lib/useTopic';
+import { RouteSkeleton } from '../components/RouteSkeleton';
 
 export default function ShortPage() {
   const { id = '' } = useParams();
@@ -11,7 +13,11 @@ export default function ShortPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { p } = useShorts();
-  const entry = SHORT_BY_ID.get(id);
+  const meta = SHORT_BY_ID.get(id);
+  // the index only has the cover beat; the full Short comes with its topic's body
+  const topic = useTopic(meta?.topic.id ?? '');
+  const full = topic?.sections[meta?.section ?? -1]?.short;
+  const entry = meta && full ? { ...meta, short: full } : undefined;
   // Esc / ✕: back to where you were, or to the Shorts page on a deep link
   const close = useCallback(() => (location.key !== 'default' ? navigate(-1) : navigate('/shorts')), [location.key, navigate]);
   const onFinish = useCallback(() => markShortWatched(id), [id]);
@@ -25,6 +31,7 @@ export default function ShortPage() {
   const nextHref = next?.href;
   const onNext = useCallback(() => nextHref && navigate(nextHref, { replace: true }), [nextHref, navigate]);
 
+  if (meta && !entry) return <RouteSkeleton />;
   if (!entry) {
     return (
       <div className="page narrow sp-missing">
