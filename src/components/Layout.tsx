@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Activity, BookA, Braces, ChartSpline, CircleDot, CircleHelp, CirclePlay, Ellipsis, Flame, Lock, Medal, Moon, Route, Search, Settings, Sparkles, Star, Sun, Target, Trophy, X } from 'lucide-react';
+import { Activity, BookA, Braces, ChartSpline, ChevronDown, ChevronUp, CircleDot, CircleHelp, CirclePlay, Ellipsis, Flame, Lock, Medal, Moon, Route, Search, Settings, Sparkles, Star, Sun, Target, Trophy, X } from 'lucide-react';
 import { COMPANY_QUESTIONS, TOPICS } from '../content';
 import { localDay, setSettings, setStudyPlan, useProgress } from '../lib/progress';
 import { planWithLog } from '../lib/pace';
@@ -179,6 +179,10 @@ export default function Layout() {
   const themeTip = useTip(isDark ? 'Light mode' : 'Dark mode', { end: true });
   const settingsTip = useTip('Settings', { end: true });
 
+  // phone dock: can fold into a small "Menu" pill (saved in settings)
+  const barMin = !!p.settings.tabbarMinimized;
+  const setTabbarMinimized = (v: boolean) => setSettings({ tabbarMinimized: v });
+
   // phone dock: one pill slides (transform only) to the active tab; reduced motion fades it out and in instead
   const reduce = useReducedMotion();
   const tabbarRef = useRef<HTMLElement>(null);
@@ -216,7 +220,7 @@ export default function Layout() {
       clearTimeout(timer);
       window.removeEventListener('resize', onResize);
     };
-  }, [location.pathname, reduce]);
+  }, [location.pathname, reduce, barMin]);
 
   const lockTitle = unlocked ? undefined : 'Unlocks when every topic exam is passed';
   const navItems = [
@@ -237,7 +241,7 @@ export default function Layout() {
       `${base}${isActive || extra ? ' active' : ''}`;
 
   return (
-    <div className="shell" data-reading={reading ? '' : undefined}>
+    <div className={`shell${barMin ? ' shell--tabbar-min' : ''}`} data-reading={reading ? '' : undefined}>
       <a href="#main" className="skip-link">
         Skip to content
       </a>
@@ -405,6 +409,12 @@ export default function Layout() {
         </AnimatePresence>
       </header>
 
+      {barMin ? (
+        <button type="button" className="tabbar-pill" onClick={() => setTabbarMinimized(false)} aria-label="Show the menu">
+          <ChevronUp size={15} aria-hidden />
+          Menu
+        </button>
+      ) : (
       <nav className="tabbar glass" aria-label="Primary" ref={tabbarRef}>
         <span className="tab-pill" ref={pillRef} aria-hidden />
         {navItems.filter((n) => !n.desktopOnly).map((n) => {
@@ -424,7 +434,11 @@ export default function Layout() {
             </NavLink>
           );
         })}
+        <button type="button" className="tabbar-min" onClick={() => setTabbarMinimized(true)} aria-label="Minimise the menu" title="Minimise the menu">
+          <ChevronDown size={18} aria-hidden />
+        </button>
       </nav>
+      )}
 
       <main id="main" className="main" tabIndex={-1}>
         {/* enter only (CSS): the next page shows at once, no blank exit gap */}

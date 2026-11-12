@@ -564,6 +564,85 @@
       inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.14)),
       0 18px 44px -18px var(--shadow-c);
   }
+  /* minimise: a slim key at the end folds the dock into a small glass "Menu" pill (settings.tabbarMinimized) */
+  .tabbar-min {
+    flex: 0 0 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    padding: 0;
+    border-radius: 14px;
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+  }
+  .tabbar-min:hover {
+    color: var(--text);
+  }
+  .tabbar-min:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .tabbar-pill {
+    position: fixed;
+    z-index: 39;
+    left: 50%;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 15px 0 12px;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transform: translateX(-50%);
+    font-family: var(--display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+    background: light-dark(rgb(255 255 255 / 0.45), rgb(15 13 38 / 0.4));
+    -webkit-backdrop-filter: blur(8px) saturate(1.7);
+    backdrop-filter: blur(8px) saturate(1.7);
+    box-shadow:
+      inset 0 1px 0 light-dark(rgb(255 255 255 / 0.8), rgb(255 255 255 / 0.14)),
+      0 0 0 1px light-dark(rgb(91 64 214 / 0.14), rgb(255 255 255 / 0.1)),
+      0 10px 26px -14px var(--shadow-c);
+    animation: tabbar-pill-in 220ms var(--ease-out) both;
+  }
+  .tabbar-pill:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  /* minimised: the content-fade strip above the dock goes too, so nothing covers the page */
+  .shell.shell--tabbar-min::after {
+    display: none;
+  }
+  /* resting "liquid glass" with a mouse / trackpad: mostly clear so the text behind can be read; hover or keyboard
+     focus brings back the frosted face. Touch keeps the frosted dock (it cannot hover). */
+  @media (hover: hover) and (pointer: fine) {
+    .tabbar {
+      transition: background 0.25s ease, box-shadow 0.25s ease, backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease;
+    }
+    .tabbar:not(:hover, :focus-within) {
+      background: light-dark(rgb(255 255 255 / 0.16), rgb(15 13 38 / 0.16));
+      -webkit-backdrop-filter: blur(1px) saturate(1.8) brightness(1.05);
+      backdrop-filter: blur(1px) saturate(1.8) brightness(1.05);
+      box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.45),
+        inset 0 -1px 0 rgb(255 255 255 / 0.1),
+        0 12px 32px -18px var(--shadow-c);
+    }
+    .tabbar:not(:hover, :focus-within) .tab {
+      opacity: 0.8;
+    }
+    .tabbar-pill:hover {
+      color: var(--text);
+      background: light-dark(rgb(255 255 255 / 0.92), rgb(15 13 38 / 0.85));
+    }
+  }
   /* scroll edge: content fades as it meets the dock instead of a hard edge */
   .shell::after {
     content: '';
@@ -761,5 +840,23 @@
   .tip {
     transform: none;
     transition: opacity 140ms ease !important;
+  }
+}
+
+/* the minimised dock pill only exists where the phone dock does (900px and under) */
+@media (min-width: 901px) {
+  .tabbar-pill {
+    display: none;
+  }
+}
+@keyframes tabbar-pill-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabbar-pill {
+    animation: none;
   }
 }

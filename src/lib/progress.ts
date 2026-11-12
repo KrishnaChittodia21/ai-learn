@@ -88,6 +88,8 @@ export interface Settings {
   studyLock: 'off' | 'exam' | 'exam-interview';
   /** UI signal colour (optional; unknown or older saved values fall back to vermilion) */
   accent?: Accent;
+  /** phones: the bottom tab bar folded into a small "Menu" pill (optional; off when missing) */
+  tabbarMinimized?: boolean;
 }
 
 export type Accent = 'vermilion' | 'pine' | 'ink' | 'plum';
