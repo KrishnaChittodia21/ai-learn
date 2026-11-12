@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { mergeEarned, type EarnedNow, type StoredAchievement } from '../content/achievements.ts';
+import { cleanNotes, NOTES_MAX, type Note } from './notes.ts';
 
 export type Rating = 'nailed' | 'partial' | 'missed';
 
@@ -145,6 +146,8 @@ export interface Progress {
   rolePath?: string;
   /** the name printed on path certificates (C4). Optional; asked once. */
   certName?: string;
+  /** Notebook highlights, notes and sketches, oldest first (src/lib/notes.ts; max NOTES_MAX). Optional. */
+  notes?: Note[];
   settings: Settings;
 }
 
@@ -170,8 +173,10 @@ const DEFAULT: Progress = {
 export function normalize(parsed: Partial<Progress>): Progress {
   // migrations are judged from what was saved, not from the defaults merged in
   // `achievements` stays undefined for saves from before badges existed (no default merged in)
+  // notes are free-form learner data: validated and capped here, malformed entries dropped
+  const notes = parsed.notes === undefined ? {} : { notes: cleanNotes(parsed.notes) };
   return migrate(
-    { ...DEFAULT, ...parsed, achievements: parsed.achievements, settings: { ...DEFAULT.settings, ...parsed.settings } },
+    { ...DEFAULT, ...parsed, ...notes, achievements: parsed.achievements, settings: { ...DEFAULT.settings, ...parsed.settings } },
     parsed.migrations ?? [],
   );
 }
@@ -496,6 +501,23 @@ export function recordSteps(topicId: string, index: number, missed: number, now 
       steps: { ...p.steps, [`${topicId}:${index}`]: { missed, at: now.toISOString() } },
     };
   });
+}
+
+// ---------- Notebook ----------
+/** Add or replace a note (by id). Returns false when the Notebook is full. Not a study action. */
+export function putNote(note: Note): boolean {
+  const list = state.notes ?? [];
+  const at = list.findIndex((n) => n.id === note.id);
+  if (at < 0 && list.length >= NOTES_MAX) return false;
+  update((p) => ({ ...p, notes: at < 0 ? [...(p.notes ?? []), note] : (p.notes ?? []).map((n) => (n.id === note.id ? note : n)) }), false);
+  return true;
+}
+
+/** Delete a note; returns it (for Undo, via putNote). */
+export function removeNote(id: string): Note | undefined {
+  const note = state.notes?.find((n) => n.id === id);
+  if (note) update((p) => ({ ...p, notes: (p.notes ?? []).filter((n) => n.id !== id) }), false);
+  return note;
 }
 
 /** Store newly earned badges / tier-ups (never a study action, never downgrades). */
