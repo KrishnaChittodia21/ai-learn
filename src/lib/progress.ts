@@ -90,6 +90,8 @@ export interface Settings {
   accent?: Accent;
   /** phones: the bottom tab bar folded into a small "Menu" pill (optional; off when missing) */
   tabbarMinimized?: boolean;
+  /** desktop: the top menu bar folded into a small "Menu" pill (optional; off when missing) */
+  mastheadMinimized?: boolean;
 }
 
 export type Accent = 'vermilion' | 'pine' | 'ink' | 'plum';

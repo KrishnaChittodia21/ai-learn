@@ -860,3 +860,92 @@
     animation: none;
   }
 }
+
+/* ---------- desktop top bar: resting "liquid glass" + minimise (settings.mastheadMinimized) ----------
+   With a mouse / trackpad the bar is mostly clear at rest so the text scrolling under it can be read; hovering it,
+   focusing into it or opening its More menu brings back the frosted face. */
+.masthead-min {
+  display: none;
+}
+.masthead-pill {
+  display: none;
+}
+@media (min-width: 901px) {
+  .masthead-min {
+    display: inline-grid;
+  }
+  .masthead--min {
+    position: static;
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  .masthead-pill {
+    position: fixed;
+    z-index: 41;
+    top: 12px;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 15px 0 12px;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transform: translateX(-50%);
+    font-family: var(--display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+    background: light-dark(rgb(255 255 255 / 0.45), rgb(15 13 38 / 0.4));
+    -webkit-backdrop-filter: blur(8px) saturate(1.7);
+    backdrop-filter: blur(8px) saturate(1.7);
+    box-shadow:
+      inset 0 1px 0 light-dark(rgb(255 255 255 / 0.8), rgb(255 255 255 / 0.14)),
+      0 0 0 1px light-dark(rgb(91 64 214 / 0.14), rgb(255 255 255 / 0.1)),
+      0 10px 26px -14px var(--shadow-c);
+    animation: masthead-pill-in 220ms var(--ease-out) both;
+  }
+  .masthead-pill:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+}
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  .masthead-inner {
+    transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease;
+  }
+  .masthead-inner:not(:hover, :focus-within, :has([aria-expanded='true'])) {
+    background: light-dark(rgb(255 255 255 / 0.16), rgb(15 13 38 / 0.16));
+    border-color: light-dark(rgb(91 64 214 / 0.1), rgb(255 255 255 / 0.08));
+    -webkit-backdrop-filter: blur(1px) saturate(1.8) brightness(1.05);
+    backdrop-filter: blur(1px) saturate(1.8) brightness(1.05);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.45),
+      inset 0 -1px 0 rgb(255 255 255 / 0.1),
+      0 12px 32px -18px var(--shadow-c);
+  }
+  /* the chips and buttons inside go clear too, so nothing solid sits over the page */
+  .masthead-inner:not(:hover, :focus-within, :has([aria-expanded='true'])) :is(.tool-btn, .search-trigger, .streak-chip, .ach-hdr) {
+    background: transparent;
+  }
+  .masthead-inner:not(:hover, :focus-within, :has([aria-expanded='true'])) > * {
+    opacity: 0.85;
+  }
+  .masthead-pill:hover {
+    color: var(--text);
+    background: light-dark(rgb(255 255 255 / 0.92), rgb(15 13 38 / 0.85));
+  }
+}
+@keyframes masthead-pill-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .masthead-pill {
+    animation: none;
+  }
+}
