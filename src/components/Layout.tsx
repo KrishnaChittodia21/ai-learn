@@ -182,6 +182,9 @@ export default function Layout() {
   // phone dock: can fold into a small "Menu" pill (saved in settings)
   const barMin = !!p.settings.tabbarMinimized;
   const setTabbarMinimized = (v: boolean) => setSettings({ tabbarMinimized: v });
+  // desktop top bar: can fold into a small "Menu" pill too (saved in settings)
+  const topMin = !!p.settings.mastheadMinimized;
+  const setMastheadMinimized = (v: boolean) => setSettings({ mastheadMinimized: v });
 
   // phone dock: one pill slides (transform only) to the active tab; reduced motion fades it out and in instead
   const reduce = useReducedMotion();
@@ -246,7 +249,13 @@ export default function Layout() {
         Skip to content
       </a>
       <AmbientStage />
-      <header className="masthead">
+      {topMin && (
+        <button type="button" className="masthead-pill" onClick={() => setMastheadMinimized(false)} aria-label="Show the menu">
+          <ChevronDown size={15} aria-hidden />
+          Menu
+        </button>
+      )}
+      <header className={`masthead${topMin ? ' masthead--min' : ''}`}>
         <div className="masthead-inner glass">
           <NavLink to="/" className="wordmark" aria-label="GenAI.learn, home">
             <BrandMark />
@@ -320,6 +329,9 @@ export default function Layout() {
               aria-label={navOpen ? 'Close menu' : 'More: search, Shorts, plan, learning paths, glossary, drills, saved, achievements, guide, theme, settings'}
             >
               {navOpen ? <X size={19} aria-hidden /> : <Ellipsis size={19} aria-hidden />}
+            </button>
+            <button type="button" className="tool-btn masthead-min" onClick={() => setMastheadMinimized(true)} aria-label="Minimise the menu" title="Minimise the menu">
+              <ChevronUp size={18} aria-hidden />
             </button>
           </div>
         </div>
