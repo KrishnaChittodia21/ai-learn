@@ -9,7 +9,7 @@ import type * as UiPrefsModule from '../src/lib/uiPrefs.ts';
 const SOURCES: Record<GuideId, string[]> = {
   today: ['pages/Home.tsx', 'components/NeuralCoverage.tsx'],
   track: ['pages/Track.tsx', 'components/achievements/AchievementsSummary.tsx'],
-  topic: ['pages/Topic.tsx', 'components/StudyPath.tsx', 'components/SectionPractice.tsx'],
+  topic: ['pages/Topic.tsx', 'components/StudyPath.tsx', 'components/SectionPractice.tsx', 'components/Notebook.tsx'],
   exam: ['pages/Exam.tsx'],
   saved: ['pages/Saved.tsx'],
   shorts: ['pages/Shorts.tsx'],

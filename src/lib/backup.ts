@@ -3,6 +3,7 @@
 // nothing touches the current data until the learner picks Merge or Replace.
 import { CERT_NAME_MAX, normalize, PLAN_LOG_MAX, SAVED_KINDS, SAVED_MAX, type DrillRecord, type McqRecord, type Progress, type PromptLabRecord, type SavedItem, type ShortRecord, type StepsRecord, type StudyPlan, type TestRecord } from './progress.ts';
 import type { StoredAchievement } from '../content/achievements.ts';
+import { NOTES_MAX, type Note } from './notes.ts';
 
 export const BACKUP_APP = 'ai-learn';
 export const BACKUP_VERSION = 1;
@@ -214,7 +215,7 @@ function settings(v: unknown): Partial<Progress['settings']> {
   return s;
 }
 
-const PROGRESS_KEYS = ['tests', 'sections', 'iq', 'boe', 'cc', 'drafts', 'company', 'mcq', 'migrations', 'activityDays', 'achievements', 'promptLabs', 'saved', 'shorts', 'studyPlan', 'steps', 'rolePath', 'certName', 'drills', 'settings'];
+const PROGRESS_KEYS = ['tests', 'sections', 'iq', 'boe', 'cc', 'drafts', 'company', 'mcq', 'migrations', 'activityDays', 'achievements', 'promptLabs', 'saved', 'shorts', 'studyPlan', 'steps', 'rolePath', 'certName', 'drills', 'notes', 'settings'];
 
 /** Validate the `progress` object of a backup into a fresh, typed Partial<Progress>. */
 function progressFrom(v: unknown): Partial<Progress> {
@@ -250,6 +251,8 @@ function progressFrom(v: unknown): Partial<Progress> {
   // a role id (unknown ids are ignored where it is read) and the certificate name (plain text, rendered as text)
   if (o.rolePath !== undefined) out.rolePath = /^[a-z0-9-]+$/.test(str(o.rolePath, 'rolePath', 64)) ? (o.rolePath as string) : fail('rolePath should be a path id');
   if (o.certName !== undefined) out.certName = str(o.certName, 'certName', CERT_NAME_MAX).trim();
+  // notes: capped here, then each one is rebuilt field by field (bad ones dropped) by normalize → cleanNotes
+  if (o.notes !== undefined) out.notes = arr(o.notes, 'notes', NOTES_MAX) as Note[];
   if (o.settings !== undefined) out.settings = settings(o.settings) as Progress['settings'];
   return out;
 }
@@ -362,6 +365,9 @@ export function mergeProgress(cur: Progress, inc: Progress): Progress {
     const revealedAt = earliest(a.revealedAt, drills[k]?.revealedAt);
     drills[k] = { ...(passedAt && { passedAt }), ...(revealedAt && { revealedAt }) };
   }
+  // notes: this device's notes win by id; imported ones are added, oldest first, up to the cap
+  const mine = new Set((cur.notes ?? []).map((n) => n.id));
+  const notes = [...(cur.notes ?? []), ...(inc.notes ?? []).filter((n) => !mine.has(n.id))].sort((a, b) => a.at.localeCompare(b.at)).slice(-NOTES_MAX);
   return {
     ...cur,
     tests,
@@ -384,6 +390,7 @@ export function mergeProgress(cur: Progress, inc: Progress): Progress {
     // the path being followed and the certificate name: this device wins, the import fills a gap
     ...(cur.rolePath || inc.rolePath ? { rolePath: cur.rolePath || inc.rolePath } : {}),
     ...(cur.certName || inc.certName ? { certName: cur.certName || inc.certName } : {}),
+    ...(cur.notes === undefined && inc.notes === undefined ? {} : { notes }),
     settings: cur.settings,
   };
 }

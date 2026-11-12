@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { RouteSkeleton } from '../components/RouteSkeleton';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PHASES, TOPICS, TOPIC_BY_ID } from '../content';
@@ -39,6 +39,7 @@ import { StepLesson } from '../components/steps/StepLesson';
 import { showToast } from '../lib/toast';
 import { useTopic } from '../lib/useTopic';
 import { CheatExtra } from '../components/CheatExtra';
+import { Notebook, NotebookToggle } from '../components/Notebook';
 
 const TAB_IDS: TabId[] = ['learn', 'code', 'prompt-lab', 'interview', 'envelope', 'cheat', 'capstone', 'exam'];
 
@@ -162,6 +163,7 @@ function TopicView({ topic }: { topic: Topic }) {
         <p className="tp-here" aria-current="page">
           You&apos;re on <strong>{titleMain}</strong>
         </p>
+        {tab === 'learn' && <NotebookToggle topicId={topic.id} />}
       </div>
 
       <header className="tp-hero glass">
@@ -339,7 +341,9 @@ function LearnTab({ topic }: { topic: Topic }) {
   const shorts = SHORTS.filter((e) => e.topic.id === topic.id);
   // Read or Steps is chosen per section (keyed by topic so another topic starts fresh); every section opens on Read
   // remembered in this browser per section, so a section you switched to Steps opens on Steps next time
-  const stepsOn = useUiPrefs().stepsSections ?? {};
+  const prefs = useUiPrefs();
+  const stepsOn = prefs.stepsSections ?? {};
+  const readRef = useRef<HTMLDivElement>(null);
   const modeOf = (i: number) => (stepsOn[`${topic.id}:${i}`] ? 'steps' : 'read');
   const setModeAt = (i: number, m: 'read' | 'steps') => {
     const next = { ...(getUiPrefs().stepsSections ?? {}) };
@@ -371,7 +375,7 @@ function LearnTab({ topic }: { topic: Topic }) {
   const fill = n > 1 && furthest >= 0 ? (furthest / (n - 1)) * 100 : 0;
 
   return (
-    <div className="tp-learn">
+    <div className={`tp-learn${prefs.notebookOpen !== false ? ' nb-on' : ''}`}>
       <nav className={`tp-rail ${tocOpen ? 'open' : ''}`} aria-label="Sections in this topic" data-guide="sections">
         <button type="button" className="tp-rail-title" aria-expanded={tocOpen} onClick={() => setTocOpen((o) => !o)}>
           <span>
@@ -402,7 +406,7 @@ function LearnTab({ topic }: { topic: Topic }) {
           })}
         </ol>
       </nav>
-      <div className="tp-read">
+      <div className="tp-read" ref={readRef}>
         {shorts.length > 0 && (
           <section className="tp-shorts" aria-labelledby="tp-shorts-h">
             <div className="strip-head">
@@ -536,6 +540,7 @@ function LearnTab({ topic }: { topic: Topic }) {
           </div>
         )}
       </div>
+      <Notebook topic={topic} readRef={readRef} />
     </div>
   );
 }

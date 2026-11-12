@@ -71,6 +71,10 @@ export const GUIDES: Record<GuideId, PageGuide> = {
       { id: 'section-save', target: at('section-save'), title: '☆ Save and Mark as read', text: 'Star a section to come back to it from the Saved page. Tick Read when you finish it.' },
       { id: 'quick-check', target: at('quick-check'), title: 'Quick check', text: 'One question at the end of a section. A miss is remembered in Weak areas.' },
       { id: 'prompt-lab-tab', target: at('prompt-lab-tab'), title: 'Prompt Lab', text: 'Rewrite a weak prompt and watch an offline scorecard grade its structure. The number is how many labs you solved.' },
+      { id: 'notebook-toggle', target: at('notebook-toggle'), title: 'Notebook: show or hide', text: 'Opens or hides your Notebook beside the lesson; hidden, the lesson takes the full width. Your choice is remembered. On a phone, the Notes button opens it as a sheet.' },
+      { id: 'notebook-highlight', target: at('notebook-highlight'), title: 'Highlight', text: 'Select any lesson text and pick one of five colours (keys 1–5): Key idea, Remember, Confusing, My take, Follow up. Click a highlight to find its note.' },
+      { id: 'notebook-panel', target: at('notebook-panel'), title: 'Your notes', text: 'Every highlight and note, for this page or all lessons. Search, filter by colour, add emoji, tick checklists, and export them all as Markdown.' },
+      { id: 'notebook-sketch', target: at('notebook-sketch'), title: 'Notes and sketches', text: 'Write a page note (bold, marker, checklist, handwriting, code) or draw a quick diagram with boxes, arrows, text and a pen. Notes are saved in this browser and in your backups.' },
     ],
   },
   exam: {

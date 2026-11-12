@@ -42,6 +42,10 @@ export interface UiPrefs {
   depthEffects?: boolean;
   /** underline glossary terms in lessons with a hover definition (C4; default on) */
   glossaryHovers?: boolean;
+  /** desktop: the lesson Notebook panel is shown (default on); phones open it as a sheet each time */
+  notebookOpen?: boolean;
+  /** the last highlighter colour picked (src/lib/notes.ts NOTE_COLORS) */
+  notebookColor?: string;
 }
 
 const KEY = 'genai-ui-v1';
